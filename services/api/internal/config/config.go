@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	MatchThreshold          float64
 	LivenessThreshold       float64
 	ReviewLivenessThreshold float64
+	AllowReviewEnrollment   bool
 }
 
 func Load() (Config, error) {
@@ -46,6 +48,7 @@ func Load() (Config, error) {
 		MatchThreshold:          envFloat("FACEPROOF_MATCH_THRESHOLD", 0.363),
 		LivenessThreshold:       envFloat("FACEPROOF_LIVENESS_THRESHOLD", 0.68),
 		ReviewLivenessThreshold: envFloat("FACEPROOF_REVIEW_LIVENESS_THRESHOLD", 0.55),
+		AllowReviewEnrollment:   envBool("FACEPROOF_ALLOW_REVIEW_ENROLLMENT", false),
 	}, nil
 }
 
@@ -69,6 +72,18 @@ func envInt(name string, fallback int) int {
 func envFloat(name string, fallback float64) float64 {
 	value := os.Getenv(name)
 	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envBool(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}
