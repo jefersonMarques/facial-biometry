@@ -34,9 +34,11 @@ $env:FACEPROOF_TEMPLATE_DIR = Join-Path $Root "data\templates"
 $env:FACEPROOF_YUNET_MODEL = Join-Path $Root "models\yunet\face_detection_yunet_2023mar.onnx"
 $env:FACEPROOF_SFACE_MODEL = Join-Path $Root "models\sface\face_recognition_sface_2021dec.onnx"
 $env:FACEPROOF_MINIFASNET_MODEL = Join-Path $Root "models\minifasnet\MiniFASNetV2.onnx"
+$env:FACEPROOF_ALLOW_REVIEW_ENROLLMENT = "true"
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\engine'; & '$Python' engine_server.py"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\api'; go run ./cmd/server"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\apps\web-sdk'; python -m http.server 5173"
 
 Write-Host "FaceProof demo: http://localhost:5173"
+Write-Host "Development mode: review enrollments are stored as provisional templates."
