@@ -48,16 +48,18 @@ type completeSessionRequest struct {
 }
 
 type completeSessionResponse struct {
-	SessionID      string               `json:"sessionId"`
-	SubjectID      string               `json:"subjectId"`
-	Kind           string               `json:"kind"`
-	Decision       string               `json:"decision"`
-	LivenessScore  float64              `json:"livenessScore"`
-	Similarity     *float64             `json:"similarity,omitempty"`
-	MatchThreshold *float64             `json:"matchThreshold,omitempty"`
-	Signals        signalResponse       `json:"signals"`
-	Quality        domain.EngineQuality `json:"quality"`
-	Diagnostics    []string             `json:"diagnostics"`
+	SessionID           string               `json:"sessionId"`
+	SubjectID           string               `json:"subjectId"`
+	Kind                string               `json:"kind"`
+	Decision            string               `json:"decision"`
+	LivenessScore       float64              `json:"livenessScore"`
+	Similarity          *float64             `json:"similarity,omitempty"`
+	MatchThreshold      *float64             `json:"matchThreshold,omitempty"`
+	TemplateStored      bool                 `json:"templateStored,omitempty"`
+	TemplateProvisional bool                 `json:"templateProvisional,omitempty"`
+	Signals             signalResponse       `json:"signals"`
+	Quality             domain.EngineQuality `json:"quality"`
+	Diagnostics         []string             `json:"diagnostics"`
 }
 
 type signalResponse struct {
@@ -217,12 +219,13 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 			Illumination:   result.Illumination,
 		},
 		Quality:     result.Quality,
-		Diagnostics: result.Diagnostics,
+		Diagnostics: append([]string(nil), result.Diagnostics...),
 	}
 
 	if captureSession.Kind == domain.SessionKindEnrollment {
 		response.Decision = handler.risk.EnrollmentDecision(result.LivenessScore)
-		if response.Decision == "approved" {
+		shouldStoreTemplate := response.Decision == "approved" || (response.Decision == "review" && handler.config.AllowReviewEnrollment)
+		if shouldStoreTemplate {
 			biometricTemplate := domain.BiometricTemplate{
 				SubjectID:      captureSession.SubjectID,
 				Embedding:      result.Embedding,
@@ -232,6 +235,11 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 			if err := handler.templates.Save(biometricTemplate); err != nil {
 				handler.writeError(writer, http.StatusInternalServerError, "failed to store biometric template")
 				return
+			}
+			response.TemplateStored = true
+			response.TemplateProvisional = response.Decision == "review"
+			if response.TemplateProvisional {
+				response.Diagnostics = append(response.Diagnostics, "review enrollment template stored because development mode is enabled")
 			}
 		}
 	} else {
