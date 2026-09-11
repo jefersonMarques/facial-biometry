@@ -41,6 +41,8 @@ export interface CompletionResponse {
     livenessScore: number;
     similarity?: number;
     matchThreshold?: number;
+    templateStored?: boolean;
+    templateProvisional?: boolean;
     signals: {
         passivePad: SignalResult;
         temporalMotion: SignalResult;
