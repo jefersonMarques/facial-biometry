@@ -76,11 +76,22 @@ function renderResult(result) {
         review: "REVISÃO",
         rejected: "REJEITADO",
     }[result.decision];
-    statusText.textContent = result.kind === "enrollment"
-        ? `Cadastro: ${decisionLabel}`
-        : `Verificação: ${decisionLabel}`;
+    if (result.kind === "enrollment" && result.templateStored) {
+        const suffix = result.templateProvisional ? " — template provisório salvo" : " — template salvo";
+        statusText.textContent = `Cadastro: ${decisionLabel}${suffix}`;
+    }
+    else {
+        statusText.textContent = result.kind === "enrollment"
+            ? `Cadastro: ${decisionLabel}`
+            : `Verificação: ${decisionLabel}`;
+    }
     const similarity = result.similarity === undefined ? "—" : percentage(result.similarity);
     const threshold = result.matchThreshold === undefined ? "—" : result.matchThreshold.toFixed(3);
+    const templateState = result.kind === "enrollment"
+        ? result.templateStored
+            ? result.templateProvisional ? "PROVISÓRIO" : "SALVO"
+            : "NÃO SALVO"
+        : "—";
     resultPanel.innerHTML = `
         <div class="result-header result-${escapeHtml(result.decision)}">
             <span>${escapeHtml(decisionLabel)}</span>
@@ -95,6 +106,7 @@ function renderResult(result) {
             ${metric("Presença facial", percentage(result.quality.facePresence))}
             ${metric("Similaridade 1:1", similarity)}
             ${metric("Threshold", threshold)}
+            ${metric("Template", templateState)}
         </div>
         ${result.diagnostics.length > 0
         ? `<div class="diagnostics">${result.diagnostics.map((message) => `<div>${escapeHtml(message)}</div>`).join("")}</div>`
@@ -131,4 +143,3 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
-//# sourceMappingURL=main.js.map
