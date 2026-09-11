@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>FaceProof Demo</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <main class="page-shell">
+        <section class="intro">
+            <div class="eyebrow">FACEPROOF / LOCAL MVP</div>
+            <h1>Biometria facial com prova de vida multi-frame</h1>
+            <p>Captura curta, PAD passivo, sinais temporais e comparação facial 1:1 sem API paga.</p>
+        </section>
+
+        <section class="workspace">
+            <div class="camera-card">
+                <div id="lightLayer" class="light-layer" aria-hidden="true"></div>
+                <video id="camera" autoplay muted playsinline></video>
+                <div class="face-guide" aria-hidden="true"></div>
+                <div class="camera-topline">
+                    <span class="camera-dot"></span>
+                    <span id="cameraState">Inicializando câmera...</span>
+                </div>
+                <div class="camera-footer">
+                    <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+                    <div id="statusText">Permita o acesso à câmera para começar.</div>
+                </div>
+            </div>
+
+            <aside class="controls-card">
+                <div class="field">
+                    <label for="subjectId">Subject ID</label>
+                    <input id="subjectId" autocomplete="off" maxlength="128" value="demo-person-001">
+                    <small>Use um ID interno. Evite CPF/e-mail diretamente no MVP.</small>
+                </div>
+
+                <div class="button-group">
+                    <button id="enrollButton" class="button button-primary" disabled>Cadastrar biometria</button>
+                    <button id="verifyButton" class="button button-secondary" disabled>Verificar identidade</button>
+                </div>
+
+                <div class="privacy-note">
+                    <strong>Privacidade do MVP</strong>
+                    <span>Os frames são processados em memória. O cadastro persiste apenas o embedding criptografado.</span>
+                </div>
+
+                <div id="resultPanel" class="result-panel" hidden></div>
+            </aside>
+        </section>
+    </main>
+
+    <script type="module" src="./dist/main.js"></script>
+</body>
+</html>
