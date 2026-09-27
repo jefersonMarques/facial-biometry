@@ -1,4 +1,4 @@
-import type { CapturedFrame, CompletionResponse, SessionKind, SessionResponse } from "./types.js";
+import type { CapturePackage, CompletionResponse, SessionKind, SessionResponse } from "./types.js";
 
 export class BiometricClient {
     public constructor(private readonly baseUrl: string) {}
@@ -11,13 +11,14 @@ export class BiometricClient {
         });
     }
 
-    public async completeSession(session: SessionResponse, frames: CapturedFrame[]): Promise<CompletionResponse> {
+    public async completeSession(session: SessionResponse, capture: CapturePackage): Promise<CompletionResponse> {
         const resource = session.kind === "enrollment" ? "enrollments" : "verifications";
         return this.request<CompletionResponse>(`/v1/biometric/${resource}/${session.sessionId}/complete`, {
             method: "POST",
             body: JSON.stringify({
                 sessionToken: session.sessionToken,
-                frames,
+                frames: capture.frames,
+                metadata: capture.metadata,
             }),
         });
     }

@@ -11,7 +11,7 @@ import (
 var (
 	ErrSessionNotFound  = errors.New("session not found")
 	ErrSessionExpired   = errors.New("session expired")
-	ErrSessionCompleted = errors.New("session already completed")
+	ErrSessionCompleted = errors.New("session already consumed")
 )
 
 type Store struct {
@@ -23,37 +23,43 @@ func NewStore() *Store {
 	return &Store{sessions: make(map[string]domain.CaptureSession)}
 }
 
-func (store *Store) Put(session domain.CaptureSession) {
+func (store *Store) Put(captureSession domain.CaptureSession) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	store.sessions[session.ID] = session
+	store.sessions[captureSession.ID] = captureSession
 }
 
 func (store *Store) Get(id string) (domain.CaptureSession, error) {
 	store.mu.RLock()
-	session, exists := store.sessions[id]
+	captureSession, exists := store.sessions[id]
 	store.mu.RUnlock()
-	if !exists {
-		return domain.CaptureSession{}, ErrSessionNotFound
-	}
-	if time.Now().After(session.ExpiresAt) {
-		return domain.CaptureSession{}, ErrSessionExpired
-	}
-	if session.Completed {
-		return domain.CaptureSession{}, ErrSessionCompleted
-	}
-	return session, nil
+	return validateSession(captureSession, exists)
 }
 
-func (store *Store) MarkCompleted(id string) error {
+func (store *Store) Consume(id string) (domain.CaptureSession, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	session, exists := store.sessions[id]
-	if !exists {
-		return ErrSessionNotFound
+	captureSession, exists := store.sessions[id]
+	captureSession, err := validateSession(captureSession, exists)
+	if err != nil {
+		return domain.CaptureSession{}, err
 	}
-	session.Completed = true
-	store.sessions[id] = session
-	return nil
+
+	captureSession.Completed = true
+	store.sessions[id] = captureSession
+	return captureSession, nil
+}
+
+func validateSession(captureSession domain.CaptureSession, exists bool) (domain.CaptureSession, error) {
+	if !exists {
+		return domain.CaptureSession{}, ErrSessionNotFound
+	}
+	if time.Now().After(captureSession.ExpiresAt) {
+		return domain.CaptureSession{}, ErrSessionExpired
+	}
+	if captureSession.Completed {
+		return domain.CaptureSession{}, ErrSessionCompleted
+	}
+	return captureSession, nil
 }

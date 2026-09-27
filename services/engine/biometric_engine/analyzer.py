@@ -11,6 +11,7 @@ from .metrics import (
     brightness_score,
     clamp01,
     face_size_score,
+    facial_illumination_value,
     illumination_correlation,
     robust_mean,
     sharpness_score,
@@ -74,7 +75,8 @@ class BiometricAnalyzer:
                 continue
 
             sharpness = sharpness_score(face_crop)
-            brightness_quality, brightness_value = brightness_score(face_crop)
+            brightness_quality, _ = brightness_score(face_crop)
+            brightness_value = facial_illumination_value(face_crop)
             size_score = face_size_score(image, detected.bbox)
             quality = clamp01(0.45 * sharpness + 0.30 * brightness_quality + 0.25 * size_score)
 

@@ -25,6 +25,23 @@ def brightness_score(image: np.ndarray) -> tuple[float, float]:
     return clamp01(score), normalized
 
 
+def facial_illumination_value(face_crop: np.ndarray) -> float:
+    gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape[:2]
+    if height < 8 or width < 8:
+        return float(gray.mean()) / 255.0
+
+    regions = [
+        gray[int(height * 0.12) : int(height * 0.34), int(width * 0.30) : int(width * 0.70)],
+        gray[int(height * 0.42) : int(height * 0.68), int(width * 0.10) : int(width * 0.42)],
+        gray[int(height * 0.42) : int(height * 0.68), int(width * 0.58) : int(width * 0.90)],
+    ]
+    values = [float(region.mean()) / 255.0 for region in regions if region.size > 0]
+    if not values:
+        return float(gray.mean()) / 255.0
+    return float(np.median(np.asarray(values, dtype=np.float64)))
+
+
 def face_size_score(image: np.ndarray, bbox: tuple[int, int, int, int]) -> float:
     _, _, width, height = bbox
     image_height, image_width = image.shape[:2]

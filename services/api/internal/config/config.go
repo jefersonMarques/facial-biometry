@@ -21,6 +21,7 @@ type Config struct {
 	LivenessThreshold       float64
 	ReviewLivenessThreshold float64
 	AllowReviewEnrollment   bool
+	RequirePassivePAD       bool
 }
 
 func Load() (Config, error) {
@@ -49,6 +50,7 @@ func Load() (Config, error) {
 		LivenessThreshold:       envFloat("FACEPROOF_LIVENESS_THRESHOLD", 0.68),
 		ReviewLivenessThreshold: envFloat("FACEPROOF_REVIEW_LIVENESS_THRESHOLD", 0.55),
 		AllowReviewEnrollment:   envBool("FACEPROOF_ALLOW_REVIEW_ENROLLMENT", false),
+		RequirePassivePAD:       envBool("FACEPROOF_REQUIRE_PASSIVE_PAD", true),
 	}, nil
 }
 
