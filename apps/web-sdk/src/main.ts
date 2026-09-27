@@ -1,9 +1,9 @@
+import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
-import type { CompletionResponse, FrameQualityAssessment, SessionKind } from "./types.js";
+import type { BiometricSessionKind, CompletionResponse, FrameQualityAssessment } from "./types.js";
 
-const apiBaseUrl = new URLSearchParams(window.location.search).get("api") ?? "http://localhost:8080";
-const client = new BiometricClient(apiBaseUrl);
+const client = new BiometricClient(resolveApiBaseUrl());
 
 const video = requiredElement<HTMLVideoElement>("camera");
 const subjectInput = requiredElement<HTMLInputElement>("subjectId");
@@ -35,7 +35,7 @@ enrollmentButton.addEventListener("click", () => void run("enrollment"));
 verificationButton.addEventListener("click", () => void run("verification"));
 window.addEventListener("beforeunload", () => camera.stop());
 
-async function run(kind: SessionKind): Promise<void> {
+async function run(kind: BiometricSessionKind): Promise<void> {
     if (busy) {
         return;
     }

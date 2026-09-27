@@ -1,5 +1,14 @@
-export type SessionKind = "enrollment" | "verification";
+export type SessionKind = "enrollment" | "verification" | "identity";
+export type BiometricSessionKind = Exclude<SessionKind, "identity">;
 export type Decision = "approved" | "review" | "rejected";
+export type IdentityStatus =
+    | "pending_document"
+    | "processing_document"
+    | "biometry_pending"
+    | "approved"
+    | "review"
+    | "rejected"
+    | "expired";
 
 export interface SessionResponse {
     sessionId: string;
@@ -78,4 +87,45 @@ export interface CompletionResponse {
     };
     quality: QualityResult;
     diagnostics: string[];
+}
+
+export interface IdentityCheckStatus {
+    id: string;
+    status: IdentityStatus;
+    expiresAt: string;
+    documentAccepted: boolean;
+    canStartBiometry: boolean;
+    decision?: Decision;
+}
+
+export interface IdentityDocumentResponse {
+    status: IdentityStatus;
+    document: {
+        signatureValid: boolean;
+        vioSignatureValid: boolean;
+        cpfMatch: boolean;
+        freshnessValid: boolean;
+    };
+}
+
+export interface IdentityCompletionResponse {
+    id: string;
+    status: IdentityStatus;
+    decision: Decision;
+    livenessScore: number;
+    similarity: number;
+    matchThreshold: number;
+    signals: {
+        passivePad: SignalResult;
+        temporalMotion: SignalResult;
+        illumination: SignalResult;
+    };
+    quality: QualityResult;
+    diagnostics: string[];
+    document: {
+        signatureValid: boolean;
+        vioSignatureValid: boolean;
+        cpfMatch: boolean;
+        freshnessValid: boolean;
+    };
 }
