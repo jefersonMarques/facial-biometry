@@ -1,10 +1,7 @@
 package httpapi
 
 import (
-	"crypto/rand"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -290,21 +287,3 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 
 	handler.writeJSON(writer, http.StatusOK, response)
 }
-
-func normalizeCapturedFrames(frames []domain.CapturedFrame, captureSession domain.CaptureSession) ([]domain.CapturedFrame, error) {
-	if len(frames) < 8 || len(frames) > 32 {
-		return nil, errors.New("capture must contain between 8 and 32 frames")
-	}
-	if captureSession.CaptureDurationMS <= 0 || captureSession.SampleIntervalMS <= 0 || len(captureSession.IlluminationPattern) < 4 {
-		return nil, errors.New("capture session configuration is invalid")
-	}
-
-	normalized := make([]domain.CapturedFrame, len(frames))
-	seenChallenges := make(map[int]struct{}, len(captureSession.IlluminationPattern))
-	var previousTimestamp int64 = -1
-	for index, frame := range frames {
-		if strings.TrimSpace(frame.ImageBase64) == "" {
-			return nil, errors.New("capture contains an empty frame")
-		}
-		if frame.TimestampMS < 0 || frame.TimestampMS <= previousTimestamp {
-			return nil, errors.New("frame timestamps must be strictly inc
