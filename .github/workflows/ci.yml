@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/browser-first-capture-v2
+      - feature/identity-check-cnh
   pull_request:
     branches:
       - main
@@ -17,6 +18,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23.x"
+      - name: Resolve Go modules
+        working-directory: services/api
+        run: |
+          go mod tidy
+          echo "=== FACEPROOF_GO_MOD ==="
+          cat go.mod
+          echo "=== FACEPROOF_GO_SUM ==="
+          cat go.sum
+          echo "=== FACEPROOF_GO_SUM_END ==="
       - name: Test Go API
         working-directory: services/api
         run: go test ./...
