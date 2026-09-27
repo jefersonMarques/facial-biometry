@@ -1,0 +1,41 @@
+[
+  {
+    "id": "2ec35447-7fc3-4fcd-8131-2185c9b5f3e6",
+    "group": {
+      "id": "37234581-512c-4906-a4ea-591d25dee539"
+    },
+    "public_key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAojvNLUEOyzAmjj+Lzs+nfNirYsnkLjw5exUdwMuDp1l2+6KEiPQ2yjLOqsczR+GB652t0+AZjd69MhYMOcVqkw8oe/ZL3CGl5jtcahzu0I1ZMep/cpyPoeP7jKh7lBCWrajg7tLufymNnFhcgVZkr3qFYD6GxWQMJXo/yyz/Fqhaj1rcudEWD9orzAdxsXMBjZ29C2pQYlUUfp4q/ERoViC+VR1RyDSM5kOhS+XAUXEKdT6QEoz+XfgsiYVZT5XDANYbEbf4XjDxp7Jd/xoMK6O4jiRhqZLlV1tXxzW+JQ0PcLMMcGeQK7eyklDvpBQY6iFGAdkt99KtSEN73sEEHwIDAQAB",
+    "valid": {
+      "from": "2017-04-29T10:50:00.000-03:00",
+      "until": "2022-04-29T10:50:00.000-03:00"
+    },
+    "created_at": "2017-04-29T10:50:00.000-03:00",
+    "updated_at": "2022-04-27T16:24:13.296-03:00"
+  },
+  {
+    "id": "fffc444f-99eb-46af-9987-409042e65c09",
+    "group": {
+      "id": "37234581-512c-4906-a4ea-591d25dee539"
+    },
+    "public_key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr3+FT8Gy+tIdCPOULLnHye3t+IED7gtOtJUKTellW2PvPjCwNPCEZjEYohhtdwhR7wEHyPHmt09WlFzOShYCV5RvwJhgaCH3YdDWxD329Hd/zQXx64gCYluzoM/Fj/Y1bu7UbtKrNnyEbLqyrVLjhfnSNh2hLPRh8ayUwPwQyiGeA4Wt3hixdrmzLFv/BbVF4jxTcEHHocqY0t351hcZzpTrirYXgmjCM8sPt4GEvOQE61hDZjQaWeZu3iRT8YVQBNRV9mQL8KSLimFGlgNiO42Vk63gxsd2RsGbl9xrEU/2HpYwqzHxqorrZn/7j1CWqshS9gmJtWgF+YtrmrdOswIDAQAB",
+    "valid": {
+      "from": "2022-04-14T00:00:00.000-03:00",
+      "until": "2027-04-14T00:00:00.000-03:00"
+    },
+    "created_at": "2022-04-26T16:58:18.783-03:00",
+    "updated_at": "2022-04-27T16:23:19.955-03:00"
+  },
+  {
+    "id": "7016a8bc-b4e1-40fc-a509-973227355126",
+    "group": {
+      "id": "6d15023d-bdb8-4860-b73f-cb66934369f4"
+    },
+    "public_key": "MFowFAYHKoZIzj0CAQYJKyQDAwIIAQEHA0IABHxKU3gWMkn5J4UvqvhQOw2SmiOQy/dS2YYm74PfgsF3WscdxbddO7d+UVzMk98MrHpu4qO8V6m89NSE8OS2ibg=",
+    "valid": {
+      "from": "2019-08-13T08:00:00.000-03:00",
+      "until": "2029-08-13T08:00:00.000-03:00"
+    },
+    "created_at": "2019-08-13T14:12:14.737-03:00",
+    "updated_at": "2019-08-13T14:12:14.737-03:00"
+  }
+]
