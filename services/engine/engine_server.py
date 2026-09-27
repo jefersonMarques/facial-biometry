@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -24,10 +25,11 @@ ANALYZER = BiometricAnalyzer(
     sface_model_path=env_path("FACEPROOF_SFACE_MODEL", "../../models/sface/face_recognition_sface_2021dec.onnx"),
     minifasnet_model_path=env_path("FACEPROOF_MINIFASNET_MODEL", "../../models/minifasnet/MiniFASNetV2.onnx"),
 )
+ANALYZER_LOCK = threading.Lock()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FaceProofEngine/0.1"
+    server_version = "FaceProofEngine/0.2"
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -36,18 +38,26 @@ class Handler(BaseHTTPRequestHandler):
         self._write_json(404, {"error": "route not found"})
 
     def do_POST(self) -> None:
-        if self.path != "/analyze":
-            self._write_json(404, {"error": "route not found"})
-            return
-
         try:
-            payload = self._read_json(max_bytes=16 * 1024 * 1024)
-            result = ANALYZER.analyze(payload)
-            self._write_json(200, result)
+            if self.path == "/analyze":
+                payload = self._read_json(max_bytes=16 * 1024 * 1024)
+                with ANALYZER_LOCK:
+                    result = ANALYZER.analyze(payload)
+                self._write_json(200, result)
+                return
+
+            if self.path == "/reference":
+                payload = self._read_json(max_bytes=6 * 1024 * 1024)
+                with ANALYZER_LOCK:
+                    result = ANALYZER.extract_reference(payload)
+                self._write_json(200, result)
+                return
+
+            self._write_json(404, {"error": "route not found"})
         except ValueError as error:
             self._write_json(400, {"error": str(error)})
-        except Exception as error:
-            self._write_json(500, {"error": f"engine failure: {error}"})
+        except Exception:
+            self._write_json(500, {"error": "engine failure"})
 
     def log_message(self, format_string: str, *args: Any) -> None:
         print(f"[engine] {self.address_string()} - {format_string % args}")

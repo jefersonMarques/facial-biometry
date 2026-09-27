@@ -7,6 +7,7 @@ type SessionKind string
 const (
 	SessionKindEnrollment   SessionKind = "enrollment"
 	SessionKindVerification SessionKind = "verification"
+	SessionKindIdentity     SessionKind = "identity"
 )
 
 type CaptureSession struct {
@@ -76,6 +77,12 @@ type EngineResult struct {
 	EmbeddingModel string        `json:"embeddingModel"`
 	BestFrameIndex int           `json:"bestFrameIndex"`
 	Diagnostics    []string      `json:"diagnostics"`
+}
+
+type ReferenceResult struct {
+	Embedding      []float64     `json:"embedding"`
+	EmbeddingModel string        `json:"embeddingModel"`
+	Quality        EngineQuality `json:"quality"`
 }
 
 type BiometricTemplate struct {

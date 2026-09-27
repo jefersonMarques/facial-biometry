@@ -51,6 +51,40 @@ class BiometricAnalyzer:
         except Exception as error:
             self._passive_pad_error = str(error)
 
+    def extract_reference(self, payload: dict[str, Any]) -> dict[str, Any]:
+        image_base64 = payload.get("imageBase64")
+        if not isinstance(image_base64, str) or not image_base64.strip():
+            raise ValueError("imageBase64 is required")
+
+        image = decode_data_url(image_base64)
+        detected = self._detector.detect_primary(image)
+        if detected is None:
+            raise ValueError("no face detected in reference image")
+
+        face_crop = crop_face(image, detected.bbox)
+        if face_crop.size == 0:
+            raise ValueError("reference face crop is empty")
+
+        sharpness = sharpness_score(face_crop)
+        brightness, _ = brightness_score(face_crop)
+        size_score = face_size_score(image, detected.bbox)
+        quality = clamp01(0.45 * sharpness + 0.30 * brightness + 0.25 * size_score)
+        embedding = self._encoder.encode(image, detected)
+
+        return {
+            "embedding": [round(float(value), 8) for value in embedding.tolist()],
+            "embeddingModel": self._encoder.model_name,
+            "quality": {
+                "score": round(float(quality), 6),
+                "facePresence": 1.0,
+                "sharpness": round(float(sharpness), 6),
+                "brightness": round(float(brightness), 6),
+                "faceSize": round(float(size_score), 6),
+                "detectedFrames": 1,
+                "processedFrames": 1,
+            },
+        }
+
     def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         frames_payload = payload.get("frames")
         illumination_pattern = payload.get("illuminationPattern")
