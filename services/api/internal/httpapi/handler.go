@@ -259,7 +259,7 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 		response.Decision = handler.risk.EnrollmentDecision(result.LivenessScore, passivePADAvailable)
 		shouldStoreTemplate := response.Decision == "approved" || (response.Decision == "review" && handler.config.AllowReviewEnrollment)
 		if shouldStoreTemplate {
-			biometricTemplate := domain.BiometricTemplate{,
+			biometricTemplate := domain.BiometricTemplate{
 				SubjectID:      captureSession.SubjectID,
 				Embedding:      result.Embedding,
 				EmbeddingModel: result.EmbeddingModel,
