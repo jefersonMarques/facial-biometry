@@ -10,13 +10,14 @@ export class BiometricClient {
             body: JSON.stringify({ subjectId }),
         });
     }
-    async completeSession(session, frames) {
+    async completeSession(session, capture) {
         const resource = session.kind === "enrollment" ? "enrollments" : "verifications";
         return this.request(`/v1/biometric/${resource}/${session.sessionId}/complete`, {
             method: "POST",
             body: JSON.stringify({
                 sessionToken: session.sessionToken,
-                frames,
+                frames: capture.frames,
+                metadata: capture.metadata,
             }),
         });
     }

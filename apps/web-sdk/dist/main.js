@@ -45,7 +45,7 @@ async function run(kind) {
     statusText.textContent = "Criando sessão segura...";
     try {
         const session = await client.createSession(subjectId, kind);
-        const frames = await camera.capture(session, {
+        const capture = await camera.capture(session, {
             onProgress(progress) {
                 progressBar.style.width = `${Math.round(progress * 100)}%`;
             },
@@ -53,11 +53,14 @@ async function run(kind) {
                 const opacity = Math.max(0, Math.min(0.72, value * 0.72));
                 lightLayer.style.background = `rgba(255, 255, 255, ${opacity.toFixed(3)})`;
             },
+            onQualityChange(quality) {
+                renderCameraQuality(quality);
+            },
             onStatus(message) {
                 statusText.textContent = message;
             },
         });
-        const result = await client.completeSession(session, frames);
+        const result = await client.completeSession(session, capture);
         renderResult(result);
     }
     catch (error) {
@@ -69,6 +72,13 @@ async function run(kind) {
         busy = false;
         setControlsEnabled(true);
     }
+}
+function renderCameraQuality(quality) {
+    if (quality.acceptable) {
+        cameraState.textContent = "Qualidade de captura boa";
+        return;
+    }
+    cameraState.textContent = quality.issue ?? "Ajuste a câmera";
 }
 function renderResult(result) {
     const decisionLabel = {
@@ -143,3 +153,4 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+//# sourceMappingURL=main.js.map
