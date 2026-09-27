@@ -11,6 +11,9 @@ export class BiometricClient {
         });
     }
     async completeSession(session, capture) {
+        if (session.kind === "identity") {
+            throw new Error("Identity sessions must use completeIdentityCheck");
+        }
         const resource = session.kind === "enrollment" ? "enrollments" : "verifications";
         return this.request(`/v1/biometric/${resource}/${session.sessionId}/complete`, {
             method: "POST",
@@ -21,13 +24,52 @@ export class BiometricClient {
             }),
         });
     }
+    async getIdentityCheck(token) {
+        return this.identityRequest("/v1/identity/check", token, { method: "GET" });
+    }
+    async uploadIdentityDocument(token, file) {
+        const form = new FormData();
+        form.append("file", file, file.name);
+        return this.identityRequest("/v1/identity/document", token, {
+            method: "POST",
+            body: form,
+        });
+    }
+    async createIdentitySession(token) {
+        return this.identityRequest("/v1/identity/session", token, {
+            method: "POST",
+        });
+    }
+    async completeIdentityCheck(token, session, capture) {
+        if (session.kind !== "identity") {
+            throw new Error("Invalid identity capture session");
+        }
+        return this.identityRequest("/v1/identity/complete", token, {
+            method: "POST",
+            body: JSON.stringify({
+                sessionId: session.sessionId,
+                sessionToken: session.sessionToken,
+                frames: capture.frames,
+                metadata: capture.metadata,
+            }),
+        });
+    }
+    async identityRequest(path, token, init) {
+        const headers = new Headers(init.headers);
+        headers.set("X-FaceProof-Identity-Token", token);
+        return this.request(path, { ...init, headers });
+    }
     async request(path, init) {
+        const headers = new Headers(init.headers);
+        if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+            headers.set("Content-Type", "application/json");
+        }
         const response = await fetch(`${this.baseUrl}${path}`, {
             ...init,
-            headers: {
-                "Content-Type": "application/json",
-                ...init.headers,
-            },
+            headers,
+            cache: "no-store",
+            credentials: "omit",
+            referrerPolicy: "no-referrer",
         });
         const payload = await response.json();
         if (!response.ok) {

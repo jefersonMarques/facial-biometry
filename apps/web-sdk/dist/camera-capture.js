@@ -1,5 +1,5 @@
 import { FrameQualityAnalyzer } from "./frame-quality.js";
-const SDK_VERSION = "0.2.0";
+const SDK_VERSION = "0.3.0";
 const READINESS_TIMEOUT_MS = 4_000;
 const READINESS_SAMPLE_MS = 220;
 const REQUIRED_GOOD_SAMPLES = 2;
