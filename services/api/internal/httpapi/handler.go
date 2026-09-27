@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"faceproof/services/api/internal/config"
+	"faceproof/services/api/internal/document/cnh"
 	"faceproof/services/api/internal/domain"
 	"faceproof/services/api/internal/engine"
+	"faceproof/services/api/internal/identity"
 	"faceproof/services/api/internal/matching"
 	"faceproof/services/api/internal/risk"
 	"faceproof/services/api/internal/security"
@@ -24,12 +26,14 @@ const (
 )
 
 type Handler struct {
-	config    config.Config
-	sessions  *session.Store
-	signer    *security.Signer
-	engine    *engine.Client
-	templates *templaterepository.Repository
-	risk      *risk.Engine
+	config         config.Config
+	sessions       *session.Store
+	signer         *security.Signer
+	engine         *engine.Client
+	templates      *templaterepository.Repository
+	risk           *risk.Engine
+	identityChecks *identity.Repository
+	cnhDocuments   *cnh.Service
 }
 
 type createSessionRequest struct {
@@ -74,13 +78,23 @@ type signalResponse struct {
 	Illumination   domain.EngineSignal `json:"illumination"`
 }
 
-func NewHandler(configuration config.Config, sessions *session.Store, signer *security.Signer, engineClient *engine.Client, templates *templaterepository.Repository) *Handler {
+func NewHandler(
+	configuration config.Config,
+	sessions *session.Store,
+	signer *security.Signer,
+	engineClient *engine.Client,
+	templates *templaterepository.Repository,
+	identityChecks *identity.Repository,
+	cnhDocuments *cnh.Service,
+) *Handler {
 	return &Handler{
-		config:    configuration,
-		sessions:  sessions,
-		signer:    signer,
-		engine:    engineClient,
-		templates: templates,
+		config:         configuration,
+		sessions:       sessions,
+		signer:         signer,
+		engine:         engineClient,
+		templates:      templates,
+		identityChecks: identityChecks,
+		cnhDocuments:   cnhDocuments,
 		risk: risk.NewEngine(
 			configuration.LivenessThreshold,
 			configuration.ReviewLivenessThreshold,
@@ -99,6 +113,27 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 
 	if request.URL.Path == "/health" && request.Method == http.MethodGet {
 		handler.writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+
+	if request.URL.Path == "/v1/identity/checks" && request.Method == http.MethodPost {
+		handler.createIdentityCheck(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/check" && request.Method == http.MethodGet {
+		handler.getIdentityCheck(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/document" && request.Method == http.MethodPost {
+		handler.uploadIdentityDocument(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/session" && request.Method == http.MethodPost {
+		handler.issueIdentitySession(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/complete" && request.Method == http.MethodPost {
+		handler.completeIdentityCheck(writer, request)
 		return
 	}
 
@@ -152,47 +187,12 @@ func (handler *Handler) createSession(writer http.ResponseWriter, request *http.
 		}
 	}
 
-	sessionID, err := security.RandomID(18)
+	response, err := handler.issueCaptureSession(payload.SubjectID, kind)
 	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to create session")
+		handler.writeError(writer, http.StatusInternalServerError, "failed to create capture session")
 		return
 	}
-	illuminationPattern, err := randomIlluminationPattern(illuminationSteps)
-	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to create illumination challenge")
-		return
-	}
-
-	now := time.Now().UTC()
-	captureSession := domain.CaptureSession{
-		ID:                   sessionID,
-		SubjectID:            payload.SubjectID,
-		Kind:                 kind,
-		IlluminationPattern:  illuminationPattern,
-		CaptureDurationMS:    captureDurationMS,
-		SampleIntervalMS:     sampleIntervalMS,
-		IlluminationSettleMS: illuminationSettleMS,
-		CreatedAt:            now,
-		ExpiresAt:            now.Add(handler.config.SessionTTL),
-	}
-	handler.sessions.Put(captureSession)
-
-	token, err := handler.signer.Sign(captureSession.ID, captureSession.ExpiresAt)
-	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to sign session")
-		return
-	}
-
-	handler.writeJSON(writer, http.StatusCreated, createSessionResponse{
-		SessionID:            captureSession.ID,
-		SessionToken:         token,
-		Kind:                 string(captureSession.Kind),
-		ExpiresAt:            captureSession.ExpiresAt,
-		CaptureDurationMS:    captureSession.CaptureDurationMS,
-		SampleIntervalMS:     captureSession.SampleIntervalMS,
-		IlluminationSettleMS: captureSession.IlluminationSettleMS,
-		IlluminationPattern:  captureSession.IlluminationPattern,
-	})
+	handler.writeJSON(writer, http.StatusCreated, response)
 }
 
 func (handler *Handler) completeSession(writer http.ResponseWriter, request *http.Request, sessionID string, expectedKind domain.SessionKind) {
@@ -233,7 +233,7 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 		IlluminationPattern: captureSession.IlluminationPattern,
 	})
 	if err != nil {
-		handler.writeError(writer, http.StatusBadGateway, "biometric engine failed: "+err.Error())
+		handler.writeError(writer, http.StatusBadGateway, "biometric engine failed")
 		return
 	}
 

@@ -6,4 +6,6 @@ services/api/faceproof-api
 apps/web-sdk/node_modules/
 data/templates/*.json
 !data/templates/.gitkeep
+data/identity-checks/*.json
+!data/identity-checks/.gitkeep
 .dev/
