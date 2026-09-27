@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/browser-first-capture-v2
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Test Go API
+        working-directory: services/api
+        run: go test ./...
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install engine dependencies
+        run: python -m pip install -r services/engine/requirements.txt
+      - name: Test biometric engine
+        env:
+          PYTHONPATH: services/engine
+        run: python -m unittest discover -s services/engine/tests -v
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web SDK dependencies
+        working-directory: apps/web-sdk
+        run: npm install
+      - name: Typecheck web SDK
+        working-directory: apps/web-sdk
+        run: npm run typecheck
+      - name: Build web SDK
+        working-directory: apps/web-sdk
+        run: npm run build
+      - name: Verify committed web bundle
+        run: git diff --exit-code -- apps/web-sdk/dist
