@@ -148,4 +148,3 @@ export class CameraCapture {
         await new Promise((resolve) => window.setTimeout(resolve, milliseconds));
     }
 }
-//# sourceMappingURL=camera-capture.js.map
