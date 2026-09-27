@@ -120,6 +120,15 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		handler.createIdentityCheck(writer, request)
 		return
 	}
+	identitySegments := splitPath(request.URL.Path)
+	if len(identitySegments) == 4 &&
+		identitySegments[0] == "v1" &&
+		identitySegments[1] == "identity" &&
+		identitySegments[2] == "checks" &&
+		request.Method == http.MethodGet {
+		handler.getIssuerIdentityCheck(writer, request, identitySegments[3])
+		return
+	}
 	if request.URL.Path == "/v1/identity/check" && request.Method == http.MethodGet {
 		handler.getIdentityCheck(writer, request)
 		return

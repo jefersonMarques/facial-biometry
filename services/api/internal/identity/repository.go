@@ -12,10 +12,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 )
 
 var ErrNotFound = errors.New("identity check not found")
+
+var checkIDPattern = regexp.MustCompile(`^chk_[A-Za-z0-9_-]{8,64}$`)
 
 type encryptedDocument struct {
 	Nonce      string `json:"nonce"`
@@ -24,9 +27,10 @@ type encryptedDocument struct {
 }
 
 type Repository struct {
-	directory string
-	aead      cipher.AEAD
-	mu        sync.RWMutex
+	directory      string
+	indexDirectory string
+	aead           cipher.AEAD
+	mu             sync.RWMutex
 }
 
 func NewRepository(directory string, key []byte) (*Repository, error) {
@@ -41,12 +45,26 @@ func NewRepository(directory string, key []byte) (*Repository, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
-	return &Repository{directory: directory, aead: aead}, nil
+
+	indexDirectory := filepath.Join(directory, "by-id")
+	if err := os.MkdirAll(indexDirectory, 0o700); err != nil {
+		return nil, err
+	}
+
+	return &Repository{
+		directory:      directory,
+		indexDirectory: indexDirectory,
+		aead:           aead,
+	}, nil
 }
 
 func (repository *Repository) Create(token string, check Check) error {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
+
+	if !checkIDPattern.MatchString(check.ID) {
+		return errors.New("invalid identity check id")
+	}
 
 	tokenHash := hashToken(token)
 	path := repository.pathFor(tokenHash)
@@ -55,13 +73,38 @@ func (repository *Repository) Create(token string, check Check) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	return repository.saveLocked(tokenHash, check)
+
+	if _, err := os.Stat(repository.indexPath(check.ID)); err == nil {
+		return errors.New("identity check id collision")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := repository.saveLocked(tokenHash, check); err != nil {
+		return err
+	}
+	if err := repository.saveIndexLocked(check.ID, tokenHash); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return nil
 }
 
 func (repository *Repository) Load(token string) (Check, error) {
 	repository.mu.RLock()
 	defer repository.mu.RUnlock()
 	return repository.loadLocked(hashToken(token))
+}
+
+func (repository *Repository) LoadByID(id string) (Check, error) {
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+
+	tokenHash, err := repository.tokenHashForIDLocked(id)
+	if err != nil {
+		return Check{}, err
+	}
+	return repository.loadLocked(tokenHash)
 }
 
 func (repository *Repository) Update(token string, mutate func(*Check) error) (Check, error) {
@@ -148,8 +191,42 @@ func (repository *Repository) saveLocked(tokenHash string, check Check) error {
 	return os.Rename(temporaryPath, path)
 }
 
+func (repository *Repository) saveIndexLocked(id, tokenHash string) error {
+	path := repository.indexPath(id)
+	temporaryPath := path + ".tmp"
+	if err := os.WriteFile(temporaryPath, []byte(tokenHash), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
+}
+
+func (repository *Repository) tokenHashForIDLocked(id string) (string, error) {
+	if !checkIDPattern.MatchString(id) {
+		return "", ErrNotFound
+	}
+	value, err := os.ReadFile(repository.indexPath(id))
+	if os.IsNotExist(err) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	tokenHash := string(value)
+	if len(tokenHash) != sha256.Size*2 {
+		return "", errors.New("invalid identity check index")
+	}
+	if _, err := hex.DecodeString(tokenHash); err != nil {
+		return "", errors.New("invalid identity check index")
+	}
+	return tokenHash, nil
+}
+
 func (repository *Repository) pathFor(tokenHash string) string {
 	return filepath.Join(repository.directory, tokenHash+".json")
+}
+
+func (repository *Repository) indexPath(id string) string {
+	return filepath.Join(repository.indexDirectory, id)
 }
 
 func hashToken(token string) string {

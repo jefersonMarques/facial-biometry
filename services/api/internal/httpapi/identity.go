@@ -66,6 +66,18 @@ type identityCompleteRequest struct {
 	Metadata     *domain.CaptureMetadata `json:"metadata,omitempty"`
 }
 
+type issuerIdentityCheckResponse struct {
+	ID                  string             `json:"id"`
+	Status              identity.Status    `json:"status"`
+	MinimumDocumentDate time.Time          `json:"minimumDocumentDate"`
+	CreatedAt           time.Time          `json:"createdAt"`
+	ExpiresAt           time.Time          `json:"expiresAt"`
+	Decision            string             `json:"decision,omitempty"`
+	Document            *identity.DocumentEvidence `json:"document,omitempty"`
+	LivenessScore       float64            `json:"livenessScore,omitempty"`
+	FaceSimilarity      float64            `json:"faceSimilarity,omitempty"`
+}
+
 type identityCompleteResponse struct {
 	ID             string               `json:"id"`
 	Status         identity.Status      `json:"status"`
@@ -527,4 +539,43 @@ func readIdentityPDF(writer http.ResponseWriter, request *http.Request, maxBytes
 		return nil, errors.New("file is not a valid PDF")
 	}
 	return data, nil
+}
+
+
+func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, request *http.Request, checkID string) {
+	if handler.identityChecks == nil {
+		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
+		return
+	}
+	if !handler.authorizeIdentityIssuer(request) {
+		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
+		return
+	}
+
+	check, err := handler.identityChecks.LoadByID(checkID)
+	if errors.Is(err, identity.ErrNotFound) {
+		handler.writeError(writer, http.StatusNotFound, "identity check not found")
+		return
+	}
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to load identity check")
+		return
+	}
+
+	status := check.Status
+	if time.Now().After(check.ExpiresAt) && status != identity.StatusApproved && status != identity.StatusReview && status != identity.StatusRejected {
+		status = identity.StatusExpired
+	}
+
+	handler.writeJSON(writer, http.StatusOK, issuerIdentityCheckResponse{
+		ID:                  check.ID,
+		Status:              status,
+		MinimumDocumentDate: check.MinimumDocumentDate,
+		CreatedAt:           check.CreatedAt,
+		ExpiresAt:           check.ExpiresAt,
+		Decision:            check.Decision,
+		Document:            check.Document,
+		LivenessScore:       check.LivenessScore,
+		FaceSimilarity:      check.FaceSimilarity,
+	})
 }
