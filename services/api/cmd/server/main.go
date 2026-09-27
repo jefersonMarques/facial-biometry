@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"faceproof/services/api/internal/config"
 	"faceproof/services/api/internal/engine"
@@ -34,10 +35,10 @@ func main() {
 	server := &http.Server{
 		Addr:              configuration.APIAddress,
 		Handler:           handler,
-		ReadHeaderTimeout: 5_000_000_000,
-		ReadTimeout:       35_000_000_000,
-		WriteTimeout:      35_000_000_000,
-		IdleTimeout:       60_000_000_000,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       35 * time.Second,
+		WriteTimeout:      35 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	log.Printf("FaceProof API listening on %s", configuration.APIAddress)

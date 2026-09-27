@@ -1,10 +1,7 @@
 package httpapi
 
 import (
-	"crypto/rand"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +14,13 @@ import (
 	"faceproof/services/api/internal/security"
 	"faceproof/services/api/internal/session"
 	templaterepository "faceproof/services/api/internal/template"
+)
+
+const (
+	captureDurationMS    = 2400
+	sampleIntervalMS     = 120
+	illuminationSettleMS = 65
+	illuminationSteps    = 6
 )
 
 type Handler struct {
@@ -33,18 +37,20 @@ type createSessionRequest struct {
 }
 
 type createSessionResponse struct {
-	SessionID           string    `json:"sessionId"`
-	SessionToken        string    `json:"sessionToken"`
-	Kind                string    `json:"kind"`
-	ExpiresAt           time.Time `json:"expiresAt"`
-	CaptureDurationMS   int       `json:"captureDurationMs"`
-	SampleIntervalMS    int       `json:"sampleIntervalMs"`
-	IlluminationPattern []float64 `json:"illuminationPattern"`
+	SessionID            string    `json:"sessionId"`
+	SessionToken         string    `json:"sessionToken"`
+	Kind                 string    `json:"kind"`
+	ExpiresAt            time.Time `json:"expiresAt"`
+	CaptureDurationMS    int       `json:"captureDurationMs"`
+	SampleIntervalMS     int       `json:"sampleIntervalMs"`
+	IlluminationSettleMS int       `json:"illuminationSettleMs"`
+	IlluminationPattern  []float64 `json:"illuminationPattern"`
 }
 
 type completeSessionRequest struct {
-	SessionToken string                 `json:"sessionToken"`
-	Frames       []domain.CapturedFrame `json:"frames"`
+	SessionToken string                  `json:"sessionToken"`
+	Frames       []domain.CapturedFrame  `json:"frames"`
+	Metadata     *domain.CaptureMetadata `json:"metadata,omitempty"`
 }
 
 type completeSessionResponse struct {
@@ -75,7 +81,12 @@ func NewHandler(configuration config.Config, sessions *session.Store, signer *se
 		signer:    signer,
 		engine:    engineClient,
 		templates: templates,
-		risk:      risk.NewEngine(configuration.LivenessThreshold, configuration.ReviewLivenessThreshold, configuration.MatchThreshold),
+		risk: risk.NewEngine(
+			configuration.LivenessThreshold,
+			configuration.ReviewLivenessThreshold,
+			configuration.MatchThreshold,
+			configuration.RequirePassivePAD,
+		),
 	}
 }
 
@@ -146,14 +157,23 @@ func (handler *Handler) createSession(writer http.ResponseWriter, request *http.
 		handler.writeError(writer, http.StatusInternalServerError, "failed to create session")
 		return
 	}
+	illuminationPattern, err := randomIlluminationPattern(illuminationSteps)
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to create illumination challenge")
+		return
+	}
+
 	now := time.Now().UTC()
 	captureSession := domain.CaptureSession{
-		ID:                  sessionID,
-		SubjectID:           payload.SubjectID,
-		Kind:                kind,
-		IlluminationPattern: randomIlluminationPattern(6),
-		CreatedAt:           now,
-		ExpiresAt:           now.Add(handler.config.SessionTTL),
+		ID:                   sessionID,
+		SubjectID:            payload.SubjectID,
+		Kind:                 kind,
+		IlluminationPattern:  illuminationPattern,
+		CaptureDurationMS:    captureDurationMS,
+		SampleIntervalMS:     sampleIntervalMS,
+		IlluminationSettleMS: illuminationSettleMS,
+		CreatedAt:            now,
+		ExpiresAt:            now.Add(handler.config.SessionTTL),
 	}
 	handler.sessions.Put(captureSession)
 
@@ -164,20 +184,21 @@ func (handler *Handler) createSession(writer http.ResponseWriter, request *http.
 	}
 
 	handler.writeJSON(writer, http.StatusCreated, createSessionResponse{
-		SessionID:           captureSession.ID,
-		SessionToken:        token,
-		Kind:                string(captureSession.Kind),
-		ExpiresAt:           captureSession.ExpiresAt,
-		CaptureDurationMS:   2400,
-		SampleIntervalMS:    120,
-		IlluminationPattern: captureSession.IlluminationPattern,
+		SessionID:            captureSession.ID,
+		SessionToken:         token,
+		Kind:                 string(captureSession.Kind),
+		ExpiresAt:            captureSession.ExpiresAt,
+		CaptureDurationMS:    captureSession.CaptureDurationMS,
+		SampleIntervalMS:     captureSession.SampleIntervalMS,
+		IlluminationSettleMS: captureSession.IlluminationSettleMS,
+		IlluminationPattern:  captureSession.IlluminationPattern,
 	})
 }
 
 func (handler *Handler) completeSession(writer http.ResponseWriter, request *http.Request, sessionID string, expectedKind domain.SessionKind) {
 	captureSession, err := handler.sessions.Get(sessionID)
 	if err != nil {
-		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		handler.writeError(writer, sessionErrorStatus(err), err.Error())
 		return
 	}
 	if captureSession.Kind != expectedKind {
@@ -194,13 +215,21 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 		handler.writeError(writer, http.StatusUnauthorized, err.Error())
 		return
 	}
-	if len(payload.Frames) < 8 || len(payload.Frames) > 32 {
-		handler.writeError(writer, http.StatusBadRequest, "capture must contain between 8 and 32 frames")
+
+	normalizedFrames, err := normalizeCapturedFrames(payload.Frames, captureSession)
+	if err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	captureSession, err = handler.sessions.Consume(sessionID)
+	if err != nil {
+		handler.writeError(writer, sessionErrorStatus(err), err.Error())
 		return
 	}
 
 	result, err := handler.engine.Analyze(request.Context(), domain.EngineRequest{
-		Frames:              payload.Frames,
+		Frames:              normalizedFrames,
 		IlluminationPattern: captureSession.IlluminationPattern,
 	})
 	if err != nil {
@@ -222,8 +251,9 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 		Diagnostics: append([]string(nil), result.Diagnostics...),
 	}
 
+	passivePADAvailable := result.PassivePAD.Status == "available"
 	if captureSession.Kind == domain.SessionKindEnrollment {
-		response.Decision = handler.risk.EnrollmentDecision(result.LivenessScore)
+		response.Decision = handler.risk.EnrollmentDecision(result.LivenessScore, passivePADAvailable)
 		shouldStoreTemplate := response.Decision == "approved" || (response.Decision == "review" && handler.config.AllowReviewEnrollment)
 		if shouldStoreTemplate {
 			biometricTemplate := domain.BiometricTemplate{
@@ -252,68 +282,8 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 		threshold := handler.config.MatchThreshold
 		response.Similarity = &similarity
 		response.MatchThreshold = &threshold
-		response.Decision = handler.risk.VerificationDecision(result.LivenessScore, similarity)
+		response.Decision = handler.risk.VerificationDecision(result.LivenessScore, similarity, passivePADAvailable)
 	}
 
-	if err := handler.sessions.MarkCompleted(sessionID); err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to complete session")
-		return
-	}
 	handler.writeJSON(writer, http.StatusOK, response)
-}
-
-func randomIlluminationPattern(length int) []float64 {
-	pattern := make([]float64, length)
-	buffer := make([]byte, length)
-	if _, err := rand.Read(buffer); err != nil {
-		for index := range pattern {
-			pattern[index] = 0.5
-		}
-		return pattern
-	}
-	for index, value := range buffer {
-		pattern[index] = 0.22 + (float64(value)/255.0)*0.68
-	}
-	return pattern
-}
-
-func (handler *Handler) setCORS(writer http.ResponseWriter) {
-	writer.Header().Set("Access-Control-Allow-Origin", handler.config.AllowedOrigin)
-	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-}
-
-func (handler *Handler) writeJSON(writer http.ResponseWriter, status int, payload any) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(payload)
-}
-
-func (handler *Handler) writeError(writer http.ResponseWriter, status int, message string) {
-	handler.writeJSON(writer, status, map[string]string{"error": message})
-}
-
-func splitPath(path string) []string {
-	trimmed := strings.Trim(path, "/")
-	if trimmed == "" {
-		return nil
-	}
-	return strings.Split(trimmed, "/")
-}
-
-func decodeJSON(request *http.Request, target any, maxBytes int64) error {
-	defer request.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(request.Body, maxBytes+1))
-	if err != nil {
-		return err
-	}
-	if int64(len(body)) > maxBytes {
-		return errors.New("request body is too large")
-	}
-	decoder := json.NewDecoder(strings.NewReader(string(body)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	return nil
 }

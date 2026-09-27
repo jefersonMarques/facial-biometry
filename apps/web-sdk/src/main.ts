@@ -1,6 +1,6 @@
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
-import type { CompletionResponse, SessionKind } from "./types.js";
+import type { CompletionResponse, FrameQualityAssessment, SessionKind } from "./types.js";
 
 const apiBaseUrl = new URLSearchParams(window.location.search).get("api") ?? "http://localhost:8080";
 const client = new BiometricClient(apiBaseUrl);
@@ -55,7 +55,7 @@ async function run(kind: SessionKind): Promise<void> {
 
     try {
         const session = await client.createSession(subjectId, kind);
-        const frames = await camera.capture(session, {
+        const capture = await camera.capture(session, {
             onProgress(progress) {
                 progressBar.style.width = `${Math.round(progress * 100)}%`;
             },
@@ -63,12 +63,15 @@ async function run(kind: SessionKind): Promise<void> {
                 const opacity = Math.max(0, Math.min(0.72, value * 0.72));
                 lightLayer.style.background = `rgba(255, 255, 255, ${opacity.toFixed(3)})`;
             },
+            onQualityChange(quality) {
+                renderCameraQuality(quality);
+            },
             onStatus(message) {
                 statusText.textContent = message;
             },
         });
 
-        const result = await client.completeSession(session, frames);
+        const result = await client.completeSession(session, capture);
         renderResult(result);
     } catch (error) {
         statusText.textContent = errorMessage(error);
@@ -78,6 +81,14 @@ async function run(kind: SessionKind): Promise<void> {
         busy = false;
         setControlsEnabled(true);
     }
+}
+
+function renderCameraQuality(quality: FrameQualityAssessment): void {
+    if (quality.acceptable) {
+        cameraState.textContent = "Qualidade de captura boa";
+        return;
+    }
+    cameraState.textContent = quality.issue ?? "Ajuste a câmera";
 }
 
 function renderResult(result: CompletionResponse): void {

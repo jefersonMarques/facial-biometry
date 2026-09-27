@@ -8,7 +8,14 @@ export interface SessionResponse {
     expiresAt: string;
     captureDurationMs: number;
     sampleIntervalMs: number;
+    illuminationSettleMs: number;
     illuminationPattern: number[];
+}
+
+export interface ClientFrameQuality {
+    brightness: number;
+    contrast: number;
+    sharpness: number;
 }
 
 export interface CapturedFrame {
@@ -16,6 +23,27 @@ export interface CapturedFrame {
     timestampMs: number;
     challengeIndex: number;
     clientLight: number;
+    clientQuality: ClientFrameQuality;
+}
+
+export interface CaptureMetadata {
+    sdkVersion: string;
+    startedAtUnixMs: number;
+    endedAtUnixMs: number;
+    frameWidth: number;
+    frameHeight: number;
+    userAgent: string;
+    platform: string;
+}
+
+export interface CapturePackage {
+    frames: CapturedFrame[];
+    metadata: CaptureMetadata;
+}
+
+export interface FrameQualityAssessment extends ClientFrameQuality {
+    acceptable: boolean;
+    issue: string | null;
 }
 
 export interface SignalResult {

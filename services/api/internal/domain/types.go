@@ -10,20 +10,40 @@ const (
 )
 
 type CaptureSession struct {
-	ID                  string
-	SubjectID           string
-	Kind                SessionKind
-	IlluminationPattern []float64
-	CreatedAt           time.Time
-	ExpiresAt           time.Time
-	Completed           bool
+	ID                   string
+	SubjectID            string
+	Kind                 SessionKind
+	IlluminationPattern  []float64
+	CaptureDurationMS    int
+	SampleIntervalMS     int
+	IlluminationSettleMS int
+	CreatedAt            time.Time
+	ExpiresAt            time.Time
+	Completed            bool
+}
+
+type ClientFrameQuality struct {
+	Brightness float64 `json:"brightness"`
+	Contrast   float64 `json:"contrast"`
+	Sharpness  float64 `json:"sharpness"`
 }
 
 type CapturedFrame struct {
-	ImageBase64    string  `json:"imageBase64"`
-	TimestampMS    int64   `json:"timestampMs"`
-	ChallengeIndex int     `json:"challengeIndex"`
-	ClientLight    float64 `json:"clientLight"`
+	ImageBase64    string              `json:"imageBase64"`
+	TimestampMS    int64               `json:"timestampMs"`
+	ChallengeIndex int                 `json:"challengeIndex"`
+	ClientLight    float64             `json:"clientLight"`
+	ClientQuality  *ClientFrameQuality `json:"clientQuality,omitempty"`
+}
+
+type CaptureMetadata struct {
+	SDKVersion      string `json:"sdkVersion"`
+	StartedAtUnixMS int64  `json:"startedAtUnixMs"`
+	EndedAtUnixMS   int64  `json:"endedAtUnixMs"`
+	FrameWidth      int    `json:"frameWidth"`
+	FrameHeight     int    `json:"frameHeight"`
+	UserAgent       string `json:"userAgent"`
+	Platform        string `json:"platform"`
 }
 
 type EngineRequest struct {
