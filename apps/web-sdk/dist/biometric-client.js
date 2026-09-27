@@ -40,4 +40,3 @@ export class BiometricClient {
 function isErrorPayload(value) {
     return typeof value === "object" && value !== null && "error" in value && typeof value.error === "string";
 }
-//# sourceMappingURL=biometric-client.js.map
