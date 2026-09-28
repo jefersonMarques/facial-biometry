@@ -30,7 +30,18 @@ reference SFace embedding
   |
   | raw PDF and portrait discarded
   v
-browser live capture + liveness
+continuous camera guidance
+  |
+  +--> phase 1: face farther from camera
+  +--> phase 2: face closer to camera
+  +--> positioning/quality samples do not consume a biometric attempt
+  |
+  v
+server-generated liveness challenge
+  |
+  +--> guided far/near frames
+  +--> challenge frames
+  +--> multi-frame SFace embedding
   |
   v
 live embedding <-> CNH embedding
@@ -73,11 +84,18 @@ The response contains status, document evidence and final biometric scores when 
 ```text
 GET  /v1/identity/check
 POST /v1/identity/document
+POST /v1/identity/guide
 POST /v1/identity/session
 POST /v1/identity/complete
 ```
 
 All require `X-FaceProof-Identity-Token`.
+
+The `/v1/identity/guide` endpoint is a low-resolution, non-persistent positioning preflight. It uses YuNet to return normalized face position, scale, roll and face-quality signals. It does not create or consume a biometric attempt.
+
+The browser keeps the same camera stream open while the user completes two guided phases. The first phase captures stable frames with the face farther from the camera; the second enlarges the oval and captures stable frames with the face closer. Only after both phases pass does the server issue the randomized liveness challenge.
+
+Low-quality completed captures return a recapture-required response and keep the identity check in `biometry_pending`; they do not consume one of the final biometric attempts.
 
 ## PDF authenticity policy
 
@@ -86,7 +104,7 @@ The current strict profile requires:
 - a cryptographically valid detached PDF signature;
 - native Go PDF signature validation (required); `pdfsig` is optional corroboration to report the total document as signed;
 - a DETRAN or SENATRAN signer identity;
-- SERPRO / ICP-Brasil in the signer distinguished name;
+- ICP-Brasil evidence in the signer certificate subject/issuer;
 - SHA-256, SHA-384 or SHA-512;
 - an accepted detached PKCS#7/CAdES signature type;
 - no signing time in the future;
@@ -114,8 +132,9 @@ After PDF integrity passes:
 - require a recognized CNH template issued by SENATRAN;
 - verify the VIO signature using the VIO certificate/public-key catalog;
 - require the VIO CPF to equal the expected CPF;
-- extract the portrait embedded in VIO;
-- decode BPG to PNG when necessary.
+- prefer the portrait extracted from the cryptographically intact signed PDF;
+- retain the signed VIO portrait as a fallback;
+- decode BPG to PNG only when that VIO fallback is needed.
 
 For identity checks, the visual portrait may be used as the biometric reference only after the PDF signature is cryptographically valid and the signed revision covers the complete file. The signed VIO payload remains authoritative for CPF, document type and its own authenticity.
 
@@ -134,6 +153,6 @@ CNH Digital validation requires:
 - native Go PDF signature validation (required); `pdfsig` is optional corroboration for PDF signature inspection;
 - `pdfinfo` for PDF structure and metadata;
 - `pdftoppm` for page rendering and QR scanning;
-- `bpgdec` for VIO portraits encoded as BPG.
+- `bpgdec` is optional fallback support for VIO portraits encoded as BPG.
 
 The identity repository is encrypted local-file storage for the MVP. Move it to a transactional shared store before multi-instance production.
