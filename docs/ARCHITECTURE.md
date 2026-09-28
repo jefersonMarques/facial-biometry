@@ -6,6 +6,36 @@ The browser is treated as an untrusted capture client. It may guide the user, pe
 
 The API is authoritative for session lifetime, one-time session consumption, illumination challenge values and frame-to-challenge mapping. Client-provided `challengeIndex` and `clientLight` values are overwritten before the biometric engine receives the capture.
 
+## CNH Digital identity pipeline
+
+```text
+Issuer: expected CPF + minimum signed-PDF date
+    |
+    v
+Opaque public link
+    |
+    v
+CNH Digital PDF
+    |
+    +--> PDF signature / metadata integrity
+    +--> VIO signature / CNH template / CPF
+    +--> official embedded portrait
+    |
+    v
+temporary reference embedding
+    |
+    v
+browser liveness capture
+    |
+    v
+CNH portrait <-> live face
+    |
+    v
+approved / review / rejected
+```
+
+This identity flow does not require permanent biometric enrollment. Raw PDF bytes and the extracted portrait are discarded after the reference embedding is created, and that embedding is cleared after final completion.
+
 ## Capture pipeline
 
 ```text
@@ -65,7 +95,7 @@ A live embedding is compared to the enrolled template using cosine similarity. A
 
 The browser SDK is intentionally split into capture, local quality analysis and API transport. This keeps the path open for a WASM runtime that can later provide face tracking, landmarks, pose, occlusion and richer capture guidance without moving the final trust decision to the browser.
 
-Document capture and CNH portrait comparison are the next product layer. See `BROWSER_FIRST_ROADMAP.md`.
+CNH Digital identity checks are implemented as a separate product flow. Physical-document camera capture and OCR are intentionally outside the current scope. See `IDENTITY_CHECK.md` and `BROWSER_FIRST_ROADMAP.md`.
 
 ## Deliberate seams
 
