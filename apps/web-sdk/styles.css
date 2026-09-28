@@ -268,3 +268,115 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
     color: #15803d;
     overflow-wrap: anywhere;
 }
+
+
+.identity-profile {
+    display: grid;
+    gap: 16px;
+    margin-top: 14px;
+}
+.identity-summary {
+    padding: 16px;
+    border-radius: 16px;
+    background: #f8fafc;
+}
+.identity-summary h3 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+}
+.identity-data-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+.identity-data-item {
+    display: grid;
+    gap: 3px;
+}
+.identity-data-item span {
+    color: #667085;
+    font-size: 11px;
+}
+.identity-data-item strong {
+    color: #111827;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+.face-comparison {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+}
+.face-photo-card {
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid #eaecf0;
+    border-radius: 18px;
+    background: #f8fafc;
+}
+.face-photo-card img,
+.face-photo-placeholder {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    background: #111827;
+}
+.face-photo-placeholder {
+    display: grid;
+    place-items: center;
+    padding: 12px;
+    color: #98a2b3;
+    text-align: center;
+    font-size: 12px;
+}
+.face-photo-card figcaption {
+    padding: 10px 12px;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+}
+.face-comparison-mark {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #ecfdf3;
+    color: #166534;
+    font-size: 18px;
+    font-weight: 900;
+}
+.frame-score-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #667085;
+    font-size: 11px;
+}
+.frame-score-line strong {
+    color: #344054;
+    text-align: right;
+}
+
+@media (max-width: 640px) {
+    .identity-data-grid {
+        grid-template-columns: 1fr;
+    }
+    .face-comparison {
+        grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+        gap: 6px;
+    }
+    .face-comparison-mark {
+        width: 28px;
+        height: 28px;
+        font-size: 15px;
+    }
+}
