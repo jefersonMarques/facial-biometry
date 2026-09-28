@@ -316,7 +316,6 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     let networkFailures = 0;
     let qualityLimitedSamples = 0;
     let guidePosts = 0;
-    let firstCaptureFallbackEligible = false;
 
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
@@ -354,24 +353,26 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
             clientQualityUsable &&
             (!clientQualityGood || !serverQualityGood);
 
-        if (phase === "far" && assessment.captureReady && clientQualityUsable) {
-            firstCaptureFallbackEligible = true;
-        }
-
         if (
             phase === "far" &&
-            firstCaptureFallbackEligible &&
             guidePosts >= FIRST_CAPTURE_MAX_GUIDE_POSTS &&
             !assessment.ready
         ) {
-            cameraState.textContent = "Pronto para tentar";
-            biometricStatus.textContent = "O rosto está em uma posição utilizável. Se estiver pronto, continue.";
+            cameraState.textContent = "Aguardando você";
+            biometricStatus.textContent = assessment.captureReady
+                ? "O enquadramento está utilizável. Toque em “Estou pronto” para capturar."
+                : "Ajuste o rosto conforme a orientação e toque em “Estou pronto” quando estiver preparado.";
             faceGuide.classList.remove("guide-ready");
-            faceGuide.classList.add("guide-near");
-            setProximityIndicator(assessment.proximityPercent, "yellow");
+            if (assessment.captureReady) {
+                faceGuide.classList.add("guide-near");
+                setProximityIndicator(assessment.proximityPercent, "yellow");
+            } else {
+                faceGuide.classList.remove("guide-near");
+                setProximityIndicator(assessment.proximityPercent, "red");
+            }
 
             await waitForManualReady();
-            biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade na análise.";
+            biometricStatus.textContent = "Certo. Vamos tentar a captura.";
             return true;
         }
 
