@@ -42,6 +42,7 @@ type Check struct {
 	ExpiresAt              time.Time         `json:"expiresAt"`
 	DocumentAttempts       int               `json:"documentAttempts"`
 	BiometricSessions      int               `json:"biometricSessions"`
+	CaptureSessionsIssued  int               `json:"captureSessionsIssued,omitempty"`
 	CaptureSessionID       string            `json:"captureSessionId,omitempty"`
 	ReferenceEmbedding     []float64         `json:"referenceEmbedding,omitempty"`
 	ReferenceEmbeddingModel string           `json:"referenceEmbeddingModel,omitempty"`
