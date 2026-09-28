@@ -76,6 +76,7 @@ type signalResponse struct {
 	PassivePAD     domain.EngineSignal `json:"passivePad"`
 	TemporalMotion domain.EngineSignal `json:"temporalMotion"`
 	Illumination   domain.EngineSignal `json:"illumination"`
+	GuidedCapture  domain.EngineSignal `json:"guidedCapture"`
 }
 
 func NewHandler(
@@ -135,6 +136,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 	if request.URL.Path == "/v1/identity/document" && request.Method == http.MethodPost {
 		handler.uploadIdentityDocument(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/guide" && request.Method == http.MethodPost {
+		handler.guideIdentityFace(writer, request)
 		return
 	}
 	if request.URL.Path == "/v1/identity/session" && request.Method == http.MethodPost {
