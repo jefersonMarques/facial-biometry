@@ -92,6 +92,11 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
     box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.18), 0 0 0 5px rgba(74, 222, 128, 0.16);
 }
 
+.identity-camera .face-guide.guide-near {
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.20), 0 0 0 5px rgba(251, 191, 36, 0.14);
+}
+
 .capture-flash {
     position: absolute;
     inset: 0;
@@ -133,7 +138,16 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
 .camera-dot { width: 9px; height: 9px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 14px #4ade80; }
 .camera-footer { bottom: 20px; padding: 16px; border-radius: 16px; background: rgba(11, 15, 19, 0.66); backdrop-filter: blur(14px); font-size: 13px; }
 .progress-track { height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.18); margin-bottom: 11px; overflow: hidden; }
-.progress-bar { height: 100%; width: 0; border-radius: inherit; background: #4ade80; transition: width 80ms linear; }
+.progress-bar {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: #ef4444;
+    transition: width 160ms ease, background 160ms ease;
+}
+.progress-bar.proximity-red { background: #ef4444; }
+.progress-bar.proximity-yellow { background: #f59e0b; }
+.progress-bar.proximity-green { background: #22c55e; }
 
 .controls-card {
     border-radius: 28px;
