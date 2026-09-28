@@ -232,7 +232,11 @@ function friendlyDocumentError(message: string): string {
     if (message.includes("does not correspond")) {
         return "A CNH enviada não corresponde a esta verificação.";
     }
-    return "Não foi possível autenticar esta CNH Digital. Envie o PDF original gerado pelo aplicativo oficial.";
+    const generic = "Não foi possível autenticar esta CNH Digital. Envie o PDF original gerado pelo aplicativo oficial.";
+    if (["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) {
+        return `${generic} Detalhe: ${message}`;
+    }
+    return generic;
 }
 
 function friendlyBiometryError(message: string): string {
