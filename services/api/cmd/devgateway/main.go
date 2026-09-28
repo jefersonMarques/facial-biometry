@@ -57,9 +57,9 @@ func main() {
 		Addr:              listenAddress,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       40 * time.Second,
-		WriteTimeout:      40 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadTimeout:       115 * time.Second,
+		WriteTimeout:      115 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	log.Printf("FaceProof web gateway listening on %s", listenAddress)
