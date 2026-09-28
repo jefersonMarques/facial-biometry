@@ -140,3 +140,32 @@ func TestJPEGMetadataDetectsEditorMarkers(t *testing.T) {
 		t.Fatalf("expected editor markers, got %#v", meta)
 	}
 }
+
+
+func TestCropCNHFrontPortraitUsesFullPhotoBoxV2(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 963, 680))
+	for y := 0; y < 680; y++ {
+		for x := 0; x < 963; x++ {
+			img.Set(x, y, color.RGBA{R: 220, G: 210, B: 200, A: 255})
+		}
+	}
+
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, img, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatal(err)
+	}
+
+	photo, err := cropCNHFrontPortrait(encoded.Bytes(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if photo.Method != "pdfimages_structural_candidate_crop_v2" {
+		t.Fatalf("unexpected extraction method: %q", photo.Method)
+	}
+	if photo.Width != 250 || photo.Height != 337 {
+		t.Fatalf("unexpected crop dimensions: %dx%d", photo.Width, photo.Height)
+	}
+	if photo.SHA256 == "" || len(photo.Bytes) == 0 {
+		t.Fatal("expected hashed extracted portrait")
+	}
+}
