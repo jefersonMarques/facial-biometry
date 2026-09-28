@@ -8,7 +8,9 @@ param(
 
     [int]$ExpiresInMinutes = 60,
 
-    [string]$ApiUrl = "http://localhost:8080"
+    [string]$ApiUrl = "http://localhost:8080",
+
+    [string]$PublicBaseUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +31,14 @@ $Body = @{
     expiresInMinutes = $ExpiresInMinutes
 } | ConvertTo-Json
 
-Invoke-RestMethod -Method Post -Uri "$ApiUrl/v1/identity/checks" -Headers @{
+$Response = Invoke-RestMethod -Method Post -Uri "$ApiUrl/v1/identity/checks" -Headers @{
     Authorization = "Bearer $IssuerKey"
-} -ContentType "application/json" -Body $Body | ConvertTo-Json -Depth 6
+} -ContentType "application/json" -Body $Body
+
+if ($PublicBaseUrl) {
+    $PublicBaseUrl = $PublicBaseUrl.TrimEnd("/")
+    $OriginalUri = [System.Uri]$Response.verificationUrl
+    $Response.verificationUrl = "$PublicBaseUrl/verify.html$($OriginalUri.Fragment)"
+}
+
+$Response | ConvertTo-Json -Depth 6
