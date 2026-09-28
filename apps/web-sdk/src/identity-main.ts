@@ -352,16 +352,21 @@ function guideInstruction(
 
 
 function scheduleAutomaticBiometry(): void {
-    if (autoBiometryScheduled || busy) {
+    if (autoBiometryScheduled) {
         return;
     }
 
     autoBiometryScheduled = true;
     window.setTimeout(() => {
         autoBiometryScheduled = false;
-        if (!biometryPanel.hidden && !busy) {
-            void runBiometry();
+        if (biometryPanel.hidden) {
+            return;
         }
+        if (busy) {
+            scheduleAutomaticBiometry();
+            return;
+        }
+        void runBiometry();
     }, AUTO_CAMERA_DELAY_MS);
 }
 
