@@ -19,6 +19,7 @@ import (
 const (
 	maxIdentityDocumentAttempts = 3
 	maxIdentityBiometricSessions = 3
+	maxIdentityCaptureSessions   = 12
 	identityMultipartOverhead    = 1 << 20
 )
 
@@ -310,6 +311,9 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		if check.BiometricSessions >= maxIdentityBiometricSessions {
 			return errIdentityAttemptLimit
 		}
+		if check.CaptureSessionsIssued >= maxIdentityCaptureSessions {
+			return errIdentityAttemptLimit
+		}
 
 		response, err := handler.issueCaptureSession(check.ID, domain.SessionKindIdentity)
 		if err != nil {
@@ -317,6 +321,7 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		}
 		sessionResponse = response
 		check.CaptureSessionID = response.SessionID
+		check.CaptureSessionsIssued++
 		return nil
 	})
 	if err != nil {
