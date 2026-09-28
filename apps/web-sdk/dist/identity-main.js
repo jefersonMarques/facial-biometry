@@ -2,11 +2,13 @@ import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
-const GUIDE_SAMPLE_MS = 420;
+const GUIDE_SAMPLE_MS = 360;
 const GUIDE_READY_SAMPLES = 2;
 const PHASE_CAPTURE_FRAMES = 4;
 const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
+const AUTO_CAMERA_DELAY_MS = 250;
+const AUTO_FACE_DETECTION_WINDOW_MS = 8_000;
 const client = new BiometricClient(resolveApiBaseUrl());
 const documentPanel = requiredElement("documentPanel");
 const biometryPanel = requiredElement("biometryPanel");
@@ -27,9 +29,21 @@ const captureFlash = requiredElement("captureFlash");
 const camera = new CameraCapture(video);
 let identityToken = "";
 let busy = false;
+let autoBiometryScheduled = false;
+let manualReadyResolver = null;
 void initialize();
 uploadButton.addEventListener("click", () => void uploadDocument());
-startButton.addEventListener("click", () => void runBiometry());
+startButton.addEventListener("click", () => {
+    if (manualReadyResolver) {
+        const resolve = manualReadyResolver;
+        manualReadyResolver = null;
+        startButton.hidden = true;
+        startButton.disabled = true;
+        resolve();
+        return;
+    }
+    void runBiometry();
+});
 window.addEventListener("beforeunload", () => camera.stop());
 async function initialize() {
     identityToken = consumeIdentityToken();
@@ -86,14 +100,17 @@ async function runBiometry() {
         return;
     }
     busy = true;
+    startButton.hidden = true;
     startButton.disabled = true;
-    startButton.textContent = "Verificação em andamento";
-    biometricStatus.textContent = "Abrindo a câmera...";
+    startButton.textContent = "Estou pronto";
+    biometricStatus.textContent = "Iniciando câmera...";
+    cameraState.textContent = "Iniciando câmera...";
     progressBar.style.width = "0%";
     let completed = false;
     try {
         await camera.start();
         cameraState.textContent = "Câmera ativa";
+        biometricStatus.textContent = "Posicione o rosto dentro do oval.";
         while (!completed) {
             await waitForFacePhase("far");
             const session = await client.createIdentitySession(identityToken);
@@ -126,8 +143,9 @@ async function runBiometry() {
     }
     catch (error) {
         biometricStatus.textContent = friendlyBiometryError(errorMessage(error));
+        startButton.hidden = false;
         startButton.disabled = false;
-        startButton.textContent = "Continuar verificação facial";
+        startButton.textContent = "Estou pronto";
         cameraState.textContent = "Câmera pausada";
         camera.stop();
     }
@@ -141,13 +159,22 @@ async function runBiometry() {
 async function waitForFacePhase(phase) {
     let stableSamples = 0;
     let networkFailures = 0;
+    const startedAt = performance.now();
+    let fallbackOffered = false;
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "1 de 2 · Mais longe" : "2 de 2 · Mais perto";
     biometricStatus.textContent = phase === "far"
-        ? "Posicione o rosto dentro do oval."
-        : "Aproxime o rosto e encaixe-o no oval maior.";
+        ? "Preencha o oval com o rosto."
+        : "Aproxime o rosto e preencha o oval maior.";
     progressBar.style.width = "0%";
     while (stableSamples < GUIDE_READY_SAMPLES) {
+        if (phase === "far" &&
+            !fallbackOffered &&
+            performance.now() - startedAt >= AUTO_FACE_DETECTION_WINDOW_MS) {
+            fallbackOffered = true;
+            await waitForManualReady();
+            biometricStatus.textContent = "Verificando seu enquadramento...";
+        }
         const snapshot = camera.snapshotForGuide();
         if (!snapshot.quality.acceptable) {
             stableSamples = 0;
@@ -242,24 +269,24 @@ function guideInstruction(guide, phase) {
     if (Math.abs(guide.rollDegrees) > 12) {
         return { ready: false, message: "Mantenha a cabeça reta e olhe para a câmera." };
     }
-    const centered = Math.abs(guide.centerX - 0.5) <= 0.11 && Math.abs(guide.centerY - 0.46) <= 0.13;
+    const centered = Math.abs(guide.centerX - 0.5) <= 0.08 && Math.abs(guide.centerY - 0.46) <= 0.10;
     if (!centered) {
         return { ready: false, message: "Centralize o rosto no oval." };
     }
     if (phase === "far") {
-        if (guide.heightRatio < 0.26) {
-            return { ready: false, message: "Aproxime-se um pouco." };
+        if (guide.heightRatio < 0.34) {
+            return { ready: false, message: "Aproxime-se até o rosto preencher o oval." };
         }
-        if (guide.heightRatio > 0.42) {
-            return { ready: false, message: "Afaste-se um pouco." };
+        if (guide.heightRatio > 0.43) {
+            return { ready: false, message: "Afaste-se um pouco para encaixar no oval." };
         }
     }
     else {
-        if (guide.heightRatio < 0.46) {
-            return { ready: false, message: "Aproxime o rosto até preencher o oval." };
+        if (guide.heightRatio < 0.54) {
+            return { ready: false, message: "Aproxime-se até o rosto preencher o oval maior." };
         }
-        if (guide.heightRatio > 0.70) {
-            return { ready: false, message: "Afaste-se só um pouco." };
+        if (guide.heightRatio > 0.66) {
+            return { ready: false, message: "Afaste-se só um pouco para encaixar no oval." };
         }
     }
     if (guide.quality.score < 0.38) {
@@ -269,6 +296,34 @@ function guideInstruction(guide, phase) {
         return { ready: false, message: "Melhore a iluminação do rosto." };
     }
     return { ready: true, message: "Perfeito. Mantenha-se assim..." };
+}
+function scheduleAutomaticBiometry() {
+    if (autoBiometryScheduled) {
+        return;
+    }
+    autoBiometryScheduled = true;
+    window.setTimeout(() => {
+        autoBiometryScheduled = false;
+        if (biometryPanel.hidden) {
+            return;
+        }
+        if (busy) {
+            scheduleAutomaticBiometry();
+            return;
+        }
+        void runBiometry();
+    }, AUTO_CAMERA_DELAY_MS);
+}
+async function waitForManualReady() {
+    startButton.hidden = false;
+    startButton.disabled = false;
+    startButton.textContent = "Estou pronto";
+    biometricStatus.textContent = "Posicione o rosto preenchendo o oval e toque em “Estou pronto”.";
+    await new Promise((resolve) => {
+        manualReadyResolver = resolve;
+    });
+    startButton.hidden = true;
+    startButton.disabled = true;
 }
 function renderStatus(status) {
     expiresText.textContent = formatExpiration(status.expiresAt);
@@ -283,8 +338,12 @@ function renderStatus(status) {
             documentPanel.hidden = true;
             biometryPanel.hidden = false;
             finalPanel.hidden = true;
-            startButton.disabled = false;
-            startButton.textContent = "Iniciar verificação facial";
+            startButton.hidden = true;
+            startButton.disabled = true;
+            startButton.textContent = "Estou pronto";
+            biometricStatus.textContent = "Iniciando câmera...";
+            cameraState.textContent = "Iniciando câmera...";
+            scheduleAutomaticBiometry();
             break;
         case "approved":
         case "review":
