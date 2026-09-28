@@ -60,10 +60,11 @@ type identityDocumentResponse struct {
 }
 
 type identityCompleteRequest struct {
-	SessionID    string                  `json:"sessionId"`
-	SessionToken string                  `json:"sessionToken"`
-	Frames       []domain.CapturedFrame  `json:"frames"`
-	Metadata     *domain.CaptureMetadata `json:"metadata,omitempty"`
+	SessionID    string                       `json:"sessionId"`
+	SessionToken string                       `json:"sessionToken"`
+	Frames       []domain.CapturedFrame       `json:"frames"`
+	GuidedFrames []domain.GuidedCapturedFrame `json:"guidedFrames"`
+	Metadata     *domain.CaptureMetadata      `json:"metadata,omitempty"`
 }
 
 type issuerIdentityCheckResponse struct {
@@ -316,7 +317,6 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		}
 		sessionResponse = response
 		check.CaptureSessionID = response.SessionID
-		check.BiometricSessions++
 		return nil
 	})
 	if err != nil {
@@ -370,6 +370,11 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+	normalizedGuidedFrames, err := normalizeGuidedFrames(payload.GuidedFrames)
+	if err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 	captureSession, err = handler.sessions.Consume(payload.SessionID)
 	if err != nil {
 		handler.writeError(writer, sessionErrorStatus(err), err.Error())
@@ -378,6 +383,7 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 
 	result, err := handler.engine.Analyze(request.Context(), domain.EngineRequest{
 		Frames:              normalizedFrames,
+		GuidedFrames:        normalizedGuidedFrames,
 		IlluminationPattern: captureSession.IlluminationPattern,
 	})
 	if err != nil {
@@ -388,6 +394,18 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			return nil
 		})
 		handler.writeError(writer, http.StatusBadGateway, "biometric engine failed")
+		return
+	}
+
+	if identityCaptureNeedsRecapture(result) {
+		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
+			if current.CaptureSessionID == payload.SessionID {
+				current.CaptureSessionID = ""
+				current.LastErrorCode = "recapture_required"
+			}
+			return nil
+		})
+		handler.writeError(writer, http.StatusUnprocessableEntity, "capture quality insufficient; recapture required")
 		return
 	}
 
@@ -417,6 +435,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		if current.Status != identity.StatusBiometryPending || current.CaptureSessionID != payload.SessionID {
 			return errIdentityInvalidState
 		}
+		if current.BiometricSessions >= maxIdentityBiometricSessions {
+			return errIdentityAttemptLimit
+		}
+		current.BiometricSessions++
 		current.Status = status
 		current.Decision = decision
 		current.LivenessScore = result.LivenessScore
@@ -443,6 +465,7 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			PassivePAD:     result.PassivePAD,
 			TemporalMotion: result.TemporalMotion,
 			Illumination:   result.Illumination,
+			GuidedCapture:  result.GuidedCapture,
 		},
 		Quality:     result.Quality,
 		Diagnostics: append([]string(nil), result.Diagnostics...),
