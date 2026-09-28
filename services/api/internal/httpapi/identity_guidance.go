@@ -59,8 +59,8 @@ func (handler *Handler) guideIdentityFace(writer http.ResponseWriter, request *h
 }
 
 func normalizeGuidedFrames(frames []domain.GuidedCapturedFrame) ([]domain.GuidedCapturedFrame, error) {
-	if len(frames) < 4 || len(frames) > 12 {
-		return nil, errors.New("guided capture must contain between 4 and 12 frames")
+	if len(frames) < 6 || len(frames) > 12 {
+		return nil, errors.New("guided capture must contain between 6 and 12 frames")
 	}
 
 	normalized := make([]domain.GuidedCapturedFrame, len(frames))
@@ -82,8 +82,8 @@ func normalizeGuidedFrames(frames []domain.GuidedCapturedFrame) ([]domain.Guided
 		}
 		normalized[index] = frame
 	}
-	if farCount < 2 || nearCount < 2 {
-		return nil, errors.New("guided capture must contain both far and near face phases")
+	if farCount < 3 || nearCount < 3 {
+		return nil, errors.New("guided capture must contain at least three far and three near frames")
 	}
 	return normalized, nil
 }
