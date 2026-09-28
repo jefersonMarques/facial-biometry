@@ -91,6 +91,19 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
     box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.18), 0 0 0 5px rgba(74, 222, 128, 0.16);
 }
 
+.capture-flash {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0);
+    transition: background 120ms ease;
+}
+
+.capture-flash.visible {
+    background: rgba(255, 255, 255, 0.42);
+}
+
 .guide-phase {
     position: absolute;
     z-index: 4;
