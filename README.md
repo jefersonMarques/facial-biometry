@@ -1,136 +1,140 @@
 # FaceProof
 
-Browser-first, self-hosted facial biometric MVP with guided multi-frame capture, passive liveness signals, encrypted biometric templates and 1:1 face verification.
+Browser-first, self-hosted identity verification and facial biometric MVP.
 
-The target product is an identity-verification flow that captures a Brazilian CNH, extracts its portrait, performs browser-based live face capture and compares the live identity against the document portrait with liveness evidence.
+The primary flow now accepts an original Brazilian CNH Digital PDF, authenticates the signed PDF and VIO payload, extracts the official VIO portrait, performs browser-based live capture with liveness, and compares the live face against that portrait.
 
-## What is included
+## CNH Digital Identity Check
 
-- Web capture SDK written in TypeScript.
-- Browser preflight for brightness, contrast and sharpness.
-- Approximately 2.4 second guided multi-frame capture.
-- Server-generated randomized illumination challenge with enforced high/low transitions.
-- Server-side frame timing validation and challenge reconstruction.
-- Atomic single-use biometric sessions to block concurrent replay.
-- Go API with signed session tokens and encrypted biometric template storage.
-- Python/OpenCV biometric engine.
-- YuNet face detection (downloaded from the original source).
-- SFace face embedding and 1:1 cosine matching (downloaded from the original source).
-- MiniFASNet V2 passive anti-spoofing (downloaded from the original source).
-- Temporal motion and regional illumination-response signals.
-- Passive PAD fail-closed mode enabled by default.
-- Enrollment and verification demo flows.
-- No paid API and no cloud dependency.
+```text
+Issuer creates check
+    ↓
+expected CPF + minimum signed-PDF date
+    ↓
+opaque public link
+    ↓
+original CNH Digital PDF
+    ↓
+PDF signature + metadata consistency
+    ↓
+VIO signature + CPF + official portrait
+    ↓
+browser liveness capture
+    ↓
+CNH portrait ↔ live face
+    ↓
+approved / review / rejected
+```
 
-## Important limitation
+The minimum date is enforced against the PDF signing timestamp, not editable PDF metadata. The VIO payload is independently verified and is the source for CPF and the biometric reference portrait.
 
-This is a research/MVP baseline, not a production-certified biometric product. The passive liveness decision combines an open model with experimental temporal signals. It has not been independently tested against ISO/IEC 30107-3 attack instruments, deepfake injection, virtual cameras, masks or a representative production population.
+See `docs/IDENTITY_CHECK.md` for the protocol and endpoints.
 
-The browser is explicitly treated as an untrusted client. JavaScript, WASM, timestamps and browser camera inputs can be manipulated. The API remains authoritative for session state, challenge definition, challenge normalization and the final decision, but browser-only capture cannot provide hardware-backed camera provenance.
+## Included
 
-Do not use the default thresholds as final security thresholds. Build an evaluation dataset, measure APCER/BPCER for liveness and FMR/FNMR for identity matching, then calibrate by use case.
+- issuer-authenticated identity-check creation and result lookup;
+- opaque public links with token in the URL fragment;
+- PDF signature/full-document integrity inspection;
+- CNH Digital metadata consistency checks;
+- VIO QR decoding v1-v6 and signature verification;
+- expected CPF matching;
+- official VIO portrait extraction, including BPG-to-PNG conversion;
+- one-time reference embedding without permanent CNH enrollment;
+- guided browser capture with brightness/contrast/sharpness preflight;
+- randomized server-generated illumination challenge;
+- single-use biometric sessions and server-side challenge reconstruction;
+- YuNet detection, SFace embeddings and MiniFASNet V2 passive PAD;
+- passive PAD fail-closed mode by default;
+- encrypted identity-check/template storage;
+- legacy biometric enrollment/verification demo.
+
+## Limitations
+
+This remains a research/MVP baseline. Browser capture cannot provide hardware-backed camera provenance, and the default biometric thresholds are not production-calibrated.
+
+The strict CNH PDF profile must be regression-tested against a representative collection of legitimate CNH Digital PDFs from multiple DETRAN issuers before it is treated as a nationwide production policy.
+
+The MVP also does not provide complete long-term certificate revocation/timestamp validation, distributed abuse controls or horizontally scaled identity/session storage.
 
 ## Requirements
 
 - Go 1.23+
 - Python 3.11+
-- Python packages in `services/engine/requirements.txt`
-- A modern browser with camera support
+- a modern browser with camera support;
+- Poppler tools: `pdfsig`, `pdfinfo` and `pdftoppm`;
+- `bpgdec` for VIO portraits encoded in BPG.
 
-Node.js is only required when changing the TypeScript SDK. A precompiled JavaScript bundle is checked in.
+Node.js is only required when editing the TypeScript SDK. The compiled JavaScript bundle is committed.
 
-## Quick start
+## Run
 
-### Linux/macOS
+Linux/macOS:
 
 ```bash
 ./scripts/run-dev.sh
 ```
 
-### Windows PowerShell
+Windows:
 
 ```powershell
-./scripts/run-dev.ps1
+.\scripts\run-dev.ps1
 ```
 
-Then open:
+Services:
 
 ```text
-http://localhost:5173
+Web:              http://localhost:5173
+Identity page:    http://localhost:5173/verify.html
+Biometric API:    http://localhost:8080
+Biometric engine: http://localhost:8090
 ```
 
-The startup script downloads the three open model artifacts with pinned SHA-256 checksums before starting the services.
+To create a check, call:
 
-The services use:
+```http
+POST /v1/identity/checks
+Authorization: Bearer <FACEPROOF_IDENTITY_ISSUER_KEY>
+Content-Type: application/json
 
-```text
-Web demo:          http://localhost:5173
-Biometric API:     http://localhost:8080
-Biometric engine:  http://localhost:8090
+{
+  "cpf": "<expected-cpf>",
+  "minimumDocumentDate": "2026-09-25",
+  "expiresInMinutes": 60
+}
 ```
 
-## Manual start
+The response contains the `checkId` and public verification URL. Query the result later with:
 
-Engine:
-
-```bash
-cd services/engine
-python -m pip install -r requirements.txt
-python engine_server.py
+```http
+GET /v1/identity/checks/<checkId>
+Authorization: Bearer <FACEPROOF_IDENTITY_ISSUER_KEY>
 ```
-
-API:
-
-```bash
-cd services/api
-go run ./cmd/server
-```
-
-Web:
-
-```bash
-cd apps/web-sdk
-python -m http.server 5173
-```
-
-## Demo flow
-
-1. Enter a `subjectId`.
-2. Choose **Enroll**.
-3. The browser checks basic illumination and image sharpness before capture.
-4. Keep the face centered while the application performs the short randomized-light capture.
-5. The API validates capture timing, reconstructs the expected challenge and consumes the session once.
-6. The engine extracts a biometric template only after liveness and quality checks.
-7. Choose **Verify** with the same `subjectId`.
-8. A new live capture is compared with the encrypted stored template.
 
 ## Configuration
 
-Copy `.env.example` values into your environment as needed.
+Start from `.env.example`. Important identity settings:
 
-The most important values are:
+- `FACEPROOF_IDENTITY_ISSUER_KEY`
+- `FACEPROOF_IDENTITY_VERIFY_URL`
+- `FACEPROOF_IDENTITY_LINK_TTL_MINUTES`
+- `FACEPROOF_IDENTITY_MAX_PDF_MB`
+- `FACEPROOF_PDFSIG_PATH`
+- `FACEPROOF_PDFINFO_PATH`
+- `FACEPROOF_BPGDEC_PATH`
 
-- `FACEPROOF_SESSION_SECRET`: HMAC signing key.
-- `FACEPROOF_TEMPLATE_KEY`: Base64-encoded 32-byte AES key.
-- `FACEPROOF_MATCH_THRESHOLD`: Initial SFace cosine threshold.
-- `FACEPROOF_LIVENESS_THRESHOLD`: Overall liveness threshold.
-- `FACEPROOF_REQUIRE_PASSIVE_PAD`: Reject approval when passive PAD is unavailable. Defaults to `true`.
-- `FACEPROOF_ENGINE_URL`: Python engine endpoint.
+Important biometric settings:
 
-Generate a template encryption key:
+- `FACEPROOF_SESSION_SECRET`
+- `FACEPROOF_TEMPLATE_KEY`
+- `FACEPROOF_MATCH_THRESHOLD`
+- `FACEPROOF_LIVENESS_THRESHOLD`
+- `FACEPROOF_REQUIRE_PASSIVE_PAD`
+- `FACEPROOF_ENGINE_URL`
 
-```bash
-python -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"
-```
+## Documentation
 
-## Browser-first roadmap
-
-The next product layer is CNH document capture, document portrait extraction and live-face-to-document matching. See `docs/BROWSER_FIRST_ROADMAP.md`.
-
-## Architecture and security
-
-See `docs/ARCHITECTURE.md` and `docs/SECURITY.md`.
-
-## Third-party models
-
-See `THIRD_PARTY_NOTICES.md`. Model binaries are not redistributed inside this repository; `models/download_models.py` retrieves them from their original sources and verifies their SHA-256 checksums.
+- `docs/IDENTITY_CHECK.md`
+- `docs/ARCHITECTURE.md`
+- `docs/SECURITY.md`
+- `docs/BROWSER_FIRST_ROADMAP.md`
+- `THIRD_PARTY_NOTICES.md`
