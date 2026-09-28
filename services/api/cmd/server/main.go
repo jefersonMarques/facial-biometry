@@ -7,7 +7,6 @@ import (
 
 	"faceproof/services/api/internal/config"
 	"faceproof/services/api/internal/document/cnh"
-	"faceproof/services/api/internal/document/pdfintegrity"
 	viodata "faceproof/services/api/internal/document/vio/data"
 	"faceproof/services/api/internal/document/vio/decoder"
 	"faceproof/services/api/internal/document/vio/imagepreview"
@@ -34,11 +33,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pdfInspector := pdfintegrity.NewInspector(configuration.PDFSigPath, configuration.PDFInfoPath)
-	if err := pdfInspector.Ready(); err != nil {
-		log.Printf("identity PDF validation unavailable until Poppler tools are installed: %v", err)
-	}
-
 	vioRepository := viodata.NewRepository()
 	vioService := decoder.NewService(vioRepository, decoder.NewCryptoVerifier())
 	previewService := imagepreview.NewService(imagepreview.NewBPGDecoder(configuration.BPGDecoderPath))
@@ -54,7 +48,7 @@ func main() {
 		engineClient,
 		templates,
 		identityChecks,
-		cnh.NewService(pdfInspector, vioService, previewService),
+		cnh.NewService(vioService, previewService),
 	)
 
 	server := &http.Server{
