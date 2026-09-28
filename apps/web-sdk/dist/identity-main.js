@@ -11,11 +11,11 @@ const AUTO_CAMERA_DELAY_MS = 250;
 const AUTO_FACE_DETECTION_WINDOW_MS = 8_000;
 const PHASE_GUIDE = {
     far: {
-        idealMin: 0.34,
-        idealMax: 0.44,
-        captureMin: 0.31,
-        captureMax: 0.47,
-        target: 0.39,
+        idealMin: 0.31,
+        idealMax: 0.46,
+        captureMin: 0.27,
+        captureMax: 0.50,
+        target: 0.385,
     },
     near: {
         idealMin: 0.51,
@@ -208,7 +208,7 @@ async function runBiometry() {
                 if (isRecaptureRequired(message)) {
                     setProximityIndicator(0, "red");
                     faceGuide.className = "face-guide phase-far";
-                    guidePhaseText.textContent = "1 de 2 · Mais longe";
+                    guidePhaseText.textContent = "Captura 1 de 2";
                     biometricStatus.textContent = "A captura não ficou boa o suficiente. Vamos refazer sem desligar a câmera.";
                     await sleep(900);
                     continue;
@@ -238,10 +238,8 @@ async function waitForFacePhase(phase) {
     const startedAt = performance.now();
     let fallbackOffered = false;
     faceGuide.className = `face-guide phase-${phase}`;
-    guidePhaseText.textContent = phase === "far" ? "1 de 2 · Mais longe" : "2 de 2 · Mais perto";
-    biometricStatus.textContent = phase === "far"
-        ? "Posicione o rosto e siga as orientações."
-        : "Aproxime o rosto e siga as orientações.";
+    guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
+    biometricStatus.textContent = "Posicione o rosto no oval e siga as orientações.";
     setProximityIndicator(0, "red");
     while (stableSamples < GUIDE_READY_SAMPLES) {
         if (phase === "far" &&
@@ -282,10 +280,7 @@ async function waitForFacePhase(phase) {
         if (assessment.ready) {
             stableSamples++;
         }
-        else if (assessment.captureReady) {
-            stableSamples = Math.max(0, stableSamples - 1);
-        }
-        else {
+        else if (!assessment.captureReady) {
             stableSamples = 0;
         }
         if (stableSamples >= GUIDE_READY_SAMPLES) {
