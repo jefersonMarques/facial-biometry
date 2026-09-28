@@ -176,3 +176,23 @@ After Cloudflare prints the public `https://....trycloudflare.com` URL, create a
 ```
 
 Do not tunnel only a plain static file server. The public origin must reach the FaceProof gateway so that `/v1/*` returns the API JSON responses.
+
+
+### Robust face matching
+
+Identity Check now treats the two biometric phases differently:
+
+- the far capture contributes mainly to PAD, temporal motion and far-to-near scale evidence;
+- the near capture is recorded at higher resolution and is the primary source for identity matching;
+- the three highest-quality near frames are embedded independently with SFace;
+- the signed CNH portrait produces a small reference ensemble using mild luminance normalization;
+- each live frame is compared against the reference ensemble and the final similarity is the mean of those quality-selected frame scores.
+
+The UI shows the raw SFace score and configured threshold rather than presenting cosine similarity as a probability.
+
+For the MVP result screen, the browser also shows:
+- basic signed CNH data: name, masked CPF, birth date, category, validity and issuing state when available;
+- the portrait extracted from the authenticated CNH;
+- the best-quality near capture selected by the biometric engine.
+
+The raw CNH portrait used for this comparison is returned only in the immediate document-validation response and is kept in browser memory for the current flow; it is not added to the persistent identity-check record.
