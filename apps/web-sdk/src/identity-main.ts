@@ -40,11 +40,11 @@ interface PhaseGuideConfig {
 
 const PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
     far: {
-        idealMin: 0.34,
-        idealMax: 0.44,
-        captureMin: 0.31,
-        captureMax: 0.47,
-        target: 0.39,
+        idealMin: 0.31,
+        idealMax: 0.46,
+        captureMin: 0.27,
+        captureMax: 0.50,
+        target: 0.385,
     },
     near: {
         idealMin: 0.51,
@@ -279,7 +279,7 @@ async function runBiometry(): Promise<void> {
                 if (isRecaptureRequired(message)) {
                     setProximityIndicator(0, "red");
                     faceGuide.className = "face-guide phase-far";
-                    guidePhaseText.textContent = "1 de 2 · Mais longe";
+                    guidePhaseText.textContent = "Captura 1 de 2";
                     biometricStatus.textContent = "A captura não ficou boa o suficiente. Vamos refazer sem desligar a câmera.";
                     await sleep(900);
                     continue;
@@ -309,10 +309,8 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
     let fallbackOffered = false;
 
     faceGuide.className = `face-guide phase-${phase}`;
-    guidePhaseText.textContent = phase === "far" ? "1 de 2 · Mais longe" : "2 de 2 · Mais perto";
-    biometricStatus.textContent = phase === "far"
-        ? "Posicione o rosto e siga as orientações."
-        : "Aproxime o rosto e siga as orientações.";
+    guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
+    biometricStatus.textContent = "Posicione o rosto no oval e siga as orientações.";
     setProximityIndicator(0, "red");
 
     while (stableSamples < GUIDE_READY_SAMPLES) {
@@ -359,9 +357,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
 
         if (assessment.ready) {
             stableSamples++;
-        } else if (assessment.captureReady) {
-            stableSamples = Math.max(0, stableSamples - 1);
-        } else {
+        } else if (!assessment.captureReady) {
             stableSamples = 0;
         }
 
