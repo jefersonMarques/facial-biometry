@@ -56,6 +56,44 @@ func TestRepositoryEncryptsSensitiveStateAndLoadsByID(t *testing.T) {
 	}
 }
 
+func TestRepositoryUpdateByID(t *testing.T) {
+	repository, err := NewRepository(t.TempDir(), bytes.Repeat([]byte{0x31}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := Check{
+		ID:                 "chk_update123",
+		Status:             StatusBiometryPending,
+		ReferenceEmbedding: []float64{0.1, 0.2},
+		ExpiresAt:          time.Now().UTC().Add(-time.Minute),
+	}
+	if err := repository.Create("public-token", check); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := repository.UpdateByID(check.ID, func(current *Check) error {
+		current.Status = StatusExpired
+		current.ReferenceEmbedding = nil
+		current.ReferenceEmbeddingModel = ""
+		current.CaptureSessionID = ""
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != StatusExpired || len(updated.ReferenceEmbedding) != 0 {
+		t.Fatalf("unexpected updated check: %+v", updated)
+	}
+
+	loaded, err := repository.Load("public-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Status != StatusExpired || len(loaded.ReferenceEmbedding) != 0 {
+		t.Fatalf("expiration was not persisted: %+v", loaded)
+	}
+}
+
 func TestRepositoryRejectsUnsafeCheckID(t *testing.T) {
 	repository, err := NewRepository(t.TempDir(), bytes.Repeat([]byte{0x24}, 32))
 	if err != nil {

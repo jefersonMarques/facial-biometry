@@ -182,16 +182,12 @@ func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *ht
 	if !ok {
 		return
 	}
-	status := check.Status
-	if time.Now().After(check.ExpiresAt) {
-		status = identity.StatusExpired
-	}
 	handler.writeJSON(writer, http.StatusOK, identityStatusResponse{
 		ID:               check.ID,
-		Status:           status,
+		Status:           check.Status,
 		ExpiresAt:        check.ExpiresAt,
 		DocumentAccepted: check.Document != nil,
-		CanStartBiometry: status == identity.StatusBiometryPending,
+		CanStartBiometry: check.Status == identity.StatusBiometryPending,
 		Decision:         check.Decision,
 	})
 }
@@ -467,6 +463,14 @@ func (handler *Handler) loadPublicIdentityCheck(writer http.ResponseWriter, requ
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load identity check")
 		return identity.Check{}, "", false
 	}
+
+	if shouldExpireIdentityCheck(check, time.Now().UTC()) {
+		check, err = handler.identityChecks.Update(token, expireIdentityCheck)
+		if err != nil {
+			handler.writeError(writer, http.StatusInternalServerError, "failed to expire identity check")
+			return identity.Check{}, "", false
+		}
+	}
 	return check, token, true
 }
 
@@ -562,14 +566,17 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		return
 	}
 
-	status := check.Status
-	if time.Now().After(check.ExpiresAt) && status != identity.StatusApproved && status != identity.StatusReview && status != identity.StatusRejected {
-		status = identity.StatusExpired
+	if shouldExpireIdentityCheck(check, time.Now().UTC()) {
+		check, err = handler.identityChecks.UpdateByID(check.ID, expireIdentityCheck)
+		if err != nil {
+			handler.writeError(writer, http.StatusInternalServerError, "failed to expire identity check")
+			return
+		}
 	}
 
 	handler.writeJSON(writer, http.StatusOK, issuerIdentityCheckResponse{
 		ID:                  check.ID,
-		Status:              status,
+		Status:              check.Status,
 		MinimumDocumentDate: check.MinimumDocumentDate,
 		CreatedAt:           check.CreatedAt,
 		ExpiresAt:           check.ExpiresAt,
@@ -578,4 +585,25 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		LivenessScore:       check.LivenessScore,
 		FaceSimilarity:      check.FaceSimilarity,
 	})
+}
+
+
+func shouldExpireIdentityCheck(check identity.Check, now time.Time) bool {
+	if !now.After(check.ExpiresAt) {
+		return false
+	}
+	switch check.Status {
+	case identity.StatusApproved, identity.StatusReview, identity.StatusRejected, identity.StatusExpired:
+		return false
+	default:
+		return true
+	}
+}
+
+func expireIdentityCheck(check *identity.Check) error {
+	check.Status = identity.StatusExpired
+	check.CaptureSessionID = ""
+	check.ReferenceEmbedding = nil
+	check.ReferenceEmbeddingModel = ""
+	return nil
 }

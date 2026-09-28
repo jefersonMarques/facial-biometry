@@ -110,8 +110,21 @@ func (repository *Repository) LoadByID(id string) (Check, error) {
 func (repository *Repository) Update(token string, mutate func(*Check) error) (Check, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
+	return repository.updateLocked(hashToken(token), mutate)
+}
 
-	tokenHash := hashToken(token)
+func (repository *Repository) UpdateByID(id string, mutate func(*Check) error) (Check, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+
+	tokenHash, err := repository.tokenHashForIDLocked(id)
+	if err != nil {
+		return Check{}, err
+	}
+	return repository.updateLocked(tokenHash, mutate)
+}
+
+func (repository *Repository) updateLocked(tokenHash string, mutate func(*Check) error) (Check, error) {
 	check, err := repository.loadLocked(tokenHash)
 	if err != nil {
 		return Check{}, err
