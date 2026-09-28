@@ -35,6 +35,12 @@ export class BiometricClient {
             body: form,
         });
     }
+    async guideIdentityFace(token, imageBase64) {
+        return this.identityRequest("/v1/identity/guide", token, {
+            method: "POST",
+            body: JSON.stringify({ imageBase64 }),
+        });
+    }
     async createIdentitySession(token) {
         return this.identityRequest("/v1/identity/session", token, {
             method: "POST",
@@ -50,6 +56,7 @@ export class BiometricClient {
                 sessionId: session.sessionId,
                 sessionToken: session.sessionToken,
                 frames: capture.frames,
+                guidedFrames: capture.guidedFrames ?? [],
                 metadata: capture.metadata,
             }),
         });
