@@ -46,11 +46,11 @@ func main() {
 	if !capabilities.PDFInfo {
 		missingRequired = append(missingRequired, "pdfinfo")
 	}
-	if !capabilities.PDFSig {
-		missingRequired = append(missingRequired, "pdfsig")
-	}
 	if len(missingRequired) > 0 {
 		log.Printf("CNH identity validation unavailable: missing %s", strings.Join(missingRequired, ", "))
+	}
+	if !capabilities.PDFSig {
+		log.Printf("CNH identity note: pdfsig unavailable; native Go PKCS#7/CMS verification will be used")
 	}
 	if !capabilities.PDFImages {
 		log.Printf("CNH identity note: pdfimages unavailable; QR/photo extraction will use rendered-page fallback")
