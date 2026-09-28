@@ -220,6 +220,12 @@ function consumeIdentityToken(): string {
 }
 
 function friendlyDocumentError(message: string): string {
+    if (message.includes("dependency") || message.includes("missing pdf") || message.includes("pdftoppm")) {
+        return `O servidor ainda não está pronto para validar a CNH: ${message}`;
+    }
+    if (message.includes("reference photo")) {
+        return "A CNH foi lida, mas não foi possível obter uma foto de referência válida.";
+    }
     if (message.includes("minimum date")) {
         return "Este PDF da CNH foi gerado antes da data mínima exigida. Gere uma CNH Digital atualizada e tente novamente.";
     }
