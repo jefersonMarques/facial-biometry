@@ -163,11 +163,11 @@ async function runBiometry(): Promise<void> {
         biometricStatus.textContent = friendlyBiometryError(errorMessage(error));
         startButton.disabled = false;
         startButton.textContent = "Continuar verificação facial";
+        cameraState.textContent = "Câmera pausada";
+        camera.stop();
     } finally {
         lightLayer.style.background = "transparent";
         if (completed) {
-            camera.stop();
-        } else if (!camera.isActive()) {
             camera.stop();
         }
         busy = false;
