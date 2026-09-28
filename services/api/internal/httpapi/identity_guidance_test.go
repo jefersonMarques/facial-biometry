@@ -55,12 +55,12 @@ func TestIdentityCaptureQualityUsesHardAndPreferredThresholds(t *testing.T) {
 		t.Fatal("expected very low-quality capture to require recapture")
 	}
 
-	result.Quality.Score = 0.46
+	result.Quality.Score = 0.36
 	if identityCaptureNeedsRecapture(result) {
 		t.Fatal("expected borderline quality to continue to facial matching")
 	}
 	if !identityCaptureIsBorderline(result) {
-		t.Fatal("expected 0.46 quality to be marked borderline")
+		t.Fatal("expected 0.36 quality to be marked borderline")
 	}
 
 	result.Quality.Score = 0.70
@@ -73,7 +73,7 @@ func TestIdentityCaptureQualityUsesHardAndPreferredThresholds(t *testing.T) {
 func TestIdentityMatchRequestsRetryWhenBorderline(t *testing.T) {
 	result := domain.EngineResult{
 		Quality: domain.EngineQuality{
-			Score:        0.46,
+			Score:        0.36,
 			FacePresence: 1.0,
 		},
 		GuidedCapture: domain.EngineSignal{
