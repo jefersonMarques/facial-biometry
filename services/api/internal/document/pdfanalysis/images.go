@@ -387,10 +387,13 @@ func cropCNHFrontPortrait(data []byte, pageNumber int) (Photo, error) {
 		return Photo{}, errors.New("imagem frontal pequena demais")
 	}
 
-	x1 := b.Min.X + int(float64(width)*0.18)
-	x2 := b.Min.X + int(float64(width)*0.37)
-	y1 := b.Min.Y + int(float64(height)*0.38)
-	y2 := b.Min.Y + int(float64(height)*0.78)
+	// Modern CNH Digital front artwork (commonly 963x680): the portrait
+	// occupies the full white photo box at the left of the identity fields.
+	// Keep a very small border so hair/shoulders are not clipped.
+	x1 := b.Min.X + int(float64(width)*0.174)
+	x2 := b.Min.X + int(float64(width)*0.434)
+	y1 := b.Min.Y + int(float64(height)*0.355)
+	y2 := b.Min.Y + int(float64(height)*0.850)
 	if x2 <= x1 || y2 <= y1 || x2 > b.Max.X || y2 > b.Max.Y {
 		return Photo{}, errors.New("recorte da foto fora da imagem")
 	}
@@ -406,7 +409,7 @@ func cropCNHFrontPortrait(data []byte, pageNumber int) (Photo, error) {
 	return Photo{
 		Available:  true,
 		Page:       pageNumber,
-		Method:     "pdfimages_structural_candidate_crop_v1",
+		Method:     "pdfimages_structural_candidate_crop_v2",
 		Confidence: "layout",
 		MIME:       "image/png",
 		Width:      x2 - x1,
