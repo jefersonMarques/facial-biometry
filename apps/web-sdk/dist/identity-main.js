@@ -280,7 +280,7 @@ async function waitForFacePhase(phase) {
             (!clientQualityGood || !serverQualityGood);
         if (phase === "far" &&
             guidePosts >= FIRST_CAPTURE_MAX_GUIDE_POSTS &&
-            !assessment.ready) {
+            (!assessment.ready || !clientQualityGood)) {
             cameraState.textContent = "Aguardando você";
             biometricStatus.textContent = assessment.captureReady
                 ? "O enquadramento está utilizável. Toque em “Estou pronto” para capturar."
@@ -558,31 +558,31 @@ function assessGuide(guide, phase) {
     };
 }
 function isClientQualityUsable(quality) {
-    return quality.brightness >= 0.10 &&
-        quality.brightness <= 0.94 &&
-        quality.contrast >= 0.030 &&
-        quality.sharpness >= 0.008;
+    return quality.brightness >= 0.04 &&
+        quality.brightness <= 0.98 &&
+        quality.contrast >= 0.010 &&
+        quality.sharpness >= 0.002;
 }
 function clientQualityInstruction(quality) {
-    if (quality.brightness < 0.16) {
+    if (quality.brightness < 0.11) {
         return {
             message: "Está escuro. Aumente a iluminação do rosto.",
             state: "Pouca luz",
         };
     }
-    if (quality.brightness > 0.88) {
+    if (quality.brightness > 0.94) {
         return {
             message: "Está muito claro. Evite luz forte diretamente no rosto.",
             state: "Luz excessiva",
         };
     }
-    if (quality.sharpness < 0.018) {
+    if (quality.sharpness < 0.008) {
         return {
             message: "Imagem pouco nítida. Mantenha o celular firme.",
             state: "Imagem desfocada",
         };
     }
-    if (quality.contrast < 0.055) {
+    if (quality.contrast < 0.028) {
         return {
             message: "Melhore a iluminação do rosto.",
             state: "Pouco contraste",
