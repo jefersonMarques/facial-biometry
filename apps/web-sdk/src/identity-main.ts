@@ -342,8 +342,23 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
 
         const assessment = assessGuide(guide, phase);
         const clientQualityGood = snapshot.quality.acceptable;
+        const clientQualityUsable = isClientQualityUsable(snapshot.quality);
         const serverQualityGood = guide.quality.score >= 0.34;
-        const qualityLimited = assessment.captureReady && (!clientQualityGood || !serverQualityGood);
+        const qualityLimited = assessment.captureReady &&
+            clientQualityUsable &&
+            (!clientQualityGood || !serverQualityGood);
+
+        if (assessment.captureReady && !clientQualityUsable) {
+            qualityLimitedSamples = 0;
+            stableSamples = 0;
+            const lightingHint = clientQualityInstruction(snapshot.quality);
+            cameraState.textContent = lightingHint.state;
+            biometricStatus.textContent = lightingHint.message;
+            faceGuide.classList.remove("guide-ready", "guide-near");
+            setProximityIndicator(assessment.proximityPercent, "red");
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
 
         if (qualityLimited) {
             qualityLimitedSamples++;
@@ -410,6 +425,13 @@ async function holdStillForAutomaticCapture(phase: GuidedCapturePhase): Promise<
         setProximityIndicator(100, "yellow");
 
         const snapshot = camera.snapshotForGuide();
+        if (!isClientQualityUsable(snapshot.quality)) {
+            const lightingHint = clientQualityInstruction(snapshot.quality);
+            cameraState.textContent = lightingHint.state;
+            biometricStatus.textContent = lightingHint.message;
+            setProximityIndicator(0, "red");
+            return false;
+        }
         try {
             const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
             const assessment = assessGuide(guide, phase);
@@ -458,7 +480,10 @@ async function capturePhase(
         }
 
         const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
-        if (!snapshot.quality.acceptable && !relaxedQuality) {
+        if (
+            !isClientQualityUsable(snapshot.quality) ||
+            (!snapshot.quality.acceptable && !relaxedQuality)
+        ) {
             frames.length = 0;
             relaxedQuality = await waitForFacePhase(phase);
             continue;
@@ -614,6 +639,15 @@ function assessGuide(
         tone: "green",
         proximityPercent: 100,
     };
+}
+
+function isClientQualityUsable(
+    quality: { brightness: number; contrast: number; sharpness: number },
+): boolean {
+    return quality.brightness >= 0.10 &&
+        quality.brightness <= 0.94 &&
+        quality.contrast >= 0.030 &&
+        quality.sharpness >= 0.008;
 }
 
 function clientQualityInstruction(
