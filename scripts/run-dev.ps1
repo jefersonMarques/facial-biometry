@@ -45,6 +45,20 @@ $env:FACEPROOF_SFACE_MODEL = Join-Path $Root "models\sface\face_recognition_sfac
 $env:FACEPROOF_MINIFASNET_MODEL = Join-Path $Root "models\minifasnet\MiniFASNetV2.onnx"
 $env:FACEPROOF_ALLOW_REVIEW_ENROLLMENT = "true"
 
+$LocalBPG = Join-Path $Root "tools\bpg\bpgdec.exe"
+if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (Test-Path $LocalBPG)) {
+    $env:FACEPROOF_BPGDEC_PATH = $LocalBPG
+}
+
+foreach ($Tool in @("pdfsig", "pdfinfo", "pdftoppm")) {
+    if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
+        Write-Warning "$Tool nao encontrado. A validacao da CNH Digital requer Poppler."
+    }
+}
+if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (-not (Get-Command "bpgdec" -ErrorAction SilentlyContinue))) {
+    Write-Warning "bpgdec nao encontrado. A foto VIO nao podera ser convertida."
+}
+
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\engine'; & '$Python' engine_server.py"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\api'; go run ./cmd/server"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\apps\web-sdk'; python -m http.server 5173"
