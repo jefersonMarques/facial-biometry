@@ -30,7 +30,6 @@ export class BiometricClient {
             body: JSON.stringify({
                 sessionToken: session.sessionToken,
                 frames: capture.frames,
-                guidedFrames: capture.guidedFrames ?? [],
                 metadata: capture.metadata,
             }),
         });
@@ -76,6 +75,7 @@ export class BiometricClient {
                 sessionId: session.sessionId,
                 sessionToken: session.sessionToken,
                 frames: capture.frames,
+                guidedFrames: capture.guidedFrames ?? [],
                 metadata: capture.metadata,
             }),
         });
