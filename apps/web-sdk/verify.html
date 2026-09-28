@@ -37,12 +37,13 @@
         <section id="biometryPanel" class="identity-stage" hidden>
             <div class="stage-index">2</div>
             <div class="stage-content">
-                <h2>Prova de vida guiada</h2>
-                <p>A câmera permanecerá ligada durante o processo. Primeiro enquadre o rosto um pouco mais longe; depois aproxime-se seguindo o oval.</p>
+                <h2>Biometria facial</h2>
+                <p>Ao iniciar, a câmera orientará o enquadramento. Faremos duas capturas automáticas: primeiro com o rosto mais longe e depois mais perto.</p>
 
                 <div class="camera-card identity-camera">
                     <video id="camera" playsinline muted></video>
                     <div id="faceGuide" class="face-guide phase-far"></div>
+                    <div id="captureFlash" class="capture-flash" aria-hidden="true"></div>
                     <div class="guide-phase"><span id="guidePhaseText">1 de 2 · Mais longe</span></div>
                     <div class="camera-topline">
                         <span class="camera-dot"></span>
@@ -50,7 +51,7 @@
                     </div>
                     <div class="camera-footer">
                         <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
-                        <div id="biometricStatus">A câmera vai orientar o enquadramento antes de iniciar a tentativa biométrica.</div>
+                        <div id="biometricStatus">Clique abaixo para iniciar a biometria.</div>
                     </div>
                 </div>
 
