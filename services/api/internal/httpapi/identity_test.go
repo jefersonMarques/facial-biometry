@@ -42,7 +42,7 @@ func TestIssuerCreatesAndReadsIdentityCheckWithoutExposingSecrets(t *testing.T) 
 		nil,
 		nil,
 		repository,
-		cnh.NewService(nil, nil, nil),
+		cnh.NewService(nil, nil),
 	)
 
 	createBody := `{"cpf":"` + expectedCPF + `","minimumDocumentDate":"2020-01-01","expiresInMinutes":60}`
