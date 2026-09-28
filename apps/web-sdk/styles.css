@@ -75,6 +75,37 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
     border-radius: 50%;
     box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.18);
     z-index: 2;
+    transition: width 420ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.identity-camera .face-guide.phase-far {
+    width: min(38%, 238px);
+}
+
+.identity-camera .face-guide.phase-near {
+    width: min(62%, 390px);
+}
+
+.identity-camera .face-guide.guide-ready {
+    border-color: #4ade80;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.18), 0 0 0 5px rgba(74, 222, 128, 0.16);
+}
+
+.guide-phase {
+    position: absolute;
+    z-index: 4;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: rgba(11, 15, 19, 0.64);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    backdrop-filter: blur(12px);
+    white-space: nowrap;
 }
 
 .camera-topline, .camera-footer {
@@ -183,6 +214,8 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
 .identity-action { width: 100%; margin-top: 14px; }
 .stage-status { min-height: 20px; margin-top: 11px; color: #667085; font-size: 12px; line-height: 1.5; }
 .identity-camera { min-height: 480px; margin-top: 16px; box-shadow: none; }
+.identity-camera .camera-footer { min-height: 76px; }
+.identity-camera video { background: #0b0f13; }
 .identity-result { margin-top: 10px; padding-top: 0; border-top: 0; }
 .identity-checks { display: grid; gap: 8px; margin-top: 12px; }
 .identity-check { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 10px; background: #f8fafc; font-size: 12px; }
@@ -194,4 +227,6 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
     .identity-stage { grid-template-columns: 1fr; padding: 18px; }
     .stage-index { width: 32px; height: 32px; }
     .identity-camera { min-height: 62vh; }
+    .identity-camera .face-guide.phase-far { width: min(48%, 220px); }
+    .identity-camera .face-guide.phase-near { width: min(72%, 340px); }
 }
