@@ -59,6 +59,10 @@ type EngineRequest struct {
 	IlluminationPattern []float64             `json:"illuminationPattern"`
 }
 
+type EngineIdentityRequest struct {
+	GuidedFrames []GuidedCapturedFrame `json:"guidedFrames"`
+}
+
 type EngineGuideResult struct {
 	FaceDetected    bool          `json:"faceDetected"`
 	Confidence      float64       `json:"confidence"`
