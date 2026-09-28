@@ -2,6 +2,7 @@ import type {
     BiometricSessionKind,
     CapturePackage,
     CompletionResponse,
+    GuidedCapturedFrame,
     IdentityCheckStatus,
     IdentityCompletionResponse,
     IdentityDocumentResponse,
@@ -64,7 +65,7 @@ export class BiometricClient {
     public async completeIdentityCheck(
         token: string,
         session: SessionResponse,
-        capture: CapturePackage,
+        guidedFrames: GuidedCapturedFrame[],
     ): Promise<IdentityCompletionResponse> {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
@@ -74,9 +75,7 @@ export class BiometricClient {
             body: JSON.stringify({
                 sessionId: session.sessionId,
                 sessionToken: session.sessionToken,
-                frames: capture.frames,
-                guidedFrames: capture.guidedFrames ?? [],
-                metadata: capture.metadata,
+                guidedFrames,
             }),
         });
     }
