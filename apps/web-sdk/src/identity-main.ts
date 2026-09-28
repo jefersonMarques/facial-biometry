@@ -17,7 +17,6 @@ const PHASE_CAPTURE_FRAMES = 4;
 const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
-const AUTO_FACE_DETECTION_WINDOW_MS = 8_000;
 const QUALITY_FALLBACK_SAMPLES = 5;
 const NEAR_HOLD_SECONDS = 3;
 
@@ -83,6 +82,7 @@ let identityToken = "";
 let busy = false;
 let autoBiometryScheduled = false;
 let manualReadyResolver: (() => void) | null = null;
+let currentBiometryPhase: GuidedCapturePhase = "far";
 let documentDetails: IdentityDocumentDetails | null = null;
 
 void initialize();
@@ -253,12 +253,14 @@ async function runBiometry(): Promise<void> {
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
 
         while (!completed) {
+            currentBiometryPhase = "far";
             const farRelaxedQuality = await waitForFacePhase("far");
 
             const session = await client.createIdentitySession(identityToken);
             const farFrames = await capturePhase("far", farRelaxedQuality);
             await showCaptureSuccess("Primeira captura concluída");
 
+            currentBiometryPhase = "near";
             const nearRelaxedQuality = await waitForFacePhase("near");
             const nearFrames = await capturePhase("near", nearRelaxedQuality);
             await showCaptureSuccess("Segunda captura concluída");
@@ -295,7 +297,9 @@ async function runBiometry(): Promise<void> {
         biometricStatus.textContent = friendlyBiometryError(message);
         startButton.hidden = false;
         startButton.disabled = false;
-        startButton.textContent = infrastructureFailure ? "Tentar novamente" : "Estou pronto";
+        startButton.textContent = infrastructureFailure || currentBiometryPhase === "near"
+            ? "Tentar novamente"
+            : "Estou pronto";
         cameraState.textContent = infrastructureFailure ? "Falha temporária na análise" : "Câmera pausada";
         camera.stop();
     } finally {
@@ -343,7 +347,9 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
 
         if (qualityLimited) {
             qualityLimitedSamples++;
-            const lightingHint = clientQualityInstruction(snapshot.quality);
+            const lightingHint = clientQualityGood
+                ? { message: "A qualidade está quase suficiente. Mantenha-se parado.", state: "Qualidade quase ideal" }
+                : clientQualityInstruction(snapshot.quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             faceGuide.classList.remove("guide-ready");
