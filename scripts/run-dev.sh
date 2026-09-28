@@ -39,6 +39,15 @@ export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_r
 export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
 export FACEPROOF_ALLOW_REVIEW_ENROLLMENT="${FACEPROOF_ALLOW_REVIEW_ENROLLMENT:-true}"
 
+for tool in pdfsig pdfinfo pdftoppm; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "WARNING: $tool not found. CNH Digital validation requires Poppler."
+    fi
+done
+if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; then
+    echo "WARNING: bpgdec not found. The VIO portrait cannot be converted."
+fi
+
 cleanup() {
     kill "${ENGINE_PID:-}" "${API_PID:-}" "${WEB_PID:-}" 2>/dev/null || true
 }
