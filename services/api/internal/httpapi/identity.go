@@ -63,7 +63,6 @@ type identityDocumentResponse struct {
 type identityCompleteRequest struct {
 	SessionID    string                       `json:"sessionId"`
 	SessionToken string                       `json:"sessionToken"`
-	Frames       []domain.CapturedFrame       `json:"frames"`
 	GuidedFrames []domain.GuidedCapturedFrame `json:"guidedFrames"`
 	Metadata     *domain.CaptureMetadata      `json:"metadata,omitempty"`
 }
@@ -370,11 +369,6 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		return
 	}
 
-	normalizedFrames, err := normalizeCapturedFrames(payload.Frames, captureSession)
-	if err != nil {
-		handler.writeError(writer, http.StatusBadRequest, err.Error())
-		return
-	}
 	normalizedGuidedFrames, err := normalizeGuidedFrames(payload.GuidedFrames)
 	if err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
@@ -386,10 +380,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		return
 	}
 
-	result, err := handler.engine.Analyze(request.Context(), domain.EngineRequest{
-		Frames:              normalizedFrames,
-		GuidedFrames:        normalizedGuidedFrames,
-		IlluminationPattern: captureSession.IlluminationPattern,
+	result, err := handler.engine.AnalyzeIdentity(request.Context(), domain.EngineIdentityRequest{
+		GuidedFrames: normalizedGuidedFrames,
 	})
 	if err != nil {
 		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
