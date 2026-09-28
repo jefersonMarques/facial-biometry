@@ -39,7 +39,12 @@ type Document struct {
 	VIOTemplateID         uint16
 	VIOCreatedAt          time.Time
 	VIOSignatureAlgorithm string
+	Name                  string
 	CPF                   string
+	BirthDate             string
+	Category              string
+	ExpiryDate            string
+	IssuingUF             string
 	Photo                 []byte
 	PhotoMIME             string
 	PhotoSource           string
@@ -179,7 +184,12 @@ func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF str
 		VIOTemplateID:         result.TemplateID,
 		VIOCreatedAt:          result.CreatedAt,
 		VIOSignatureAlgorithm: result.SignatureAlgorithm,
+		Name:                  firstNonEmptyField(result.Fields, "nome", "nome_civil"),
 		CPF:                   documentCPF,
+		BirthDate:             fieldValue(result.Fields, "data_nascimento"),
+		Category:              fieldValue(result.Fields, "categoria"),
+		ExpiryDate:            fieldValue(result.Fields, "data_validade"),
+		IssuingUF:             fieldValue(result.Fields, "uf_emissao"),
 		Photo:                 photo,
 		PhotoMIME:             photoEvidence.MIME,
 		PhotoSource:           photoEvidence.Source,
@@ -388,6 +398,15 @@ func fieldValue(fields []decoder.FieldValue, name string) string {
 	for _, field := range fields {
 		if strings.EqualFold(strings.TrimSpace(field.Name), name) {
 			return strings.TrimSpace(field.Value)
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyField(fields []decoder.FieldValue, names ...string) string {
+	for _, name := range names {
+		if value := fieldValue(fields, name); value != "" {
+			return value
 		}
 	}
 	return ""
