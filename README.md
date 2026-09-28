@@ -2,7 +2,7 @@
 
 Browser-first, self-hosted identity verification and facial biometric MVP.
 
-The primary flow now accepts an original Brazilian CNH Digital PDF, authenticates the signed PDF and VIO payload, extracts the official VIO portrait, performs browser-based live capture with liveness, and compares the live face against that portrait.
+The primary flow now accepts an original Brazilian CNH Digital PDF, authenticates the signed PDF and VIO payload, extracts a biometric reference portrait from the cryptographically intact signed PDF, with the signed VIO portrait as fallback, performs browser-based live capture with liveness, and compares the live face against that portrait.
 
 ## CNH Digital Identity Check
 
@@ -38,7 +38,7 @@ See `docs/IDENTITY_CHECK.md` for the protocol and endpoints.
 - CNH Digital metadata consistency checks;
 - VIO QR decoding v1-v6 and signature verification;
 - expected CPF matching;
-- official VIO portrait extraction, including BPG-to-PNG conversion;
+- signed-PDF portrait extraction for biometrics, with VIO/BPG portrait fallback;
 - one-time reference embedding without permanent CNH enrollment;
 - guided browser capture with brightness/contrast/sharpness preflight;
 - randomized server-generated illumination challenge;
@@ -62,7 +62,7 @@ The MVP also does not provide complete long-term certificate revocation/timestam
 - Python 3.11+
 - a modern browser with camera support;
 - Poppler tools: `pdfsig`, `pdfinfo` and `pdftoppm`;
-- `bpgdec` for VIO portraits encoded in BPG.
+- `bpgdec` is optional fallback support for VIO portraits encoded in BPG.
 
 Node.js is only required when editing the TypeScript SDK. The compiled JavaScript bundle is committed.
 
