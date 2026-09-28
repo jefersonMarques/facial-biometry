@@ -183,7 +183,7 @@ class BiometricAnalyzer:
         frame_analyses: list[FrameAnalysis] = []
         face_crops: list[np.ndarray] = []
         normalized_centers: list[tuple[float, float, float]] = []
-        embeddings: list[tuple[float, str, int, np.ndarray]] = []
+        embedding_candidates: list[tuple[float, str, int, np.ndarray, Any]] = []
         far_scales: list[float] = []
         near_scales: list[float] = []
         center_scores: list[float] = []
@@ -242,8 +242,7 @@ class BiometricAnalyzer:
                 near_scales.append(float(height_ratio))
                 near_count += 1
 
-            embedding = self._encoder.encode(image, detected)
-            embeddings.append((quality, phase, frame_index, embedding))
+            embedding_candidates.append((quality, phase, frame_index, image, detected))
             face_crops.append(face_crop)
             normalized_centers.append((float(center_x), float(center_y), float(normalized_scale)))
             frame_analyses.append(
@@ -309,12 +308,21 @@ class BiometricAnalyzer:
             * (0.70 + 0.30 * presence_gate)
         )
 
-        near_embeddings = [item for item in embeddings if item[1] == "near"]
-        near_embeddings.sort(key=lambda item: item[0], reverse=True)
-        selected_near = near_embeddings[:3]
-        if len(selected_near) < 3:
+        near_candidates = [item for item in embedding_candidates if item[1] == "near"]
+        near_candidates.sort(key=lambda item: item[0], reverse=True)
+        selected_near_candidates = near_candidates[:3]
+        if len(selected_near_candidates) < 3:
             raise ValueError("not enough high-quality near face embeddings")
 
+        selected_near = [
+            (
+                quality,
+                phase,
+                frame_index,
+                self._encoder.encode(image, detected),
+            )
+            for quality, phase, frame_index, image, detected in selected_near_candidates
+        ]
         selected_embeddings = [embedding for _, _, _, embedding in selected_near]
         combined_embedding = np.mean(np.vstack(selected_embeddings), axis=0).astype(np.float32)
         embedding_norm = float(np.linalg.norm(combined_embedding))
