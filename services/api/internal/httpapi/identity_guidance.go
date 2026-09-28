@@ -11,10 +11,15 @@ import (
 )
 
 const (
-	maxIdentityGuideRequestBytes      = 1 << 20
-	minimumIdentityCaptureQuality     = 0.50
-	minimumIdentityFacePresence       = 0.80
-	minimumIdentityGuidedCaptureScore = 0.45
+	maxIdentityGuideRequestBytes       = 1 << 20
+	hardMinimumCaptureQuality          = 0.30
+	preferredCaptureQuality            = 0.50
+	hardMinimumFacePresence            = 0.65
+	preferredFacePresence              = 0.80
+	hardMinimumGuidedCaptureScore      = 0.30
+	preferredGuidedCaptureScore        = 0.45
+	identityMatchRetryMargin           = 0.05
+	borderlineQualityStrongMatchMargin = 0.12
 )
 
 type identityGuideRequest struct {
@@ -89,7 +94,29 @@ func normalizeGuidedFrames(frames []domain.GuidedCapturedFrame) ([]domain.Guided
 }
 
 func identityCaptureNeedsRecapture(result domain.EngineResult) bool {
-	return result.Quality.Score < minimumIdentityCaptureQuality ||
-		result.Quality.FacePresence < minimumIdentityFacePresence ||
-		result.GuidedCapture.Score < minimumIdentityGuidedCaptureScore
+	return result.Quality.Score < hardMinimumCaptureQuality ||
+		result.Quality.FacePresence < hardMinimumFacePresence ||
+		result.GuidedCapture.Score < hardMinimumGuidedCaptureScore
+}
+
+func identityCaptureIsBorderline(result domain.EngineResult) bool {
+	return result.Quality.Score < preferredCaptureQuality ||
+		result.Quality.FacePresence < preferredFacePresence ||
+		result.GuidedCapture.Score < preferredGuidedCaptureScore
+}
+
+func identityMatchNeedsRecapture(result domain.EngineResult, similarity float64, threshold float64) bool {
+	if threshold <= 0 {
+		return false
+	}
+
+	nearThreshold := similarity >= threshold*0.90 &&
+		similarity < threshold+identityMatchRetryMargin
+	if nearThreshold {
+		return true
+	}
+
+	return identityCaptureIsBorderline(result) &&
+		similarity >= threshold*0.90 &&
+		similarity < threshold+borderlineQualityStrongMatchMargin
 }
