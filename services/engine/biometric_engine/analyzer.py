@@ -304,8 +304,8 @@ class BiometricAnalyzer:
 
         liveness_score = clamp01(
             liveness_score
-            * (0.65 + 0.35 * quality_gate)
-            * (0.70 + 0.30 * presence_gate)
+            * (0.82 + 0.18 * quality_gate)
+            * (0.80 + 0.20 * presence_gate)
         )
 
         near_candidates = [item for item in embedding_candidates if item[1] == "near"]
