@@ -117,7 +117,7 @@ After PDF integrity passes:
 - extract the portrait embedded in VIO;
 - decode BPG to PNG when necessary.
 
-The visual portrait printed on the page is not used as the biometric reference.
+For identity checks, the visual portrait may be used as the biometric reference only after the PDF signature is cryptographically valid and the signed revision covers the complete file. The signed VIO payload remains authoritative for CPF, document type and its own authenticity.
 
 ## Privacy and storage
 
