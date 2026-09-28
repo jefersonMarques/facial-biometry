@@ -18,6 +18,8 @@ const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
 const AUTO_FACE_DETECTION_WINDOW_MS = 8_000;
+const QUALITY_FALLBACK_SAMPLES = 5;
+const NEAR_HOLD_SECONDS = 3;
 
 type GuideTone = "red" | "yellow" | "green";
 
@@ -251,14 +253,14 @@ async function runBiometry(): Promise<void> {
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
 
         while (!completed) {
-            await waitForFacePhase("far");
+            const farRelaxedQuality = await waitForFacePhase("far");
 
             const session = await client.createIdentitySession(identityToken);
-            const farFrames = await capturePhase("far");
+            const farFrames = await capturePhase("far", farRelaxedQuality);
             await showCaptureSuccess("Primeira captura concluída");
 
-            await waitForFacePhase("near");
-            const nearFrames = await capturePhase("near");
+            const nearRelaxedQuality = await waitForFacePhase("near");
+            const nearFrames = await capturePhase("near", nearRelaxedQuality);
             await showCaptureSuccess("Segunda captura concluída");
 
             biometricStatus.textContent = "Analisando sua identidade...";
@@ -304,40 +306,20 @@ async function runBiometry(): Promise<void> {
     }
 }
 
-async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
+async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     let stableSamples = 0;
     let networkFailures = 0;
-    const startedAt = performance.now();
-    let fallbackOffered = false;
+    let qualityLimitedSamples = 0;
 
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
     biometricStatus.textContent = "Posicione o rosto no oval e siga as orientações.";
     setProximityIndicator(0, "red");
+    startButton.hidden = true;
+    startButton.disabled = true;
 
     while (stableSamples < GUIDE_READY_SAMPLES) {
-        if (
-            phase === "far" &&
-            !fallbackOffered &&
-            performance.now() - startedAt >= AUTO_FACE_DETECTION_WINDOW_MS
-        ) {
-            fallbackOffered = true;
-            await waitForManualReady();
-            biometricStatus.textContent = "Verificando seu enquadramento...";
-        }
-
         const snapshot = camera.snapshotForGuide();
-
-        if (!snapshot.quality.acceptable) {
-            stableSamples = 0;
-            faceGuide.classList.remove("guide-ready", "guide-near");
-            const lightingHint = clientQualityInstruction(snapshot.quality);
-            cameraState.textContent = lightingHint.state;
-            biometricStatus.textContent = lightingHint.message;
-            setProximityIndicator(0, "red");
-            await sleep(GUIDE_SAMPLE_MS);
-            continue;
-        }
 
         let guide: IdentityGuideResult;
         try {
@@ -355,6 +337,38 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
         }
 
         const assessment = assessGuide(guide, phase);
+        const clientQualityGood = snapshot.quality.acceptable;
+        const serverQualityGood = guide.quality.score >= 0.34;
+        const qualityLimited = assessment.captureReady && (!clientQualityGood || !serverQualityGood);
+
+        if (qualityLimited) {
+            qualityLimitedSamples++;
+            const lightingHint = clientQualityInstruction(snapshot.quality);
+            cameraState.textContent = lightingHint.state;
+            biometricStatus.textContent = lightingHint.message;
+            faceGuide.classList.remove("guide-ready");
+            faceGuide.classList.add("guide-near");
+            setProximityIndicator(assessment.proximityPercent, "yellow");
+
+            if (qualityLimitedSamples >= QUALITY_FALLBACK_SAMPLES) {
+                if (phase === "far") {
+                    await waitForManualReady();
+                    biometricStatus.textContent = "Certo. Vamos tentar a captura e validar a qualidade na análise.";
+                    return true;
+                }
+
+                const heldStill = await holdStillForAutomaticCapture(phase);
+                if (heldStill) {
+                    return true;
+                }
+                qualityLimitedSamples = 0;
+            }
+
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+
+        qualityLimitedSamples = 0;
         renderGuideAssessment(assessment);
 
         if (assessment.ready) {
@@ -364,18 +378,58 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
         }
 
         if (stableSamples >= GUIDE_READY_SAMPLES) {
+            faceGuide.classList.remove("guide-near");
             faceGuide.classList.add("guide-ready");
             biometricStatus.textContent = "Posição ideal. Mantenha-se assim...";
             setProximityIndicator(100, "green");
             await sleep(180);
-            return;
+            return false;
         }
 
         await sleep(GUIDE_SAMPLE_MS);
     }
+
+    return false;
 }
 
-async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFrame[]> {
+async function holdStillForAutomaticCapture(phase: GuidedCapturePhase): Promise<boolean> {
+    startButton.hidden = true;
+    startButton.disabled = true;
+    faceGuide.classList.remove("guide-ready");
+    faceGuide.classList.add("guide-near");
+
+    for (let seconds = NEAR_HOLD_SECONDS; seconds >= 1; seconds--) {
+        biometricStatus.textContent = `Fique parado por ${seconds} segundo${seconds === 1 ? "" : "s"}...`;
+        cameraState.textContent = "Mantenha-se parado";
+        setProximityIndicator(100, "yellow");
+
+        const snapshot = camera.snapshotForGuide();
+        try {
+            const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
+            const assessment = assessGuide(guide, phase);
+            if (!assessment.captureReady) {
+                renderGuideAssessment(assessment);
+                return false;
+            }
+        } catch {
+            return false;
+        }
+
+        await sleep(1_000);
+    }
+
+    faceGuide.classList.remove("guide-near");
+    faceGuide.classList.add("guide-ready");
+    cameraState.textContent = "Capturando";
+    biometricStatus.textContent = "Capturando agora...";
+    setProximityIndicator(100, "green");
+    return true;
+}
+
+async function capturePhase(
+    phase: GuidedCapturePhase,
+    relaxedQuality = false,
+): Promise<GuidedCapturedFrame[]> {
     const frames: GuidedCapturedFrame[] = [];
 
     biometricStatus.textContent = phase === "far"
@@ -387,31 +441,20 @@ async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFr
 
     while (frames.length < PHASE_CAPTURE_FRAMES) {
         const guideSnapshot = camera.snapshotForGuide(360, 0.72);
-
-        if (!guideSnapshot.quality.acceptable) {
-            const lightingHint = clientQualityInstruction(guideSnapshot.quality);
-            faceGuide.classList.remove("guide-ready", "guide-near");
-            cameraState.textContent = lightingHint.state;
-            biometricStatus.textContent = lightingHint.message;
-            setProximityIndicator(0, "red");
-            await waitForFacePhase(phase);
-            continue;
-        }
-
         const guide = await client.guideIdentityFace(identityToken, guideSnapshot.imageBase64);
         const assessment = assessGuide(guide, phase);
         renderGuideAssessment(assessment);
 
         if (!assessment.captureReady) {
-            await waitForFacePhase(phase);
+            frames.length = 0;
+            relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
 
         const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
-        if (!snapshot.quality.acceptable) {
-            const lightingHint = clientQualityInstruction(snapshot.quality);
-            biometricStatus.textContent = lightingHint.message;
-            await sleep(GUIDE_SAMPLE_MS);
+        if (!snapshot.quality.acceptable && !relaxedQuality) {
+            frames.length = 0;
+            relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
 
@@ -637,7 +680,7 @@ async function waitForManualReady(): Promise<void> {
     startButton.hidden = false;
     startButton.disabled = false;
     startButton.textContent = "Estou pronto";
-    biometricStatus.textContent = "Posicione o rosto preenchendo o oval e toque em “Estou pronto”.";
+    biometricStatus.textContent = "A imagem está quase boa. Se você já estiver bem posicionado, toque em “Estou pronto”.";
 
     await new Promise<void>((resolve) => {
         manualReadyResolver = resolve;
