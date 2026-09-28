@@ -50,13 +50,23 @@ if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (Test-Path $LocalBPG)) {
     $env:FACEPROOF_BPGDEC_PATH = $LocalBPG
 }
 
+$MissingRequired = @()
 foreach ($Tool in @("pdfsig", "pdfinfo", "pdftoppm")) {
     if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
-        Write-Warning "$Tool nao encontrado. A validacao da CNH Digital requer Poppler."
+        $MissingRequired += $Tool
+    }
+}
+if ($MissingRequired.Count -gt 0) {
+    Write-Warning ("IDENTITY CHECK indisponivel ate instalar/configurar: " + ($MissingRequired -join ", "))
+}
+
+foreach ($Tool in @("pdfimages", "pdftotext", "openssl")) {
+    if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
+        Write-Warning "$Tool nao encontrado (analise forense complementar ficara limitada)."
     }
 }
 if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (-not (Get-Command "bpgdec" -ErrorAction SilentlyContinue))) {
-    Write-Warning "bpgdec nao encontrado. A foto VIO nao podera ser convertida."
+    Write-Host "INFO: bpgdec nao encontrado. Isso nao bloqueia mais a CNH; a foto assinada do PDF sera usada."
 }
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\engine'; & '$Python' engine_server.py"
