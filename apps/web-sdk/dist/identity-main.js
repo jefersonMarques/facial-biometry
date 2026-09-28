@@ -2,6 +2,9 @@ import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
+const GUIDE_SAMPLE_MS = 420;
+const GUIDE_REQUIRED_STABLE_SAMPLES = 3;
+const GUIDE_MAX_NETWORK_FAILURES = 5;
 const client = new BiometricClient(resolveApiBaseUrl());
 const documentPanel = requiredElement("documentPanel");
 const biometryPanel = requiredElement("biometryPanel");
@@ -17,6 +20,8 @@ const lightLayer = requiredElement("lightLayer");
 const progressBar = requiredElement("progressBar");
 const cameraState = requiredElement("cameraState");
 const expiresText = requiredElement("expiresText");
+const faceGuide = requiredElement("faceGuide");
+const guidePhaseText = requiredElement("guidePhaseText");
 const camera = new CameraCapture(video);
 let identityToken = "";
 let busy = false;
@@ -80,39 +85,178 @@ async function runBiometry() {
     }
     busy = true;
     startButton.disabled = true;
-    biometricStatus.textContent = "Preparando câmera...";
+    startButton.textContent = "Verificação em andamento";
+    biometricStatus.textContent = "Abrindo a câmera...";
     progressBar.style.width = "0%";
+    let completed = false;
     try {
         await camera.start();
-        cameraState.textContent = "Câmera pronta";
-        const session = await client.createIdentitySession(identityToken);
-        const capture = await camera.capture(session, {
-            onProgress(progress) {
-                progressBar.style.width = `${Math.round(progress * 100)}%`;
-            },
-            onLightChange(value) {
-                const opacity = Math.max(0, Math.min(0.72, value * 0.72));
-                lightLayer.style.background = `rgba(255, 255, 255, ${opacity.toFixed(3)})`;
-            },
-            onQualityChange(quality) {
-                renderCameraQuality(quality);
-            },
-            onStatus(message) {
-                biometricStatus.textContent = message;
-            },
-        });
-        const result = await client.completeIdentityCheck(identityToken, session, capture);
-        renderIdentityResult(result);
+        cameraState.textContent = "Câmera ativa";
+        while (!completed) {
+            const farFrames = await guideFacePhase("far");
+            const nearFrames = await guideFacePhase("near");
+            const guidedFrames = [...farFrames, ...nearFrames];
+            guidePhaseText.textContent = "Prova de vida";
+            faceGuide.className = "face-guide phase-near guide-ready";
+            biometricStatus.textContent = "Perfeito. Mantenha-se nessa posição.";
+            progressBar.style.width = "0%";
+            const session = await client.createIdentitySession(identityToken);
+            const capture = await camera.capture(session, {
+                onProgress(progress) {
+                    progressBar.style.width = `${Math.round(progress * 100)}%`;
+                },
+                onLightChange(value) {
+                    const opacity = Math.max(0, Math.min(0.72, value * 0.72));
+                    lightLayer.style.background = `rgba(255, 255, 255, ${opacity.toFixed(3)})`;
+                },
+                onQualityChange(quality) {
+                    renderCameraQuality(quality);
+                },
+                onStatus(message) {
+                    biometricStatus.textContent = message;
+                },
+            }, { skipReadiness: true });
+            capture.guidedFrames = guidedFrames;
+            try {
+                const result = await client.completeIdentityCheck(identityToken, session, capture);
+                renderIdentityResult(result);
+                completed = true;
+            }
+            catch (error) {
+                const message = errorMessage(error);
+                if (isRecaptureRequired(message)) {
+                    lightLayer.style.background = "transparent";
+                    progressBar.style.width = "0%";
+                    faceGuide.className = "face-guide phase-far";
+                    guidePhaseText.textContent = "1 de 2 · Mais longe";
+                    biometricStatus.textContent = "A captura não ficou boa o suficiente. A câmera continuará ligada; vamos reenquadrar.";
+                    await sleep(900);
+                    continue;
+                }
+                throw error;
+            }
+        }
     }
     catch (error) {
         biometricStatus.textContent = friendlyBiometryError(errorMessage(error));
         startButton.disabled = false;
+        startButton.textContent = "Continuar verificação facial";
     }
     finally {
         lightLayer.style.background = "transparent";
-        camera.stop();
+        if (completed) {
+            camera.stop();
+        }
+        else if (!camera.isActive()) {
+            camera.stop();
+        }
         busy = false;
     }
+}
+async function guideFacePhase(phase) {
+    const stableFrames = [];
+    let networkFailures = 0;
+    faceGuide.className = `face-guide phase-${phase}`;
+    guidePhaseText.textContent = phase === "far" ? "1 de 2 · Mais longe" : "2 de 2 · Mais perto";
+    biometricStatus.textContent = phase === "far"
+        ? "Centralize o rosto e mantenha uma pequena distância da câmera."
+        : "Agora aproxime o rosto até preencher o oval maior.";
+    while (true) {
+        const snapshot = camera.snapshotForGuide();
+        if (!snapshot.quality.acceptable) {
+            stableFrames.length = 0;
+            faceGuide.classList.remove("guide-ready");
+            cameraState.textContent = snapshot.quality.issue ?? "Ajuste a câmera";
+            biometricStatus.textContent = snapshot.quality.issue ?? "Melhore a imagem para continuar.";
+            progressBar.style.width = "0%";
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+        let guide;
+        try {
+            guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
+            networkFailures = 0;
+        }
+        catch (error) {
+            networkFailures++;
+            const message = errorMessage(error);
+            if (message.includes("expired") || message.includes("attempt limit")) {
+                throw error;
+            }
+            if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
+                throw error;
+            }
+            cameraState.textContent = "Câmera ativa";
+            biometricStatus.textContent = "Ajustando a análise do enquadramento...";
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+        const instruction = guideInstruction(guide, phase);
+        cameraState.textContent = guide.faceDetected ? "Rosto detectado" : "Procurando rosto";
+        if (!instruction.ready) {
+            stableFrames.length = 0;
+            faceGuide.classList.remove("guide-ready");
+            biometricStatus.textContent = instruction.message;
+            progressBar.style.width = "0%";
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+        faceGuide.classList.add("guide-ready");
+        biometricStatus.textContent = "Perfeito. Mantenha-se assim...";
+        stableFrames.push({
+            imageBase64: snapshot.imageBase64,
+            phase,
+            clientQuality: {
+                brightness: snapshot.quality.brightness,
+                contrast: snapshot.quality.contrast,
+                sharpness: snapshot.quality.sharpness,
+            },
+        });
+        if (stableFrames.length > GUIDE_REQUIRED_STABLE_SAMPLES) {
+            stableFrames.shift();
+        }
+        progressBar.style.width = `${Math.round((stableFrames.length / GUIDE_REQUIRED_STABLE_SAMPLES) * 100)}%`;
+        if (stableFrames.length >= GUIDE_REQUIRED_STABLE_SAMPLES) {
+            await sleep(250);
+            return [...stableFrames];
+        }
+        await sleep(GUIDE_SAMPLE_MS);
+    }
+}
+function guideInstruction(guide, phase) {
+    if (!guide.faceDetected || guide.confidence < 0.82) {
+        return { ready: false, message: "Posicione seu rosto dentro do oval." };
+    }
+    if (Math.abs(guide.rollDegrees) > 12) {
+        return { ready: false, message: "Mantenha a cabeça reta e olhe para a câmera." };
+    }
+    const centered = Math.abs(guide.centerX - 0.5) <= 0.11 && Math.abs(guide.centerY - 0.46) <= 0.13;
+    if (!centered) {
+        return { ready: false, message: "Centralize o rosto no oval." };
+    }
+    if (phase === "far") {
+        if (guide.heightRatio < 0.26) {
+            return { ready: false, message: "Aproxime-se um pouco da câmera." };
+        }
+        if (guide.heightRatio > 0.42) {
+            return { ready: false, message: "Afaste-se um pouco da câmera." };
+        }
+    }
+    else {
+        if (guide.heightRatio < 0.46) {
+            return { ready: false, message: "Aproxime o rosto até preencher o oval." };
+        }
+        if (guide.heightRatio > 0.70) {
+            return { ready: false, message: "Afaste-se só um pouco." };
+        }
+    }
+    if (guide.quality.score < 0.38) {
+        if (guide.quality.sharpness < 0.30) {
+            return { ready: false, message: "Imagem pouco nítida. Mantenha o aparelho firme e limpe a câmera." };
+        }
+        return { ready: false, message: "Melhore a iluminação do rosto para continuar." };
+    }
+    return { ready: true, message: "Perfeito. Mantenha-se assim..." };
 }
 function renderStatus(status) {
     expiresText.textContent = formatExpiration(status.expiresAt);
@@ -128,6 +272,7 @@ function renderStatus(status) {
             biometryPanel.hidden = false;
             finalPanel.hidden = true;
             startButton.disabled = false;
+            startButton.textContent = "Iniciar verificação facial";
             break;
         case "approved":
         case "review":
@@ -161,6 +306,8 @@ function renderIdentityResult(result) {
             ${metric("Rosto × CNH", percentage(result.similarity))}
             ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
             ${metric("Qualidade", percentage(result.quality.score))}
+            ${metric("Captura guiada", percentage(result.signals.guidedCapture.score))}
+            ${metric("Presença facial", percentage(result.quality.facePresence))}
         </div>
         <div class="identity-checks">
             ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
@@ -182,6 +329,7 @@ function renderCameraQuality(quality) {
     cameraState.textContent = quality.acceptable ? "Qualidade de captura boa" : quality.issue ?? "Ajuste a câmera";
 }
 function showFatal(message) {
+    camera.stop();
     documentPanel.hidden = true;
     biometryPanel.hidden = true;
     finalPanel.hidden = false;
@@ -218,12 +366,18 @@ function friendlyDocumentError(message) {
 }
 function friendlyBiometryError(message) {
     if (message.includes("attempt limit")) {
-        return "O limite de tentativas desta verificação foi atingido.";
+        return "O limite de tentativas biométricas desta verificação foi atingido.";
     }
     if (message.includes("expired")) {
         return "Este link de verificação expirou.";
     }
+    if (isRecaptureRequired(message)) {
+        return "A captura não ficou nítida o suficiente. Reenquadre o rosto e tente novamente.";
+    }
     return message;
+}
+function isRecaptureRequired(message) {
+    return message.includes("recapture required") || message.includes("capture quality insufficient");
 }
 function formatExpiration(value) {
     const date = new Date(value);
@@ -258,4 +412,7 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+}
+async function sleep(milliseconds) {
+    await new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
