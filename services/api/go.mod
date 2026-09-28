@@ -3,7 +3,7 @@ module faceproof/services/api
 go 1.23
 
 require (
-	github.com/benedoc-inc/pdfer/v2 v2.9.0
+	github.com/fullsailor/pkcs7 v0.0.0-20190404230743-d7302db945fa
 	github.com/makiuchi-d/gozxing v0.1.1
 )
 
