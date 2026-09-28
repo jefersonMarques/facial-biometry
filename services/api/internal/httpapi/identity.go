@@ -230,7 +230,9 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		handler.resetIdentityDocumentAttempt(token, documentErr)
 		switch {
 		case errors.Is(documentErr, cnh.ErrDependencyUnavailable):
-			handler.writeError(writer, http.StatusServiceUnavailable, "CNH validation dependency is unavailable")
+			handler.writeError(writer, http.StatusServiceUnavailable, documentErr.Error())
+		case errors.Is(documentErr, cnh.ErrPhotoUnavailable):
+			handler.writeError(writer, http.StatusUnprocessableEntity, "CNH reference photo is unavailable")
 		case errors.Is(documentErr, cnh.ErrDocumentTooOld):
 			handler.writeError(writer, http.StatusUnprocessableEntity, "CNH Digital was generated before the minimum date required for this verification")
 		case errors.Is(documentErr, cnh.ErrDocumentMismatch):
