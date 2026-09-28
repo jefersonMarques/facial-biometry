@@ -6,7 +6,7 @@ import type {
     SessionResponse,
 } from "./types.js";
 
-const SDK_VERSION = "0.3.0";
+const SDK_VERSION = "0.4.0";
 const READINESS_TIMEOUT_MS = 4_000;
 const READINESS_SAMPLE_MS = 220;
 const REQUIRED_GOOD_SAMPLES = 2;
@@ -18,9 +18,13 @@ export interface CaptureHooks {
     onStatus(message: string): void;
 }
 
-interface CapturedImage {
+export interface CameraSnapshot {
     imageBase64: string;
     quality: FrameQualityAssessment;
+}
+
+export interface CaptureOptions {
+    skipReadiness?: boolean;
 }
 
 export class CameraCapture {
@@ -62,9 +66,28 @@ export class CameraCapture {
         this.video.srcObject = null;
     }
 
-    public async capture(session: SessionResponse, hooks: CaptureHooks): Promise<CapturePackage> {
+    public isActive(): boolean {
+        return this.stream !== null && this.stream.getVideoTracks().some((track) => track.readyState === "live");
+    }
+
+    public snapshotForGuide(maxWidth = 360, jpegQuality = 0.72): CameraSnapshot {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        return {
+            imageBase64: this.canvas.toDataURL("image/jpeg", jpegQuality),
+            quality: this.qualityAnalyzer.analyze(imageData),
+        };
+    }
+
+    public async capture(
+        session: SessionResponse,
+        hooks: CaptureHooks,
+        options: CaptureOptions = {},
+    ): Promise<CapturePackage> {
         this.assertReady();
-        await this.waitForReadiness(hooks);
+        if (!options.skipReadiness) {
+            await this.waitForReadiness(hooks);
+        }
 
         const frames: CapturedFrame[] = [];
         const startedAtUnixMs = Date.now();
@@ -153,7 +176,7 @@ export class CameraCapture {
         return this.qualityAnalyzer.analyze(imageData);
     }
 
-    private captureCurrentFrame(): CapturedImage {
+    private captureCurrentFrame(): CameraSnapshot {
         this.drawCurrentFrame();
         const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
         return {
@@ -162,7 +185,7 @@ export class CameraCapture {
         };
     }
 
-    private drawCurrentFrame(): void {
+    private drawCurrentFrame(maxWidth = 640): void {
         this.assertReady();
         const sourceWidth = this.video.videoWidth;
         const sourceHeight = this.video.videoHeight;
@@ -170,7 +193,7 @@ export class CameraCapture {
             throw new Error("Camera returned an empty frame");
         }
 
-        const outputWidth = Math.min(640, sourceWidth);
+        const outputWidth = Math.min(maxWidth, sourceWidth);
         const outputHeight = Math.round((outputWidth / sourceWidth) * sourceHeight);
         if (this.canvas.width !== outputWidth || this.canvas.height !== outputHeight) {
             this.canvas.width = outputWidth;
