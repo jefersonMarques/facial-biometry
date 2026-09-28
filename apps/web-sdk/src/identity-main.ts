@@ -2,7 +2,6 @@ import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
 import type {
-    FrameQualityAssessment,
     GuidedCapturedFrame,
     GuidedCapturePhase,
     IdentityCheckStatus,
@@ -28,7 +27,6 @@ const documentStatus = requiredElement<HTMLDivElement>("documentStatus");
 const biometricStatus = requiredElement<HTMLDivElement>("biometricStatus");
 const resultPanel = requiredElement<HTMLDivElement>("identityResult");
 const video = requiredElement<HTMLVideoElement>("camera");
-const lightLayer = requiredElement<HTMLDivElement>("lightLayer");
 const progressBar = requiredElement<HTMLDivElement>("progressBar");
 const cameraState = requiredElement<HTMLDivElement>("cameraState");
 const expiresText = requiredElement<HTMLSpanElement>("expiresText");
@@ -393,10 +391,6 @@ function renderFinalStatus(status: "approved" | "review" | "rejected"): void {
         rejected: "Não foi possível confirmar a identidade.",
     };
     resultPanel.innerHTML = `<div class="result-header result-${status}"><span>${labels[status]}</span></div>`;
-}
-
-function renderCameraQuality(quality: FrameQualityAssessment): void {
-    cameraState.textContent = quality.acceptable ? "Qualidade de captura boa" : quality.issue ?? "Ajuste a câmera";
 }
 
 function showFatal(message: string): void {
