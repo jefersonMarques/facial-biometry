@@ -52,3 +52,12 @@ The identity flow invokes `pdfsig`, `pdfinfo` and `pdftoppm` as external process
 ## BPG decoder
 
 The VIO portrait converter can invoke an external `bpgdec` executable. It is not vendored in this repository.
+
+
+## fullsailor/pkcs7
+
+Go dependency: `github.com/fullsailor/pkcs7`.
+
+Used by the Windows/native PDF signature fallback to parse BER/DER PKCS#7/CMS signatures found in official CNH Digital PDFs.
+
+License: MIT.
