@@ -106,7 +106,7 @@ func validateNativePDFSignatures(pdf []byte) ([]nativePDFSignature, error) {
 	}
 
 	results := make([]nativePDFSignature, 0, len(byteRanges))
-	for index, match := range byteRanges {
+	for _, match := range byteRanges {
 		if len(match) != 10 {
 			continue
 		}
@@ -120,7 +120,7 @@ func validateNativePDFSignatures(pdf []byte) ([]nativePDFSignature, error) {
 			br[valueIndex] = value
 		}
 
-		contentMatch := closestContentsAfter(contents, match[1], nextByteRangeStart(byteRanges, index, len(pdf)))
+		contentMatch := closestContentsToByteRange(contents, match[0], match[1])
 		if contentMatch == nil {
 			return nil, fmt.Errorf("signature /Contents not associated with ByteRange")
 		}
@@ -182,28 +182,31 @@ func validateByteRangeBounds(br [4]int64, fileSize int) error {
 	return nil
 }
 
-func closestContentsAfter(contents [][]int, after int, before int) []int {
+func closestContentsToByteRange(contents [][]int, byteRangeStart int, byteRangeEnd int) []int {
+	var best []int
+	bestDistance := 65537
+
 	for _, match := range contents {
 		if len(match) < 4 {
 			continue
 		}
-		if match[0] >= after && match[0] < before {
-			return match
-		}
-	}
-	for _, match := range contents {
-		if len(match) >= 4 && match[0] >= after && match[0]-after <= 65536 {
-			return match
-		}
-	}
-	return nil
-}
 
-func nextByteRangeStart(matches [][]int, index int, fallback int) int {
-	if index+1 < len(matches) {
-		return matches[index+1][0]
+		distance := 0
+		switch {
+		case match[1] <= byteRangeStart:
+			distance = byteRangeStart - match[1]
+		case match[0] >= byteRangeEnd:
+			distance = match[0] - byteRangeEnd
+		default:
+			distance = 0
+		}
+
+		if distance <= 65536 && distance < bestDistance {
+			best = match
+			bestDistance = distance
+		}
 	}
-	return fallback
+	return best
 }
 
 func applyNativeCertificate(cert *x509.Certificate, signedAt time.Time, target *pdfanalysis.Signature) {
