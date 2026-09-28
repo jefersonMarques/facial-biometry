@@ -525,12 +525,51 @@ function renderIdentityResult(
     };
     const bestCapture = capturedFrames[result.bestFrameIndex]?.imageBase64 ?? "";
     const referencePhoto = documentDetails?.referencePhotoDataUrl ?? "";
+    const match = faceMatchPresentation(result.similarity, result.matchThreshold);
 
     resultPanel.innerHTML = `
         <div class="result-header result-${escapeHtml(result.decision)}">
             <span>${escapeHtml(decisionLabel)}</span>
-            <strong>Score ${faceScore(result.similarity)}</strong>
         </div>
+
+        <section class="match-strength match-strength-${match.tone}">
+            <span class="match-strength-eyebrow">Correspondência facial</span>
+            <strong class="match-strength-label">${escapeHtml(match.label)}</strong>
+            <div class="match-strength-subtitle">
+                ${escapeHtml(match.summary)}
+            </div>
+
+            <div class="match-scale" aria-label="Posição do score facial em relação ao limiar técnico">
+                <div class="match-scale-track">
+                    <div
+                        class="match-scale-threshold"
+                        style="left: ${scorePosition(result.matchThreshold)}%"
+                        title="Limiar técnico ${faceScore(result.matchThreshold)}"
+                    ></div>
+                    <div
+                        class="match-scale-score match-scale-score-${match.tone}"
+                        style="left: ${scorePosition(result.similarity)}%"
+                        title="Score biométrico ${faceScore(result.similarity)}"
+                    ></div>
+                </div>
+                <div class="match-scale-labels">
+                    <span>-1</span>
+                    <span class="match-scale-threshold-label">Limiar ${faceScore(result.matchThreshold)}</span>
+                    <span>+1</span>
+                </div>
+            </div>
+
+            <div class="match-margin-grid">
+                <div>
+                    <span>Margem sobre o limiar</span>
+                    <strong>${signedFaceScore(match.margin)}</strong>
+                </div>
+                <div>
+                    <span>Distância relativa</span>
+                    <strong>${escapeHtml(match.relativeMarginLabel)}</strong>
+                </div>
+            </div>
+        </section>
 
         <div class="identity-profile">
             <div class="identity-summary">
@@ -553,15 +592,34 @@ function renderIdentityResult(
         </div>
 
         <div class="metrics-grid">
-            ${metric("Score facial", faceScore(result.similarity))}
-            ${metric("Limiar atual", faceScore(result.matchThreshold))}
             ${metric("Prova de vida", percentage(result.livenessScore))}
             ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
             ${metric("Qualidade", percentage(result.quality.score))}
             ${metric("Captura guiada", percentage(result.signals.guidedCapture.score))}
         </div>
 
-        ${frameScoreLine(result.frameSimilarities)}
+        <details class="technical-details">
+            <summary>Detalhes técnicos</summary>
+            <div class="technical-details-body">
+                <div class="technical-row">
+                    <span>Score biométrico bruto</span>
+                    <strong>${faceScore(result.similarity)}</strong>
+                </div>
+                <div class="technical-row">
+                    <span>Limiar configurado</span>
+                    <strong>${faceScore(result.matchThreshold)}</strong>
+                </div>
+                <div class="technical-row">
+                    <span>Margem</span>
+                    <strong>${signedFaceScore(match.margin)}</strong>
+                </div>
+                ${frameScoreLine(result.frameSimilarities)}
+                <p>
+                    O score facial é uma similaridade cosseno do modelo biométrico.
+                    Ele não representa uma porcentagem de certeza ou probabilidade.
+                </p>
+            </div>
+        </details>
 
         <div class="identity-checks">
             ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
@@ -570,6 +628,59 @@ function renderIdentityResult(
             ${checkLine("Data mínima do documento", result.document.freshnessValid)}
         </div>
     `;
+}
+
+interface FaceMatchPresentation {
+    label: string;
+    summary: string;
+    tone: "high" | "pass" | "below";
+    margin: number;
+    relativeMarginLabel: string;
+}
+
+function faceMatchPresentation(similarity: number, threshold: number): FaceMatchPresentation {
+    const margin = similarity - threshold;
+    const relativeMargin = threshold > 0
+        ? (margin / threshold) * 100
+        : 0;
+
+    if (similarity < threshold) {
+        return {
+            label: "ABAIXO DO LIMIAR",
+            summary: "O score facial não atingiu o limiar técnico configurado.",
+            tone: "below",
+            margin,
+            relativeMarginLabel: `${Math.abs(relativeMargin).toFixed(0)}% abaixo do limiar`,
+        };
+    }
+
+    if (relativeMargin >= 25) {
+        return {
+            label: "ALTA CORRESPONDÊNCIA",
+            summary: "O score facial está confortavelmente acima do limiar técnico.",
+            tone: "high",
+            margin,
+            relativeMarginLabel: `${relativeMargin.toFixed(0)}% acima do limiar`,
+        };
+    }
+
+    return {
+        label: "CORRESPONDÊNCIA ACIMA DO LIMIAR",
+        summary: "O score facial superou o limiar técnico configurado.",
+        tone: "pass",
+        margin,
+        relativeMarginLabel: `${relativeMargin.toFixed(0)}% acima do limiar`,
+    };
+}
+
+function scorePosition(value: number): number {
+    const clamped = Math.max(-1, Math.min(1, value));
+    return ((clamped + 1) / 2) * 100;
+}
+
+function signedFaceScore(value: number): string {
+    const prefix = value >= 0 ? "+" : "";
+    return `${prefix}${value.toFixed(3)}`;
 }
 
 function dataLine(label: string, value?: string): string {
