@@ -52,14 +52,23 @@ type identityStatusResponse struct {
 	Decision         string          `json:"decision,omitempty"`
 }
 
+type identityDocumentDetails struct {
+	SignatureValid        bool   `json:"signatureValid"`
+	VIOSignatureValid     bool   `json:"vioSignatureValid"`
+	CPFMatch              bool   `json:"cpfMatch"`
+	FreshnessValid        bool   `json:"freshnessValid"`
+	Name                  string `json:"name,omitempty"`
+	CPF                   string `json:"cpf,omitempty"`
+	BirthDate             string `json:"birthDate,omitempty"`
+	Category              string `json:"category,omitempty"`
+	ExpiryDate            string `json:"expiryDate,omitempty"`
+	IssuingUF             string `json:"issuingUf,omitempty"`
+	ReferencePhotoDataURL string `json:"referencePhotoDataUrl,omitempty"`
+}
+
 type identityDocumentResponse struct {
-	Status identity.Status `json:"status"`
-	Document struct {
-		SignatureValid    bool `json:"signatureValid"`
-		VIOSignatureValid bool `json:"vioSignatureValid"`
-		CPFMatch          bool `json:"cpfMatch"`
-		FreshnessValid    bool `json:"freshnessValid"`
-	} `json:"document"`
+	Status   identity.Status          `json:"status"`
+	Document identityDocumentDetails `json:"document"`
 }
 
 type identityCompleteRequest struct {
@@ -82,21 +91,18 @@ type issuerIdentityCheckResponse struct {
 }
 
 type identityCompleteResponse struct {
-	ID             string               `json:"id"`
-	Status         identity.Status      `json:"status"`
-	Decision       string               `json:"decision"`
-	LivenessScore  float64              `json:"livenessScore"`
-	Similarity     float64              `json:"similarity"`
-	MatchThreshold float64              `json:"matchThreshold"`
-	Signals        signalResponse       `json:"signals"`
-	Quality        domain.EngineQuality `json:"quality"`
-	Diagnostics    []string             `json:"diagnostics"`
-	Document       struct {
-		SignatureValid    bool `json:"signatureValid"`
-		VIOSignatureValid bool `json:"vioSignatureValid"`
-		CPFMatch          bool `json:"cpfMatch"`
-		FreshnessValid    bool `json:"freshnessValid"`
-	} `json:"document"`
+	ID                string                  `json:"id"`
+	Status            identity.Status         `json:"status"`
+	Decision          string                  `json:"decision"`
+	LivenessScore     float64                 `json:"livenessScore"`
+	Similarity        float64                 `json:"similarity"`
+	FrameSimilarities []float64               `json:"frameSimilarities,omitempty"`
+	BestFrameIndex    int                     `json:"bestFrameIndex"`
+	MatchThreshold    float64                 `json:"matchThreshold"`
+	Signals           signalResponse          `json:"signals"`
+	Quality           domain.EngineQuality    `json:"quality"`
+	Diagnostics       []string                `json:"diagnostics"`
+	Document          identityDocumentDetails `json:"document"`
 }
 
 func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request *http.Request) {
@@ -279,8 +285,17 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 			VIOTemplateID:         document.VIOTemplateID,
 			VIOCreatedAt:          document.VIOCreatedAt,
 			VIOSignatureAlgorithm: document.VIOSignatureAlgorithm,
+			Name:                  document.Name,
+			BirthDate:             document.BirthDate,
+			Category:              document.Category,
+			ExpiryDate:            document.ExpiryDate,
+			IssuingUF:             document.IssuingUF,
 		}
 		current.ReferenceEmbedding = append([]float64(nil), reference.Embedding...)
+		current.ReferenceEmbeddings = cloneEmbeddings(reference.Embeddings)
+		if len(current.ReferenceEmbeddings) == 0 && len(current.ReferenceEmbedding) > 0 {
+			current.ReferenceEmbeddings = [][]float64{append([]float64(nil), current.ReferenceEmbedding...)}
+		}
 		current.ReferenceEmbeddingModel = reference.EmbeddingModel
 		current.Status = identity.StatusBiometryPending
 		current.LastErrorCode = ""
@@ -291,11 +306,22 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		return
 	}
 
-	response := identityDocumentResponse{Status: identity.StatusBiometryPending}
-	response.Document.SignatureValid = true
-	response.Document.VIOSignatureValid = true
-	response.Document.CPFMatch = true
-	response.Document.FreshnessValid = true
+	response := identityDocumentResponse{
+		Status: identity.StatusBiometryPending,
+		Document: identityDocumentDetails{
+			SignatureValid:        true,
+			VIOSignatureValid:     true,
+			CPFMatch:              true,
+			FreshnessValid:        true,
+			Name:                  document.Name,
+			CPF:                   maskCPF(document.CPF),
+			BirthDate:             document.BirthDate,
+			Category:              document.Category,
+			ExpiryDate:            document.ExpiryDate,
+			IssuingUF:             document.IssuingUF,
+			ReferencePhotoDataURL: referenceImage,
+		},
+	}
 	handler.writeJSON(writer, http.StatusOK, response)
 }
 
@@ -310,7 +336,8 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		if time.Now().After(check.ExpiresAt) {
 			return errIdentityExpired
 		}
-		if check.Status != identity.StatusBiometryPending || check.Document == nil || len(check.ReferenceEmbedding) == 0 {
+		if check.Status != identity.StatusBiometryPending || check.Document == nil ||
+			(len(check.ReferenceEmbedding) == 0 && len(check.ReferenceEmbeddings) == 0) {
 			return errIdentityInvalidState
 		}
 		if check.BiometricSessions >= maxIdentityBiometricSessions {
@@ -422,7 +449,22 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		return
 	}
 
-	similarity := matching.CosineSimilarity(check.ReferenceEmbedding, result.Embedding)
+	referenceEmbeddings := check.ReferenceEmbeddings
+	if len(referenceEmbeddings) == 0 && len(check.ReferenceEmbedding) > 0 {
+		referenceEmbeddings = [][]float64{check.ReferenceEmbedding}
+	}
+
+	liveEmbeddings := make([][]float64, 0, len(result.FaceEmbeddings))
+	for _, frame := range result.FaceEmbeddings {
+		if frame.Phase == "near" && len(frame.Embedding) > 0 {
+			liveEmbeddings = append(liveEmbeddings, frame.Embedding)
+		}
+	}
+	if len(liveEmbeddings) == 0 && len(result.Embedding) > 0 {
+		liveEmbeddings = [][]float64{result.Embedding}
+	}
+
+	similarity, frameSimilarities := matching.RobustCosineSimilarity(referenceEmbeddings, liveEmbeddings)
 	passivePADAvailable := result.PassivePAD.Status == "available"
 	decision := handler.risk.VerificationDecision(result.LivenessScore, similarity, passivePADAvailable)
 	status := identity.StatusRejected
@@ -449,6 +491,7 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		current.CompletedAt = &completedAt
 		current.CaptureSessionID = ""
 		current.ReferenceEmbedding = nil
+		current.ReferenceEmbeddings = nil
 		current.ReferenceEmbeddingModel = ""
 		return nil
 	})
@@ -462,8 +505,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		Status:         updated.Status,
 		Decision:       decision,
 		LivenessScore:  result.LivenessScore,
-		Similarity:     similarity,
-		MatchThreshold: handler.config.MatchThreshold,
+		Similarity:        similarity,
+		FrameSimilarities: append([]float64(nil), frameSimilarities...),
+		BestFrameIndex:    result.BestFrameIndex,
+		MatchThreshold:    handler.config.MatchThreshold,
 		Signals: signalResponse{
 			PassivePAD:     result.PassivePAD,
 			TemporalMotion: result.TemporalMotion,
@@ -473,10 +518,7 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		Quality:     result.Quality,
 		Diagnostics: append([]string(nil), result.Diagnostics...),
 	}
-	response.Document.SignatureValid = true
-	response.Document.VIOSignatureValid = true
-	response.Document.CPFMatch = true
-	response.Document.FreshnessValid = true
+	response.Document = identityDocumentDetailsFromEvidence(updated.Document, updated.ExpectedCPF)
 	handler.writeJSON(writer, http.StatusOK, response)
 }
 
@@ -524,6 +566,7 @@ func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error
 	_, _ = handler.identityChecks.Update(token, func(check *identity.Check) error {
 		check.CaptureSessionID = ""
 		check.ReferenceEmbedding = nil
+		check.ReferenceEmbeddings = nil
 		check.ReferenceEmbeddingModel = ""
 		check.Document = nil
 		check.LastErrorCode = failure.Error()
@@ -548,6 +591,47 @@ func (handler *Handler) writeIdentityStateError(writer http.ResponseWriter, err 
 	default:
 		handler.writeError(writer, http.StatusInternalServerError, "identity check operation failed")
 	}
+}
+
+func cloneEmbeddings(values [][]float64) [][]float64 {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make([][]float64, 0, len(values))
+	for _, value := range values {
+		if len(value) == 0 {
+			continue
+		}
+		cloned = append(cloned, append([]float64(nil), value...))
+	}
+	return cloned
+}
+
+func maskCPF(value string) string {
+	value = cnh.NormalizeCPF(value)
+	if len(value) != 11 {
+		return ""
+	}
+	return "***.***.***-" + value[9:]
+}
+
+func identityDocumentDetailsFromEvidence(document *identity.DocumentEvidence, cpf string) identityDocumentDetails {
+	details := identityDocumentDetails{
+		SignatureValid:    true,
+		VIOSignatureValid: true,
+		CPFMatch:          true,
+		FreshnessValid:    true,
+		CPF:               maskCPF(cpf),
+	}
+	if document == nil {
+		return details
+	}
+	details.Name = document.Name
+	details.BirthDate = document.BirthDate
+	details.Category = document.Category
+	details.ExpiryDate = document.ExpiryDate
+	details.IssuingUF = document.IssuingUF
+	return details
 }
 
 func readIdentityPDF(writer http.ResponseWriter, request *http.Request, maxBytes int64) ([]byte, error) {
@@ -649,6 +733,7 @@ func expireIdentityCheck(check *identity.Check) error {
 	check.Status = identity.StatusExpired
 	check.CaptureSessionID = ""
 	check.ReferenceEmbedding = nil
+	check.ReferenceEmbeddings = nil
 	check.ReferenceEmbeddingModel = ""
 	return nil
 }
