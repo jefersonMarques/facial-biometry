@@ -157,6 +157,192 @@ class BiometricAnalyzer:
             },
         }
 
+    def analyze_identity(self, payload: dict[str, Any]) -> dict[str, Any]:
+        frames_payload = payload.get("guidedFrames")
+        if not isinstance(frames_payload, list) or not 6 <= len(frames_payload) <= 12:
+            raise ValueError("guidedFrames must contain between 6 and 12 items")
+
+        frame_analyses: list[FrameAnalysis] = []
+        face_crops: list[np.ndarray] = []
+        normalized_centers: list[tuple[float, float, float]] = []
+        embeddings: list[tuple[float, np.ndarray]] = []
+        far_scales: list[float] = []
+        near_scales: list[float] = []
+        center_scores: list[float] = []
+        quality_scores: list[float] = []
+        passive_values: list[float] = []
+        diagnostics: list[str] = []
+
+        far_count = 0
+        near_count = 0
+
+        for frame_payload in frames_payload:
+            if not isinstance(frame_payload, dict):
+                continue
+            phase = str(frame_payload.get("phase", "")).strip().lower()
+            if phase not in {"far", "near"}:
+                continue
+
+            image = decode_data_url(str(frame_payload.get("imageBase64", "")))
+            detected = self._detector.detect_primary(image)
+            if detected is None:
+                continue
+
+            face_crop = crop_face(image, detected.bbox)
+            if face_crop.size == 0:
+                continue
+
+            sharpness = sharpness_score(face_crop)
+            brightness_quality, _ = brightness_score(face_crop)
+            brightness_value = facial_illumination_value(face_crop)
+            size_score = face_size_score(image, detected.bbox)
+            quality = clamp01(0.45 * sharpness + 0.30 * brightness_quality + 0.25 * size_score)
+
+            passive_probability: float | None = None
+            if self._passive_pad is not None:
+                try:
+                    passive_probability = self._passive_pad.predict_real_probability(image, detected)
+                    passive_values.append(float(passive_probability))
+                except Exception as error:
+                    diagnostics.append(f"passive PAD inference failed: {error}")
+
+            image_height, image_width = image.shape[:2]
+            x, y, width, height = detected.bbox
+            center_x = (x + width / 2) / max(image_width, 1)
+            center_y = (y + height / 2) / max(image_height, 1)
+            normalized_scale = np.sqrt((width * height) / max(image_width * image_height, 1))
+            height_ratio = height / max(image_height, 1)
+
+            center_distance = float(np.sqrt((center_x - 0.5) ** 2 + (center_y - 0.46) ** 2))
+            center_scores.append(clamp01(1.0 - center_distance / 0.24))
+            quality_scores.append(float(quality))
+
+            if phase == "far":
+                far_scales.append(float(height_ratio))
+                far_count += 1
+            else:
+                near_scales.append(float(height_ratio))
+                near_count += 1
+
+            embedding = self._encoder.encode(image, detected)
+            embeddings.append((quality, embedding))
+            face_crops.append(face_crop)
+            normalized_centers.append((float(center_x), float(center_y), float(normalized_scale)))
+            frame_analyses.append(
+                FrameAnalysis(
+                    image=image,
+                    face_raw=detected,
+                    bbox=detected.bbox,
+                    sharpness=sharpness,
+                    brightness_quality=brightness_quality,
+                    brightness_value=brightness_value,
+                    face_size=size_score,
+                    quality=quality,
+                    passive_probability=passive_probability,
+                    challenge_index=-1,
+                )
+            )
+
+        if far_count < 3 or near_count < 3:
+            raise ValueError("identity capture must contain at least three valid far and near frames")
+        if not frame_analyses:
+            raise ValueError("no face detected in identity capture")
+
+        face_presence = len(frame_analyses) / len(frames_payload)
+        quality_score = robust_mean([frame.quality for frame in frame_analyses])
+        sharpness = robust_mean([frame.sharpness for frame in frame_analyses])
+        brightness = robust_mean([frame.brightness_quality for frame in frame_analyses])
+        size_score = robust_mean([frame.face_size for frame in frame_analyses])
+        temporal_score = temporal_motion_score(face_crops, normalized_centers)
+        guided_score = _guided_capture_score(far_scales, near_scales, center_scores, quality_scores)
+
+        if passive_values:
+            passive_score = robust_mean(passive_values)
+            passive_status = "available"
+        else:
+            passive_score = 0.5
+            passive_status = "unavailable"
+            if self._passive_pad_error:
+                diagnostics.append(f"passive PAD unavailable: {self._passive_pad_error}")
+
+        quality_gate = clamp01((quality_score - 0.25) / 0.55)
+        presence_gate = clamp01((face_presence - 0.55) / 0.45)
+
+        if passive_status == "available":
+            liveness_score = (
+                0.55 * passive_score
+                + 0.20 * guided_score
+                + 0.10 * temporal_score
+                + 0.10 * quality_score
+                + 0.05 * face_presence
+            )
+        else:
+            liveness_score = (
+                0.36 * guided_score
+                + 0.24 * temporal_score
+                + 0.22 * quality_score
+                + 0.18 * face_presence
+            )
+            liveness_score = min(liveness_score, 0.72)
+
+        liveness_score = clamp01(
+            liveness_score
+            * (0.65 + 0.35 * quality_gate)
+            * (0.70 + 0.30 * presence_gate)
+        )
+
+        embeddings.sort(key=lambda item: item[0], reverse=True)
+        selected_embeddings = [embedding for _, embedding in embeddings[:8]]
+        combined_embedding = np.mean(np.vstack(selected_embeddings), axis=0).astype(np.float32)
+        embedding_norm = float(np.linalg.norm(combined_embedding))
+        if embedding_norm <= 1e-8:
+            raise ValueError("combined SFace embedding is zero")
+        combined_embedding = combined_embedding / embedding_norm
+
+        if quality_score < 0.50:
+            diagnostics.append("capture quality is low")
+        if face_presence < 0.80:
+            diagnostics.append("face presence is low")
+        if guided_score < 0.45:
+            diagnostics.append("guided far/near capture signal is weak")
+        if temporal_score < 0.20:
+            diagnostics.append("temporal motion signal is weak")
+
+        best_index = int(np.argmax([frame.quality for frame in frame_analyses]))
+
+        return {
+            "livenessScore": round(float(liveness_score), 6),
+            "passivePad": {
+                "score": round(float(passive_score), 6),
+                "status": passive_status,
+            },
+            "temporalMotion": {
+                "score": round(float(temporal_score), 6),
+                "status": "available",
+            },
+            "illumination": {
+                "score": 0.5,
+                "status": "not_used",
+            },
+            "guidedCapture": {
+                "score": round(float(guided_score), 6),
+                "status": "available",
+            },
+            "quality": {
+                "score": round(float(quality_score), 6),
+                "facePresence": round(float(face_presence), 6),
+                "sharpness": round(float(sharpness), 6),
+                "brightness": round(float(brightness), 6),
+                "faceSize": round(float(size_score), 6),
+                "detectedFrames": len(frame_analyses),
+                "processedFrames": len(frames_payload),
+            },
+            "embedding": [round(float(value), 8) for value in combined_embedding.tolist()],
+            "embeddingModel": self._encoder.model_name,
+            "bestFrameIndex": best_index,
+            "diagnostics": diagnostics,
+        }
+
     def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         frames_payload = payload.get("frames")
         guided_frames_payload = payload.get("guidedFrames")
