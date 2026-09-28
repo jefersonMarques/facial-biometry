@@ -11,8 +11,8 @@ class ReferenceImagePreparationTest(unittest.TestCase):
 
         prepared = _prepare_reference_image(image)
 
-        self.assertEqual(prepared.shape[1], 240)
-        self.assertEqual(prepared.shape[0], 325)
+        self.assertEqual(prepared.shape[1], 480)
+        self.assertEqual(prepared.shape[0], 651)
 
     def test_keeps_regular_camera_image_unchanged(self) -> None:
         image = np.zeros((480, 640, 3), dtype=np.uint8)
