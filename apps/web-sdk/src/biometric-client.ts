@@ -5,6 +5,7 @@ import type {
     IdentityCheckStatus,
     IdentityCompletionResponse,
     IdentityDocumentResponse,
+    IdentityGuideResult,
     SessionResponse,
 } from "./types.js";
 
@@ -29,6 +30,7 @@ export class BiometricClient {
             body: JSON.stringify({
                 sessionToken: session.sessionToken,
                 frames: capture.frames,
+                guidedFrames: capture.guidedFrames ?? [],
                 metadata: capture.metadata,
             }),
         });
@@ -44,6 +46,13 @@ export class BiometricClient {
         return this.identityRequest<IdentityDocumentResponse>("/v1/identity/document", token, {
             method: "POST",
             body: form,
+        });
+    }
+
+    public async guideIdentityFace(token: string, imageBase64: string): Promise<IdentityGuideResult> {
+        return this.identityRequest<IdentityGuideResult>("/v1/identity/guide", token, {
+            method: "POST",
+            body: JSON.stringify({ imageBase64 }),
         });
     }
 
