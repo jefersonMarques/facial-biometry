@@ -37,6 +37,14 @@ func (client *Client) Analyze(ctx context.Context, request domain.EngineRequest)
 	return result, nil
 }
 
+func (client *Client) Guide(ctx context.Context, imageBase64 string) (domain.EngineGuideResult, error) {
+	var result domain.EngineGuideResult
+	if err := client.postJSON(ctx, "/guide", map[string]string{"imageBase64": imageBase64}, &result); err != nil {
+		return domain.EngineGuideResult{}, err
+	}
+	return result, nil
+}
+
 func (client *Client) ExtractReference(ctx context.Context, imageBase64 string) (domain.ReferenceResult, error) {
 	var result domain.ReferenceResult
 	if err := client.postJSON(ctx, "/reference", map[string]string{"imageBase64": imageBase64}, &result); err != nil {
