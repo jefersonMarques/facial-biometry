@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -239,7 +241,11 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		case errors.Is(documentErr, cnh.ErrDocumentMismatch):
 			handler.writeError(writer, http.StatusUnprocessableEntity, "CNH Digital does not correspond to this verification")
 		default:
-			handler.writeError(writer, http.StatusUnprocessableEntity, "CNH Digital is invalid or could not be authenticated")
+			if handler.config.Debug {
+				handler.writeError(writer, http.StatusUnprocessableEntity, documentErr.Error())
+			} else {
+				handler.writeError(writer, http.StatusUnprocessableEntity, "CNH Digital is invalid or could not be authenticated")
+			}
 		}
 		return
 	}
@@ -571,6 +577,15 @@ func readIdentityPDF(writer http.ResponseWriter, request *http.Request, maxBytes
 	}
 	if len(data) < 5 || string(data[:5]) != "%PDF-" || http.DetectContentType(data) != "application/pdf" {
 		return nil, errors.New("file is not a valid PDF")
+	}
+
+	expectedSHA256 := strings.TrimSpace(request.Header.Get("X-FaceProof-Upload-SHA256"))
+	if expectedSHA256 != "" {
+		sum := sha256.Sum256(data)
+		actualSHA256 := hex.EncodeToString(sum[:])
+		if !strings.EqualFold(expectedSHA256, actualSHA256) {
+			return nil, errors.New("uploaded PDF bytes do not match browser checksum")
+		}
 	}
 	return data, nil
 }
