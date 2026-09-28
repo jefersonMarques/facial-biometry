@@ -119,14 +119,23 @@ export interface IdentityCheckStatus {
     decision?: Decision;
 }
 
+export interface IdentityDocumentDetails {
+    signatureValid: boolean;
+    vioSignatureValid: boolean;
+    cpfMatch: boolean;
+    freshnessValid: boolean;
+    name?: string;
+    cpf?: string;
+    birthDate?: string;
+    category?: string;
+    expiryDate?: string;
+    issuingUf?: string;
+    referencePhotoDataUrl?: string;
+}
+
 export interface IdentityDocumentResponse {
     status: IdentityStatus;
-    document: {
-        signatureValid: boolean;
-        vioSignatureValid: boolean;
-        cpfMatch: boolean;
-        freshnessValid: boolean;
-    };
+    document: IdentityDocumentDetails;
 }
 
 export interface IdentityCompletionResponse {
@@ -135,6 +144,8 @@ export interface IdentityCompletionResponse {
     decision: Decision;
     livenessScore: number;
     similarity: number;
+    frameSimilarities: number[];
+    bestFrameIndex: number;
     matchThreshold: number;
     signals: {
         passivePad: SignalResult;
@@ -144,10 +155,5 @@ export interface IdentityCompletionResponse {
     };
     quality: QualityResult;
     diagnostics: string[];
-    document: {
-        signatureValid: boolean;
-        vioSignatureValid: boolean;
-        cpfMatch: boolean;
-        freshnessValid: boolean;
-    };
+    document: IdentityDocumentDetails;
 }
