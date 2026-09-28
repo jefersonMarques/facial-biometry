@@ -37,6 +37,12 @@ type CapturedFrame struct {
 	ClientQuality  *ClientFrameQuality `json:"clientQuality,omitempty"`
 }
 
+type GuidedCapturedFrame struct {
+	ImageBase64   string              `json:"imageBase64"`
+	Phase         string              `json:"phase"`
+	ClientQuality *ClientFrameQuality `json:"clientQuality,omitempty"`
+}
+
 type CaptureMetadata struct {
 	SDKVersion      string `json:"sdkVersion"`
 	StartedAtUnixMS int64  `json:"startedAtUnixMs"`
@@ -48,8 +54,20 @@ type CaptureMetadata struct {
 }
 
 type EngineRequest struct {
-	Frames              []CapturedFrame `json:"frames"`
-	IlluminationPattern []float64       `json:"illuminationPattern"`
+	Frames              []CapturedFrame       `json:"frames"`
+	GuidedFrames        []GuidedCapturedFrame `json:"guidedFrames,omitempty"`
+	IlluminationPattern []float64             `json:"illuminationPattern"`
+}
+
+type EngineGuideResult struct {
+	FaceDetected    bool          `json:"faceDetected"`
+	Confidence      float64       `json:"confidence"`
+	CenterX         float64       `json:"centerX"`
+	CenterY         float64       `json:"centerY"`
+	WidthRatio      float64       `json:"widthRatio"`
+	HeightRatio     float64       `json:"heightRatio"`
+	RollDegrees     float64       `json:"rollDegrees"`
+	Quality         EngineQuality `json:"quality"`
 }
 
 type EngineSignal struct {
@@ -72,6 +90,7 @@ type EngineResult struct {
 	PassivePAD     EngineSignal  `json:"passivePad"`
 	TemporalMotion EngineSignal  `json:"temporalMotion"`
 	Illumination   EngineSignal  `json:"illumination"`
+	GuidedCapture  EngineSignal  `json:"guidedCapture"`
 	Quality        EngineQuality `json:"quality"`
 	Embedding      []float64     `json:"embedding"`
 	EmbeddingModel string        `json:"embeddingModel"`
