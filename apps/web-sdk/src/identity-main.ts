@@ -330,7 +330,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
 
         if (!snapshot.quality.acceptable) {
             stableSamples = 0;
-            faceGuide.classList.remove("guide-ready");
+            faceGuide.classList.remove("guide-ready", "guide-near");
             const lightingHint = clientQualityInstruction(snapshot.quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
@@ -392,7 +392,7 @@ async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFr
 
         if (!guideSnapshot.quality.acceptable) {
             const lightingHint = clientQualityInstruction(guideSnapshot.quality);
-            faceGuide.classList.remove("guide-ready");
+            faceGuide.classList.remove("guide-ready", "guide-near");
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             setProximityIndicator(0, "red");
@@ -427,6 +427,7 @@ async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFr
             },
         });
 
+        faceGuide.classList.remove("guide-near");
         faceGuide.classList.add("guide-ready");
         cameraState.textContent = "Capturando";
         biometricStatus.textContent = phase === "far"
