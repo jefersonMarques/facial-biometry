@@ -24,6 +24,7 @@ type Config struct {
 	ReviewLivenessThreshold float64
 	AllowReviewEnrollment   bool
 	RequirePassivePAD       bool
+	Debug                    bool
 
 	IdentityIssuerKey       []byte
 	IdentityStoreKey        []byte
@@ -73,6 +74,7 @@ func Load() (Config, error) {
 		ReviewLivenessThreshold: envFloat("FACEPROOF_REVIEW_LIVENESS_THRESHOLD", 0.55),
 		AllowReviewEnrollment:   envBool("FACEPROOF_ALLOW_REVIEW_ENROLLMENT", false),
 		RequirePassivePAD:       envBool("FACEPROOF_REQUIRE_PASSIVE_PAD", true),
+		Debug:                   envBool("FACEPROOF_DEBUG", false),
 		IdentityIssuerKey:       identityIssuerKey,
 		IdentityStoreKey:        deriveIdentityStoreKey(templateKey),
 		IdentityDirectory:       envString("FACEPROOF_IDENTITY_DIR", "../../data/identity-checks"),
