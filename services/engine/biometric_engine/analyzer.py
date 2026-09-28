@@ -56,7 +56,7 @@ class BiometricAnalyzer:
         if not isinstance(image_base64, str) or not image_base64.strip():
             raise ValueError("imageBase64 is required")
 
-        image = decode_data_url(image_base64)
+        image = _prepare_reference_image(decode_data_url(image_base64))
         detected = self._detector.detect_primary(image)
         if detected is None:
             raise ValueError("no face detected in reference image")
@@ -237,3 +237,27 @@ class BiometricAnalyzer:
             "bestFrameIndex": best_index,
             "diagnostics": diagnostics,
         }
+
+
+
+def _prepare_reference_image(
+    image: np.ndarray,
+    minimum_short_side: int = 240,
+    maximum_long_side: int = 960,
+) -> np.ndarray:
+    height, width = image.shape[:2]
+    if height <= 0 or width <= 0:
+        raise ValueError("reference image has invalid dimensions")
+
+    short_side = min(height, width)
+    long_side = max(height, width)
+    if short_side >= minimum_short_side or long_side >= maximum_long_side:
+        return image
+
+    scale = minimum_short_side / short_side
+    if long_side * scale > maximum_long_side:
+        scale = maximum_long_side / long_side
+
+    resized_width = max(1, int(round(width * scale)))
+    resized_height = max(1, int(round(height * scale)))
+    return cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_CUBIC)
