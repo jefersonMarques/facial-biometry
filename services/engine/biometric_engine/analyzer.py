@@ -42,6 +42,7 @@ class BiometricAnalyzer:
         minifasnet_model_path: str,
     ) -> None:
         self._detector = YuNetDetector(yunet_model_path)
+        self._guide_detector = YuNetDetector(yunet_model_path)
         self._encoder = SFaceEncoder(sface_model_path)
         self._passive_pad: MiniFASNetV2 | None = None
         self._passive_pad_error: str | None = None
@@ -92,7 +93,7 @@ class BiometricAnalyzer:
             raise ValueError("imageBase64 is required")
 
         image = decode_data_url(image_base64)
-        detected = self._detector.detect_primary(image)
+        detected = self._guide_detector.detect_primary(image)
         if detected is None:
             return {
                 "faceDetected": False,
