@@ -76,11 +76,50 @@ if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (-not (Get-Command "bpgdec" -ErrorAct
     Write-Host "INFO: bpgdec nao encontrado. Isso nao bloqueia mais a CNH; a foto assinada do PDF sera usada."
 }
 
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\engine'; & '$Python' engine_server.py"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\api'; go run ./cmd/server"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\api'; `$env:FACEPROOF_WEB_DIR='$Root\apps\web-sdk'; go run ./cmd/devgateway"
+$env:FACEPROOF_WEB_DIR = Join-Path $Root "apps\web-sdk"
 
+$Processes = @()
+
+Write-Host ""
+Write-Host "Starting FaceProof services in this window..." -ForegroundColor Cyan
+
+$Processes += Start-Process powershell -NoNewWindow -PassThru -ArgumentList @(
+    "-NoProfile",
+    "-Command",
+    "Set-Location '$Root\services\engine'; Write-Host '[ENGINE] starting...' -ForegroundColor DarkCyan; & '$Python' engine_server.py"
+)
+
+$Processes += Start-Process powershell -NoNewWindow -PassThru -ArgumentList @(
+    "-NoProfile",
+    "-Command",
+    "Set-Location '$Root\services\api'; Write-Host '[API] starting...' -ForegroundColor DarkGreen; go run ./cmd/server"
+)
+
+$Processes += Start-Process powershell -NoNewWindow -PassThru -ArgumentList @(
+    "-NoProfile",
+    "-Command",
+    "Set-Location '$Root\services\api'; Write-Host '[WEB] starting...' -ForegroundColor DarkYellow; go run ./cmd/devgateway"
+)
+
+Write-Host ""
 Write-Host "FaceProof demo: http://localhost:5173"
 Write-Host "Identity verification: http://localhost:5173/verify.html"
 Write-Host "Identity issuer key: $IdentityIssuerKeyFile"
 Write-Host "Development mode: review enrollments are stored as provisional templates."
+Write-Host ""
+Write-Host "Press Ctrl+C to stop all FaceProof services." -ForegroundColor Yellow
+Write-Host ""
+
+try {
+    Wait-Process -InputObject $Processes
+}
+finally {
+    Write-Host ""
+    Write-Host "Stopping FaceProof services..." -ForegroundColor Yellow
+
+    foreach ($Process in $Processes) {
+        if ($Process -and -not $Process.HasExited) {
+            & taskkill.exe /PID $Process.Id /T /F 2>$null | Out-Null
+        }
+    }
+}
