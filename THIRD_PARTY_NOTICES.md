@@ -35,3 +35,20 @@ The downloader also retrieves the source repository license text to `models/mini
 ## OpenCV
 
 The runtime code uses OpenCV APIs. Install OpenCV according to the package's own license and distribution terms.
+
+
+## gozxing
+
+Go dependency: `github.com/makiuchi-d/gozxing`.
+
+Used to read QR Codes in the CNH Digital VIO pipeline.
+
+License: MIT. The upstream project also contains portions derived from ZXing under Apache License 2.0; consult the upstream license notices for the exact terms.
+
+## Poppler command-line utilities
+
+The identity flow invokes `pdfsig`, `pdfinfo` and `pdftoppm` as external processes. Poppler is not vendored in this repository and must be installed/distributed according to its own license and platform packaging terms.
+
+## BPG decoder
+
+The VIO portrait converter can invoke an external `bpgdec` executable. It is not vendored in this repository.
