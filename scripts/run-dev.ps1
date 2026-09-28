@@ -60,10 +60,13 @@ if ($MissingRequired.Count -gt 0) {
     Write-Warning ("IDENTITY CHECK indisponivel ate instalar/configurar: " + ($MissingRequired -join ", "))
 }
 
-foreach ($Tool in @("pdfimages", "pdftotext", "openssl")) {
+foreach ($Tool in @("pdfimages", "pdftotext")) {
     if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
         Write-Warning "$Tool nao encontrado (analise forense complementar ficara limitada)."
     }
+}
+if (-not (Get-Command "openssl" -ErrorAction SilentlyContinue)) {
+    Write-Warning "openssl nao encontrado. CNHs com certificado atualmente expirado nao poderao comprovar que o certificado era valido na data da assinatura."
 }
 if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (-not (Get-Command "bpgdec" -ErrorAction SilentlyContinue))) {
     Write-Host "INFO: bpgdec nao encontrado. Isso nao bloqueia mais a CNH; a foto assinada do PDF sera usada."
