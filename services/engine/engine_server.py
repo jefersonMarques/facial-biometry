@@ -53,6 +53,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._write_json(200, result)
                 return
 
+            if self.path == "/guide":
+                payload = self._read_json(max_bytes=2 * 1024 * 1024)
+                with ANALYZER_LOCK:
+                    result = ANALYZER.guide(payload)
+                self._write_json(200, result)
+                return
+
             self._write_json(404, {"error": "route not found"})
         except ValueError as error:
             self._write_json(400, {"error": str(error)})
