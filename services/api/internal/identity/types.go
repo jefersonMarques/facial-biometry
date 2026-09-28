@@ -31,6 +31,11 @@ type DocumentEvidence struct {
 	VIOTemplateID          uint16    `json:"vioTemplateId"`
 	VIOCreatedAt           time.Time `json:"vioCreatedAt"`
 	VIOSignatureAlgorithm  string    `json:"vioSignatureAlgorithm"`
+	Name                   string    `json:"name,omitempty"`
+	BirthDate              string    `json:"birthDate,omitempty"`
+	Category               string    `json:"category,omitempty"`
+	ExpiryDate             string    `json:"expiryDate,omitempty"`
+	IssuingUF              string    `json:"issuingUf,omitempty"`
 }
 
 type Check struct {
@@ -44,8 +49,9 @@ type Check struct {
 	BiometricSessions      int               `json:"biometricSessions"`
 	CaptureSessionsIssued  int               `json:"captureSessionsIssued,omitempty"`
 	CaptureSessionID       string            `json:"captureSessionId,omitempty"`
-	ReferenceEmbedding     []float64         `json:"referenceEmbedding,omitempty"`
-	ReferenceEmbeddingModel string           `json:"referenceEmbeddingModel,omitempty"`
+	ReferenceEmbedding      []float64         `json:"referenceEmbedding,omitempty"`
+	ReferenceEmbeddings     [][]float64       `json:"referenceEmbeddings,omitempty"`
+	ReferenceEmbeddingModel string            `json:"referenceEmbeddingModel,omitempty"`
 	Document               *DocumentEvidence `json:"document,omitempty"`
 	Decision               string            `json:"decision,omitempty"`
 	LivenessScore          float64           `json:"livenessScore,omitempty"`
