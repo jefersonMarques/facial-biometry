@@ -168,3 +168,20 @@ http://localhost:5173/v1/*        -> http://127.0.0.1:8080/v1/*
 ```
 
 This is required for single-host public tunnels such as a TryCloudflare Quick Tunnel. The browser uses its current origin for API calls, so a public `trycloudflare.com` URL can carry both the UI and API without a second public endpoint.
+
+
+### MVP verification result
+
+The biometric match is built primarily from the near phase. The browser captures the near burst at up to 960 px wide with JPEG quality 0.92. The engine selects the three highest-quality near frames before similarity is calculated; frames are never selected because they happen to have a higher match score.
+
+The CNH reference portrait is upscaled for more stable landmark detection and produces three SFace reference embeddings: the original image plus two mildly normalized luminance variants. For each selected near frame, FaceProof computes similarity against this reference ensemble and uses the median reference score. The final identity similarity is the mean across the three quality-selected near frames.
+
+The far phase remains part of liveness/PAD and far-to-near transition evidence but does not dilute the primary identity match.
+
+The result screen includes:
+- signed CNH summary fields: name, masked CPF, birth date, driving category, validity and issuing UF when present in VIO;
+- authenticated CNH portrait;
+- best-quality live frame selected by the engine;
+- raw facial similarity score, configured threshold and per-frame near scores.
+
+The raw CNH portrait is not written into the persistent identity-check evidence store. It is returned with the successful document-validation response and retained only in browser memory for the current MVP flow.
