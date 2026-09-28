@@ -2,6 +2,7 @@ import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
+const DOCUMENT_PREVIEW_STORAGE_KEY = "faceproof.identity.document-preview";
 const GUIDE_SAMPLE_MS = 360;
 const GUIDE_READY_SAMPLES = 2;
 const PHASE_CAPTURE_FRAMES = 4;
@@ -82,6 +83,7 @@ startButton.addEventListener("click", () => {
 window.addEventListener("beforeunload", () => camera.stop());
 async function initialize() {
     identityToken = consumeIdentityToken();
+    documentDetails = restoreDocumentPreview();
     if (!identityToken) {
         showFatal("Link de verificação inválido ou incompleto.");
         return;
@@ -118,6 +120,7 @@ async function uploadDocument() {
         documentStatus.textContent = `Validando CNH Digital (${formatBytes(prepared.size)})...`;
         const documentResponse = await client.uploadIdentityDocument(identityToken, prepared.blob, prepared.fileName, prepared.sha256);
         documentDetails = documentResponse.document;
+        storeDocumentPreview(documentResponse.document);
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
         documentStatus.textContent = "CNH Digital autenticada. Continue para a biometria.";
@@ -167,6 +170,33 @@ function formatBytes(bytes) {
         return `${(bytes / 1024).toFixed(1)} KB`;
     }
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+function storeDocumentPreview(details) {
+    if (!details.referencePhotoDataUrl) {
+        return;
+    }
+    try {
+        sessionStorage.setItem(DOCUMENT_PREVIEW_STORAGE_KEY, JSON.stringify({
+            ...details,
+            referencePhotoDataUrl: details.referencePhotoDataUrl,
+        }));
+    }
+    catch {
+        // A prévia é auxiliar; falha de sessionStorage não deve interromper a biometria.
+    }
+}
+function restoreDocumentPreview() {
+    try {
+        const value = sessionStorage.getItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+        if (!value) {
+            return null;
+        }
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : null;
+    }
+    catch {
+        return null;
+    }
 }
 function resetSelectedFileUI() {
     fileDrop.classList.remove("file-selected");
@@ -672,7 +702,9 @@ function renderIdentityResult(result, capturedFrames) {
     finalPanel.hidden = false;
     const decisionLabel = {
         approved: "IDENTIDADE CONFIRMADA",
-        review: "ANÁLISE NECESSÁRIA",
+        review: result.similarity >= result.matchThreshold
+            ? "PROVA DE VIDA EM REVISÃO"
+            : "ANÁLISE COMPLEMENTAR",
         rejected: "VERIFICAÇÃO NÃO APROVADA",
     }[result.decision];
     const details = {
@@ -873,6 +905,10 @@ function consumeIdentityToken() {
     const fragment = new URLSearchParams(window.location.hash.slice(1));
     const fromFragment = fragment.get("identity")?.trim() ?? "";
     if (fromFragment) {
+        const previousToken = sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
+        if (previousToken && previousToken !== fromFragment) {
+            sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+        }
         sessionStorage.setItem(TOKEN_STORAGE_KEY, fromFragment);
         history.replaceState(null, "", window.location.pathname + window.location.search);
         return fromFragment;
