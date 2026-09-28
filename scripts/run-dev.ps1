@@ -51,13 +51,16 @@ if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (Test-Path $LocalBPG)) {
 }
 
 $MissingRequired = @()
-foreach ($Tool in @("pdfsig", "pdfinfo", "pdftoppm")) {
+foreach ($Tool in @("pdfinfo", "pdftoppm")) {
     if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
         $MissingRequired += $Tool
     }
 }
 if ($MissingRequired.Count -gt 0) {
     Write-Warning ("IDENTITY CHECK indisponivel ate instalar/configurar: " + ($MissingRequired -join ", "))
+}
+if (-not (Get-Command "pdfsig" -ErrorAction SilentlyContinue)) {
+    Write-Host "INFO: pdfsig nao encontrado. O FaceProof usara a verificacao criptografica nativa em Go."
 }
 
 foreach ($Tool in @("pdfimages", "pdftotext")) {
@@ -66,7 +69,7 @@ foreach ($Tool in @("pdfimages", "pdftotext")) {
     }
 }
 if (-not (Get-Command "openssl" -ErrorAction SilentlyContinue)) {
-    Write-Warning "openssl nao encontrado. CNHs com certificado atualmente expirado nao poderao comprovar que o certificado era valido na data da assinatura."
+    Write-Host "INFO: openssl nao encontrado. A verificacao nativa ainda confere o periodo de validade do certificado; openssl fica como evidencia complementar."
 }
 if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (-not (Get-Command "bpgdec" -ErrorAction SilentlyContinue))) {
     Write-Host "INFO: bpgdec nao encontrado. Isso nao bloqueia mais a CNH; a foto assinada do PDF sera usada."
