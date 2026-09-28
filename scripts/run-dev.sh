@@ -82,8 +82,8 @@ ENGINE_PID=$!
 API_PID=$!
 
 (
-    cd apps/web-sdk
-    python3 -m http.server 5173
+    cd services/api
+    FACEPROOF_WEB_DIR="$ROOT/apps/web-sdk" go run ./cmd/devgateway
 ) &
 WEB_PID=$!
 
