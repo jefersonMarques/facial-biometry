@@ -43,7 +43,7 @@ func TestNormalizeGuidedFramesRejectsSinglePhase(t *testing.T) {
 func TestIdentityCaptureQualityUsesHardAndPreferredThresholds(t *testing.T) {
 	result := domain.EngineResult{
 		Quality: domain.EngineQuality{
-			Score:        0.20,
+			Score:        0.10,
 			FacePresence: 1.0,
 		},
 		GuidedCapture: domain.EngineSignal{
