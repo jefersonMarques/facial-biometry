@@ -61,7 +61,7 @@ The MVP also does not provide complete long-term certificate revocation/timestam
 - Go 1.23+
 - Python 3.11+
 - a modern browser with camera support;
-- Poppler tools: `pdfsig`, `pdfinfo` and `pdftoppm`;
+- Poppler tools: `pdfinfo` and `pdftoppm`; PDF signature cryptography is also verified natively in Go;
 - `bpgdec` is optional fallback support for VIO portraits encoded in BPG.
 
 Node.js is only required when editing the TypeScript SDK. The compiled JavaScript bundle is committed.
