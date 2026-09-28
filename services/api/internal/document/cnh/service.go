@@ -75,6 +75,11 @@ func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF str
 		}
 
 		analysis := pdfanalysis.Analyze(ctx, pdf, nil, 1, "CNH", time.Time{})
+		if !capabilities.PDFSig || !analysis.Signature.ValidationChecked {
+			if nativeErr := applyNativePDFSignatureValidation(pdf, &analysis); nativeErr != nil {
+				return Document{}, fmt.Errorf("%w: native PDF signature validation failed", ErrInvalidDocument)
+			}
+		}
 		if reason := forensicRejectionReason(analysis); reason != "" {
 			return Document{}, fmt.Errorf("%w: %s", ErrInvalidDocument, reason)
 		}
@@ -87,6 +92,11 @@ func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF str
 	result, vioErr := service.vio.DecodeBytes(decoded.Payload, "identity-cnh-pdf")
 	if vioErr != nil {
 		analysis := pdfanalysis.Analyze(ctx, pdf, decoded.PageImage, decoded.PageNumber, "CNH", time.Time{})
+		if !capabilities.PDFSig || !analysis.Signature.ValidationChecked {
+			if nativeErr := applyNativePDFSignatureValidation(pdf, &analysis); nativeErr != nil {
+				return Document{}, fmt.Errorf("%w: native PDF signature validation failed", ErrInvalidDocument)
+			}
+		}
 		if reason := forensicRejectionReason(analysis); reason != "" {
 			return Document{}, fmt.Errorf("%w: %s", ErrInvalidDocument, reason)
 		}
@@ -108,6 +118,11 @@ func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF str
 		result.TemplateName,
 		result.CreatedAt,
 	)
+	if !capabilities.PDFSig || !analysis.Signature.ValidationChecked {
+		if nativeErr := applyNativePDFSignatureValidation(pdf, &analysis); nativeErr != nil {
+			return Document{}, fmt.Errorf("%w: native PDF signature validation failed", ErrInvalidDocument)
+		}
+	}
 
 	assessment := pdfanalysis.Assess(result.SignatureValid, &analysis)
 	if assessment.Status != "verified" {
@@ -289,9 +304,6 @@ func requiredMissingCapabilities(capabilities pdfanalysis.Capabilities) []string
 	}
 	if !capabilities.PDFInfo {
 		missing = append(missing, "pdfinfo")
-	}
-	if !capabilities.PDFSig {
-		missing = append(missing, "pdfsig")
 	}
 	return missing
 }
