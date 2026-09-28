@@ -20,6 +20,11 @@ type DocumentEvidence struct {
 	PDFSigner             string    `json:"pdfSigner"`
 	PDFCreator            string    `json:"pdfCreator"`
 	PDFProducer           string    `json:"pdfProducer"`
+	PDFSourceIntegrity    string    `json:"pdfSourceIntegrity"`
+	PDFSignatureAlgorithm string    `json:"pdfSignatureAlgorithm"`
+	ReferencePhotoSource  string    `json:"referencePhotoSource"`
+	ReferencePhotoWidth   int       `json:"referencePhotoWidth,omitempty"`
+	ReferencePhotoHeight  int       `json:"referencePhotoHeight,omitempty"`
 	VIOTemplateID          uint16    `json:"vioTemplateId"`
 	VIOCreatedAt           time.Time `json:"vioCreatedAt"`
 	VIOSignatureAlgorithm  string    `json:"vioSignatureAlgorithm"`
