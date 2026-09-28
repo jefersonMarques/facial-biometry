@@ -27,11 +27,16 @@ export class BiometricClient {
     async getIdentityCheck(token) {
         return this.identityRequest("/v1/identity/check", token, { method: "GET" });
     }
-    async uploadIdentityDocument(token, file) {
+    async uploadIdentityDocument(token, file, fileName, sha256) {
         const form = new FormData();
-        form.append("file", file, file.name);
+        form.append("file", file, fileName);
+        const headers = new Headers();
+        if (sha256) {
+            headers.set("X-FaceProof-Upload-SHA256", sha256);
+        }
         return this.identityRequest("/v1/identity/document", token, {
             method: "POST",
+            headers,
             body: form,
         });
     }
