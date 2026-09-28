@@ -78,9 +78,9 @@ func main() {
 		Addr:              configuration.APIAddress,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       35 * time.Second,
-		WriteTimeout:      35 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadTimeout:       105 * time.Second,
+		WriteTimeout:      105 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	log.Printf("FaceProof API listening on %s", configuration.APIAddress)
