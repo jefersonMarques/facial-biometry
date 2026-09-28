@@ -89,21 +89,30 @@ type EngineQuality struct {
 	ProcessedFrames int     `json:"processedFrames"`
 }
 
+type EngineFaceEmbedding struct {
+	FrameIndex int       `json:"frameIndex"`
+	Phase      string    `json:"phase"`
+	Quality    float64   `json:"quality"`
+	Embedding  []float64 `json:"embedding"`
+}
+
 type EngineResult struct {
-	LivenessScore  float64       `json:"livenessScore"`
-	PassivePAD     EngineSignal  `json:"passivePad"`
-	TemporalMotion EngineSignal  `json:"temporalMotion"`
-	Illumination   EngineSignal  `json:"illumination"`
-	GuidedCapture  EngineSignal  `json:"guidedCapture"`
-	Quality        EngineQuality `json:"quality"`
-	Embedding      []float64     `json:"embedding"`
-	EmbeddingModel string        `json:"embeddingModel"`
-	BestFrameIndex int           `json:"bestFrameIndex"`
-	Diagnostics    []string      `json:"diagnostics"`
+	LivenessScore  float64               `json:"livenessScore"`
+	PassivePAD     EngineSignal          `json:"passivePad"`
+	TemporalMotion EngineSignal          `json:"temporalMotion"`
+	Illumination   EngineSignal          `json:"illumination"`
+	GuidedCapture  EngineSignal          `json:"guidedCapture"`
+	Quality        EngineQuality         `json:"quality"`
+	Embedding      []float64             `json:"embedding"`
+	FaceEmbeddings []EngineFaceEmbedding `json:"faceEmbeddings,omitempty"`
+	EmbeddingModel string                `json:"embeddingModel"`
+	BestFrameIndex int                   `json:"bestFrameIndex"`
+	Diagnostics    []string              `json:"diagnostics"`
 }
 
 type ReferenceResult struct {
 	Embedding      []float64     `json:"embedding"`
+	Embeddings     [][]float64   `json:"embeddings,omitempty"`
 	EmbeddingModel string        `json:"embeddingModel"`
 	Quality        EngineQuality `json:"quality"`
 }
