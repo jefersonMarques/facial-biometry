@@ -76,6 +76,12 @@ export class BiometricClient {
             credentials: "omit",
             referrerPolicy: "no-referrer",
         });
+        const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+        if (!contentType.includes("application/json")) {
+            const text = await response.text();
+            const preview = text.trim().slice(0, 80);
+            throw new Error(`API returned non-JSON response (HTTP ${response.status})${preview ? `: ${preview}` : ""}`);
+        }
         const payload = await response.json();
         if (!response.ok) {
             const message = isErrorPayload(payload) ? payload.error : `HTTP ${response.status}`;
