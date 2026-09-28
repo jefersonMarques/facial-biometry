@@ -19,6 +19,42 @@ const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
 const AUTO_FACE_DETECTION_WINDOW_MS = 8_000;
 
+type GuideTone = "red" | "yellow" | "green";
+
+interface GuideAssessment {
+    ready: boolean;
+    captureReady: boolean;
+    message: string;
+    state: string;
+    tone: GuideTone;
+    proximityPercent: number;
+}
+
+interface PhaseGuideConfig {
+    idealMin: number;
+    idealMax: number;
+    captureMin: number;
+    captureMax: number;
+    target: number;
+}
+
+const PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
+    far: {
+        idealMin: 0.34,
+        idealMax: 0.44,
+        captureMin: 0.31,
+        captureMax: 0.47,
+        target: 0.39,
+    },
+    near: {
+        idealMin: 0.51,
+        idealMax: 0.69,
+        captureMin: 0.47,
+        captureMax: 0.73,
+        target: 0.60,
+    },
+};
+
 const client = new BiometricClient(resolveApiBaseUrl());
 const documentPanel = requiredElement<HTMLElement>("documentPanel");
 const biometryPanel = requiredElement<HTMLElement>("biometryPanel");
@@ -205,7 +241,7 @@ async function runBiometry(): Promise<void> {
     startButton.textContent = "Estou pronto";
     biometricStatus.textContent = "Iniciando câmera...";
     cameraState.textContent = "Iniciando câmera...";
-    progressBar.style.width = "0%";
+    setProximityIndicator(0, "red");
 
     let completed = false;
 
@@ -227,7 +263,7 @@ async function runBiometry(): Promise<void> {
 
             biometricStatus.textContent = "Analisando sua identidade...";
             guidePhaseText.textContent = "Verificando";
-            progressBar.style.width = "100%";
+            setProximityIndicator(100, "green");
 
             try {
                 const capturedFrames = [...farFrames, ...nearFrames];
@@ -241,7 +277,7 @@ async function runBiometry(): Promise<void> {
             } catch (error) {
                 const message = errorMessage(error);
                 if (isRecaptureRequired(message)) {
-                    progressBar.style.width = "0%";
+                    setProximityIndicator(0, "red");
                     faceGuide.className = "face-guide phase-far";
                     guidePhaseText.textContent = "1 de 2 · Mais longe";
                     biometricStatus.textContent = "A captura não ficou boa o suficiente. Vamos refazer sem desligar a câmera.";
@@ -275,9 +311,9 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "1 de 2 · Mais longe" : "2 de 2 · Mais perto";
     biometricStatus.textContent = phase === "far"
-        ? "Preencha o oval com o rosto."
-        : "Aproxime o rosto e preencha o oval maior.";
-    progressBar.style.width = "0%";
+        ? "Posicione o rosto e siga as orientações."
+        : "Aproxime o rosto e siga as orientações.";
+    setProximityIndicator(0, "red");
 
     while (stableSamples < GUIDE_READY_SAMPLES) {
         if (
@@ -289,14 +325,16 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
             await waitForManualReady();
             biometricStatus.textContent = "Verificando seu enquadramento...";
         }
+
         const snapshot = camera.snapshotForGuide();
 
         if (!snapshot.quality.acceptable) {
             stableSamples = 0;
             faceGuide.classList.remove("guide-ready");
-            cameraState.textContent = snapshot.quality.issue ?? "Ajuste a câmera";
-            biometricStatus.textContent = snapshot.quality.issue ?? "Melhore a imagem para continuar.";
-            progressBar.style.width = "0%";
+            const lightingHint = clientQualityInstruction(snapshot.quality);
+            cameraState.textContent = lightingHint.state;
+            biometricStatus.textContent = lightingHint.message;
+            setProximityIndicator(0, "red");
             await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
@@ -310,27 +348,31 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<void> {
             if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
                 throw error;
             }
+            cameraState.textContent = "Analisando rosto";
             biometricStatus.textContent = "Ajustando o enquadramento...";
             await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
 
-        const instruction = guideInstruction(guide, phase);
-        cameraState.textContent = guide.faceDetected ? "Rosto detectado" : "Procurando rosto";
+        const assessment = assessGuide(guide, phase);
+        renderGuideAssessment(assessment);
 
-        if (!instruction.ready) {
+        if (assessment.ready) {
+            stableSamples++;
+        } else if (assessment.captureReady) {
+            stableSamples = Math.max(0, stableSamples - 1);
+        } else {
             stableSamples = 0;
-            faceGuide.classList.remove("guide-ready");
-            biometricStatus.textContent = instruction.message;
-            progressBar.style.width = "0%";
-            await sleep(GUIDE_SAMPLE_MS);
-            continue;
         }
 
-        stableSamples++;
-        faceGuide.classList.add("guide-ready");
-        biometricStatus.textContent = "Perfeito. Mantenha-se assim...";
-        progressBar.style.width = `${Math.round((stableSamples / GUIDE_READY_SAMPLES) * 100)}%`;
+        if (stableSamples >= GUIDE_READY_SAMPLES) {
+            faceGuide.classList.add("guide-ready");
+            biometricStatus.textContent = "Posição ideal. Mantenha-se assim...";
+            setProximityIndicator(100, "green");
+            await sleep(180);
+            return;
+        }
+
         await sleep(GUIDE_SAMPLE_MS);
     }
 }
@@ -341,34 +383,40 @@ async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFr
     biometricStatus.textContent = phase === "far"
         ? "Capturando a primeira imagem..."
         : "Capturando a segunda imagem...";
-    progressBar.style.width = "0%";
 
     const captureWidth = phase === "near" ? 960 : 640;
     const captureJPEGQuality = phase === "near" ? 0.92 : 0.86;
 
     while (frames.length < PHASE_CAPTURE_FRAMES) {
+        const guideSnapshot = camera.snapshotForGuide(360, 0.72);
+
+        if (!guideSnapshot.quality.acceptable) {
+            const lightingHint = clientQualityInstruction(guideSnapshot.quality);
+            faceGuide.classList.remove("guide-ready");
+            cameraState.textContent = lightingHint.state;
+            biometricStatus.textContent = lightingHint.message;
+            setProximityIndicator(0, "red");
+            await waitForFacePhase(phase);
+            continue;
+        }
+
+        const guide = await client.guideIdentityFace(identityToken, guideSnapshot.imageBase64);
+        const assessment = assessGuide(guide, phase);
+        renderGuideAssessment(assessment);
+
+        if (!assessment.captureReady) {
+            await waitForFacePhase(phase);
+            continue;
+        }
+
         const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
-
         if (!snapshot.quality.acceptable) {
-            frames.length = 0;
-            faceGuide.classList.remove("guide-ready");
-            biometricStatus.textContent = snapshot.quality.issue ?? "Mantenha o rosto imóvel.";
-            await waitForFacePhase(phase);
+            const lightingHint = clientQualityInstruction(snapshot.quality);
+            biometricStatus.textContent = lightingHint.message;
+            await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
 
-        const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
-        const instruction = guideInstruction(guide, phase);
-
-        if (!instruction.ready) {
-            frames.length = 0;
-            faceGuide.classList.remove("guide-ready");
-            biometricStatus.textContent = instruction.message;
-            await waitForFacePhase(phase);
-            continue;
-        }
-
-        faceGuide.classList.add("guide-ready");
         frames.push({
             imageBase64: snapshot.imageBase64,
             phase,
@@ -378,7 +426,13 @@ async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFr
                 sharpness: snapshot.quality.sharpness,
             },
         });
-        progressBar.style.width = `${Math.round((frames.length / PHASE_CAPTURE_FRAMES) * 100)}%`;
+
+        faceGuide.classList.add("guide-ready");
+        cameraState.textContent = "Capturando";
+        biometricStatus.textContent = phase === "far"
+            ? "Boa posição. Fazendo a primeira captura..."
+            : "Boa posição. Fazendo a segunda captura...";
+        setProximityIndicator(100, "green");
         await sleep(PHASE_CAPTURE_SAMPLE_MS);
     }
 
@@ -393,49 +447,173 @@ async function showCaptureSuccess(message: string): Promise<void> {
     await sleep(280);
 }
 
-function guideInstruction(
+function assessGuide(
     guide: IdentityGuideResult,
     phase: GuidedCapturePhase,
-): { ready: boolean; message: string } {
-    if (!guide.faceDetected || guide.confidence < 0.82) {
-        return { ready: false, message: "Posicione seu rosto dentro do oval." };
+): GuideAssessment {
+    const config = PHASE_GUIDE[phase];
+
+    if (!guide.faceDetected || guide.confidence < 0.72) {
+        return {
+            ready: false,
+            captureReady: false,
+            message: "Posicione o rosto dentro do oval.",
+            state: "Procurando rosto",
+            tone: "red",
+            proximityPercent: 0,
+        };
     }
 
-    if (Math.abs(guide.rollDegrees) > 12) {
-        return { ready: false, message: "Mantenha a cabeça reta e olhe para a câmera." };
+    const proximityPercent = Math.round(
+        Math.max(6, Math.min(100, (guide.heightRatio / config.target) * 100)),
+    );
+
+    if (Math.abs(guide.rollDegrees) > 14) {
+        return {
+            ready: false,
+            captureReady: false,
+            message: "Olhe para a câmera e mantenha a cabeça reta.",
+            state: "Ajuste a cabeça",
+            tone: "red",
+            proximityPercent,
+        };
     }
 
-    const centered = Math.abs(guide.centerX - 0.5) <= 0.08 && Math.abs(guide.centerY - 0.46) <= 0.10;
-    if (!centered) {
-        return { ready: false, message: "Centralize o rosto no oval." };
+    const horizontalOffset = Math.abs(guide.centerX - 0.5);
+    const verticalOffset = Math.abs(guide.centerY - 0.46);
+    if (horizontalOffset > 0.12 || verticalOffset > 0.14) {
+        return {
+            ready: false,
+            captureReady: false,
+            message: "Centralize o rosto dentro do oval.",
+            state: "Centralize o rosto",
+            tone: "red",
+            proximityPercent,
+        };
     }
 
-    if (phase === "far") {
-        if (guide.heightRatio < 0.34) {
-            return { ready: false, message: "Aproxime-se até o rosto preencher o oval." };
-        }
-        if (guide.heightRatio > 0.43) {
-            return { ready: false, message: "Afaste-se um pouco para encaixar no oval." };
-        }
-    } else {
-        if (guide.heightRatio < 0.54) {
-            return { ready: false, message: "Aproxime-se até o rosto preencher o oval maior." };
-        }
-        if (guide.heightRatio > 0.66) {
-            return { ready: false, message: "Afaste-se só um pouco para encaixar no oval." };
-        }
+    if (guide.heightRatio < config.captureMin) {
+        return {
+            ready: false,
+            captureReady: false,
+            message: "Aproxime o rosto.",
+            state: "Muito longe",
+            tone: "red",
+            proximityPercent,
+        };
     }
 
-    if (guide.quality.score < 0.38) {
-        if (guide.quality.sharpness < 0.30) {
-            return { ready: false, message: "Imagem pouco nítida. Mantenha o aparelho firme." };
-        }
-        return { ready: false, message: "Melhore a iluminação do rosto." };
+    if (guide.heightRatio < config.idealMin) {
+        return {
+            ready: false,
+            captureReady: true,
+            message: "Aproxime só um pouco.",
+            state: "Quase na posição",
+            tone: "yellow",
+            proximityPercent,
+        };
     }
 
-    return { ready: true, message: "Perfeito. Mantenha-se assim..." };
+    if (guide.heightRatio > config.captureMax) {
+        return {
+            ready: false,
+            captureReady: false,
+            message: "Afaste o rosto.",
+            state: "Muito perto",
+            tone: "red",
+            proximityPercent: 100,
+        };
+    }
+
+    if (guide.heightRatio > config.idealMax) {
+        return {
+            ready: false,
+            captureReady: true,
+            message: "Afaste só um pouco.",
+            state: "Quase na posição",
+            tone: "yellow",
+            proximityPercent: 100,
+        };
+    }
+
+    if (horizontalOffset > 0.09 || verticalOffset > 0.11) {
+        return {
+            ready: false,
+            captureReady: true,
+            message: "Quase lá. Centralize um pouco mais.",
+            state: "Quase na posição",
+            tone: "yellow",
+            proximityPercent,
+        };
+    }
+
+    if (guide.quality.score < 0.34) {
+        return {
+            ready: false,
+            captureReady: true,
+            message: "Quase lá. Mantenha o aparelho firme.",
+            state: "Ajustando nitidez",
+            tone: "yellow",
+            proximityPercent,
+        };
+    }
+
+    return {
+        ready: true,
+        captureReady: true,
+        message: "Posição ideal. Mantenha-se assim.",
+        state: "Posição ideal",
+        tone: "green",
+        proximityPercent: 100,
+    };
 }
 
+function clientQualityInstruction(
+    quality: { brightness: number; contrast: number; sharpness: number; issue: string | null },
+): { message: string; state: string } {
+    if (quality.brightness < 0.16) {
+        return {
+            message: "Está escuro. Aumente a iluminação do rosto.",
+            state: "Pouca luz",
+        };
+    }
+    if (quality.brightness > 0.88) {
+        return {
+            message: "Está muito claro. Evite luz forte diretamente no rosto.",
+            state: "Luz excessiva",
+        };
+    }
+    if (quality.sharpness < 0.018) {
+        return {
+            message: "Imagem pouco nítida. Mantenha o celular firme.",
+            state: "Imagem desfocada",
+        };
+    }
+    if (quality.contrast < 0.055) {
+        return {
+            message: "Melhore a iluminação do rosto.",
+            state: "Pouco contraste",
+        };
+    }
+    return {
+        message: quality.issue ?? "Ajuste a câmera.",
+        state: "Ajuste a câmera",
+    };
+}
+
+function renderGuideAssessment(assessment: GuideAssessment): void {
+    biometricStatus.textContent = assessment.message;
+    cameraState.textContent = assessment.state;
+    faceGuide.classList.toggle("guide-ready", assessment.tone === "green");
+    faceGuide.classList.toggle("guide-near", assessment.tone === "yellow");
+    setProximityIndicator(assessment.proximityPercent, assessment.tone);
+}
+
+function setProximityIndicator(percent: number, tone: GuideTone): void {
+    progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    progressBar.classList.remove("proximity-red", "proximity-yellow", "proximity-green");
+    progressBar.classList.add(`proximity-${tone}`);
+}
 
 function scheduleAutomaticBiometry(): void {
     if (autoBiometryScheduled) {
