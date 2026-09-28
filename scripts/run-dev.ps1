@@ -77,7 +77,7 @@ if ((-not $env:FACEPROOF_BPGDEC_PATH) -and (-not (Get-Command "bpgdec" -ErrorAct
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\engine'; & '$Python' engine_server.py"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\api'; go run ./cmd/server"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\apps\web-sdk'; python -m http.server 5173"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$Root\services\api'; `$env:FACEPROOF_WEB_DIR='$Root\apps\web-sdk'; go run ./cmd/devgateway"
 
 Write-Host "FaceProof demo: http://localhost:5173"
 Write-Host "Identity verification: http://localhost:5173/verify.html"
