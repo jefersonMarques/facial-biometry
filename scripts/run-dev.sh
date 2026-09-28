@@ -49,11 +49,14 @@ if [ "${#missing_required[@]}" -gt 0 ]; then
     echo "WARNING: IDENTITY CHECK unavailable until these tools are installed/configured: ${missing_required[*]}"
 fi
 
-for tool in pdfimages pdftotext openssl; do
+for tool in pdfimages pdftotext; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "WARNING: $tool not found; complementary PDF forensics will be limited."
     fi
 done
+if ! command -v openssl >/dev/null 2>&1; then
+    echo "WARNING: openssl not found. CNHs with a currently expired signer certificate cannot prove that the certificate was valid at signing time."
+fi
 if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; then
     echo "INFO: bpgdec not found. CNH identity can still use the signed PDF portrait."
 fi
