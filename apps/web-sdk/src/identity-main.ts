@@ -6,6 +6,7 @@ import type {
     GuidedCapturePhase,
     IdentityCheckStatus,
     IdentityCompletionResponse,
+    IdentityDocumentDetails,
     IdentityGuideResult,
 } from "./types.js";
 
@@ -44,6 +45,7 @@ let identityToken = "";
 let busy = false;
 let autoBiometryScheduled = false;
 let manualReadyResolver: (() => void) | null = null;
+let documentDetails: IdentityDocumentDetails | null = null;
 
 void initialize();
 
@@ -115,7 +117,13 @@ async function uploadDocument(): Promise<void> {
     try {
         const prepared = await preparePDFUpload(file);
         documentStatus.textContent = `Validando CNH Digital (${formatBytes(prepared.size)})...`;
-        await client.uploadIdentityDocument(identityToken, prepared.blob, prepared.fileName, prepared.sha256);
+        const documentResponse = await client.uploadIdentityDocument(
+            identityToken,
+            prepared.blob,
+            prepared.fileName,
+            prepared.sha256,
+        );
+        documentDetails = documentResponse.document;
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
         documentStatus.textContent = "CNH Digital autenticada. Continue para a biometria.";
@@ -222,12 +230,13 @@ async function runBiometry(): Promise<void> {
             progressBar.style.width = "100%";
 
             try {
+                const capturedFrames = [...farFrames, ...nearFrames];
                 const result = await client.completeIdentityCheck(
                     identityToken,
                     session,
-                    [...farFrames, ...nearFrames],
+                    capturedFrames,
                 );
-                renderIdentityResult(result);
+                renderIdentityResult(result, capturedFrames);
                 completed = true;
             } catch (error) {
                 const message = errorMessage(error);
@@ -334,8 +343,11 @@ async function capturePhase(phase: GuidedCapturePhase): Promise<GuidedCapturedFr
         : "Capturando a segunda imagem...";
     progressBar.style.width = "0%";
 
+    const captureWidth = phase === "near" ? 960 : 640;
+    const captureJPEGQuality = phase === "near" ? 0.92 : 0.86;
+
     while (frames.length < PHASE_CAPTURE_FRAMES) {
-        const snapshot = camera.snapshotForGuide(480, 0.82);
+        const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
 
         if (!snapshot.quality.acceptable) {
             frames.length = 0;
@@ -493,7 +505,10 @@ function renderStatus(status: IdentityCheckStatus): void {
     }
 }
 
-function renderIdentityResult(result: IdentityCompletionResponse): void {
+function renderIdentityResult(
+    result: IdentityCompletionResponse,
+    capturedFrames: GuidedCapturedFrame[],
+): void {
     documentPanel.hidden = true;
     biometryPanel.hidden = true;
     finalPanel.hidden = false;
@@ -504,19 +519,50 @@ function renderIdentityResult(result: IdentityCompletionResponse): void {
         rejected: "VERIFICAÇÃO NÃO APROVADA",
     }[result.decision];
 
+    const details = {
+        ...result.document,
+        ...(documentDetails ?? {}),
+    };
+    const bestCapture = capturedFrames[result.bestFrameIndex]?.imageBase64 ?? "";
+    const referencePhoto = documentDetails?.referencePhotoDataUrl ?? "";
+
     resultPanel.innerHTML = `
         <div class="result-header result-${escapeHtml(result.decision)}">
             <span>${escapeHtml(decisionLabel)}</span>
-            <strong>${percentage(result.similarity)}</strong>
+            <strong>Score ${faceScore(result.similarity)}</strong>
         </div>
+
+        <div class="identity-profile">
+            <div class="identity-summary">
+                <h3>Dados da CNH</h3>
+                <div class="identity-data-grid">
+                    ${dataLine("Nome", details.name)}
+                    ${dataLine("CPF", details.cpf)}
+                    ${dataLine("Nascimento", details.birthDate)}
+                    ${dataLine("Categoria", details.category)}
+                    ${dataLine("Validade", details.expiryDate)}
+                    ${dataLine("UF de emissão", details.issuingUf)}
+                </div>
+            </div>
+
+            <div class="face-comparison">
+                ${photoCard("Foto da CNH", referencePhoto)}
+                <div class="face-comparison-mark" aria-hidden="true">↔</div>
+                ${photoCard("Melhor captura", bestCapture)}
+            </div>
+        </div>
+
         <div class="metrics-grid">
+            ${metric("Score facial", faceScore(result.similarity))}
+            ${metric("Limiar atual", faceScore(result.matchThreshold))}
             ${metric("Prova de vida", percentage(result.livenessScore))}
-            ${metric("Rosto × CNH", percentage(result.similarity))}
             ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
             ${metric("Qualidade", percentage(result.quality.score))}
             ${metric("Captura guiada", percentage(result.signals.guidedCapture.score))}
-            ${metric("Presença facial", percentage(result.quality.facePresence))}
         </div>
+
+        ${frameScoreLine(result.frameSimilarities)}
+
         <div class="identity-checks">
             ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
             ${checkLine("Assinatura VIO", result.document.vioSignatureValid)}
@@ -524,6 +570,37 @@ function renderIdentityResult(result: IdentityCompletionResponse): void {
             ${checkLine("Data mínima do documento", result.document.freshnessValid)}
         </div>
     `;
+}
+
+function dataLine(label: string, value?: string): string {
+    if (!value) {
+        return "";
+    }
+    return `<div class="identity-data-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function photoCard(label: string, imageBase64: string): string {
+    const body = imageBase64
+        ? `<img src="${escapeHtml(imageBase64)}" alt="${escapeHtml(label)}">`
+        : `<div class="face-photo-placeholder">Imagem indisponível</div>`;
+    return `
+        <figure class="face-photo-card">
+            ${body}
+            <figcaption>${escapeHtml(label)}</figcaption>
+        </figure>
+    `;
+}
+
+function frameScoreLine(scores: number[]): string {
+    if (!scores.length) {
+        return "";
+    }
+    const values = scores.map((score) => faceScore(score)).join(" · ");
+    return `<div class="frame-score-line"><span>Frames próximos usados no match</span><strong>${escapeHtml(values)}</strong></div>`;
+}
+
+function faceScore(value: number): string {
+    return value.toFixed(3);
 }
 
 function renderFinalStatus(status: "approved" | "review" | "rejected"): void {
