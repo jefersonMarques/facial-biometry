@@ -152,3 +152,27 @@ Important biometric settings:
 - `docs/SECURITY.md`
 - `docs/BROWSER_FIRST_ROADMAP.md`
 - `THIRD_PARTY_NOTICES.md`
+
+## Cloudflare quick tunnel
+
+The development server on port `5173` is a same-origin gateway:
+
+- static web files are served directly;
+- `/v1/*` is reverse-proxied to the FaceProof API on `127.0.0.1:8080`.
+
+This means one tunnel is enough for browser + API:
+
+```powershell
+cloudflared tunnel --url http://localhost:5173
+```
+
+After Cloudflare prints the public `https://....trycloudflare.com` URL, create a check with:
+
+```powershell
+.\scripts\create-identity-check.ps1 `
+  -CPF "CPF_DA_CNH" `
+  -MinimumDocumentDate "2026-01-01" `
+  -PublicBaseUrl "https://YOUR-SUBDOMAIN.trycloudflare.com"
+```
+
+Do not tunnel only a plain static file server. The public origin must reach the FaceProof gateway so that `/v1/*` returns the API JSON responses.
