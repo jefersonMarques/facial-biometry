@@ -40,7 +40,37 @@ func TestNormalizeGuidedFramesRejectsSinglePhase(t *testing.T) {
 	}
 }
 
-func TestIdentityCaptureQualityRequestsRecapture(t *testing.T) {
+func TestIdentityCaptureQualityUsesHardAndPreferredThresholds(t *testing.T) {
+	result := domain.EngineResult{
+		Quality: domain.EngineQuality{
+			Score:        0.20,
+			FacePresence: 1.0,
+		},
+		GuidedCapture: domain.EngineSignal{
+			Score:  0.80,
+			Status: "available",
+		},
+	}
+	if !identityCaptureNeedsRecapture(result) {
+		t.Fatal("expected very low-quality capture to require recapture")
+	}
+
+	result.Quality.Score = 0.46
+	if identityCaptureNeedsRecapture(result) {
+		t.Fatal("expected borderline quality to continue to facial matching")
+	}
+	if !identityCaptureIsBorderline(result) {
+		t.Fatal("expected 0.46 quality to be marked borderline")
+	}
+
+	result.Quality.Score = 0.70
+	result.GuidedCapture.Score = 0.75
+	if identityCaptureIsBorderline(result) {
+		t.Fatal("expected sufficiently good capture not to be borderline")
+	}
+}
+
+func TestIdentityMatchRequestsRetryWhenBorderline(t *testing.T) {
 	result := domain.EngineResult{
 		Quality: domain.EngineQuality{
 			Score:        0.46,
@@ -51,13 +81,20 @@ func TestIdentityCaptureQualityRequestsRecapture(t *testing.T) {
 			Status: "available",
 		},
 	}
-	if !identityCaptureNeedsRecapture(result) {
-		t.Fatal("expected low-quality capture to require recapture")
+
+	const threshold = 0.363
+	if !identityMatchNeedsRecapture(result, 0.42, threshold) {
+		t.Fatal("expected borderline-quality near-threshold match to require recapture")
+	}
+	if identityMatchNeedsRecapture(result, 0.61, threshold) {
+		t.Fatal("expected strong match to continue despite borderline image quality")
 	}
 
 	result.Quality.Score = 0.70
-	result.GuidedCapture.Score = 0.75
-	if identityCaptureNeedsRecapture(result) {
-		t.Fatal("expected sufficiently good capture to continue")
+	if !identityMatchNeedsRecapture(result, 0.38, threshold) {
+		t.Fatal("expected near-threshold match to require recapture even with good quality")
+	}
+	if identityMatchNeedsRecapture(result, -0.04, threshold) {
+		t.Fatal("expected clearly different face to proceed to rejection instead of recapture")
 	}
 }
