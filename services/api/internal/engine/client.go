@@ -26,6 +26,17 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
+func (client *Client) AnalyzeIdentity(ctx context.Context, request domain.EngineIdentityRequest) (domain.EngineResult, error) {
+	var result domain.EngineResult
+	if err := client.postJSON(ctx, "/identity-analyze", request, &result); err != nil {
+		return domain.EngineResult{}, err
+	}
+	if len(result.Embedding) == 0 {
+		return domain.EngineResult{}, errors.New("engine returned empty identity embedding")
+	}
+	return result, nil
+}
+
 func (client *Client) Analyze(ctx context.Context, request domain.EngineRequest) (domain.EngineResult, error) {
 	var result domain.EngineResult
 	if err := client.postJSON(ctx, "/analyze", request, &result); err != nil {
