@@ -113,7 +113,9 @@ async function uploadDocument(): Promise<void> {
     documentStatus.textContent = "Validando assinatura digital, QR Code e documento...";
 
     try {
-        await client.uploadIdentityDocument(identityToken, file);
+        const prepared = await preparePDFUpload(file);
+        documentStatus.textContent = `Validando CNH Digital (${formatBytes(prepared.size)})...`;
+        await client.uploadIdentityDocument(identityToken, prepared.blob, prepared.fileName, prepared.sha256);
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
         documentStatus.textContent = "CNH Digital autenticada. Continue para a biometria.";
@@ -131,6 +133,52 @@ async function uploadDocument(): Promise<void> {
     }
 }
 
+
+
+interface PreparedPDFUpload {
+    blob: Blob;
+    fileName: string;
+    sha256: string;
+    size: number;
+}
+
+async function preparePDFUpload(file: File): Promise<PreparedPDFUpload> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.byteLength < 5) {
+        throw new Error("O arquivo selecionado está vazio ou incompleto.");
+    }
+
+    const header = String.fromCharCode(...bytes.slice(0, 5));
+    if (header !== "%PDF-") {
+        throw new Error("O arquivo selecionado não contém um PDF original.");
+    }
+
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const sha256 = Array.from(new Uint8Array(digest))
+        .map((value) => value.toString(16).padStart(2, "0"))
+        .join("");
+
+    const safeFileName = file.name.toLowerCase().endsWith(".pdf")
+        ? file.name
+        : "cnh-digital.pdf";
+
+    return {
+        blob: new Blob([bytes], { type: "application/pdf" }),
+        fileName: safeFileName,
+        sha256,
+        size: bytes.byteLength,
+    };
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) {
+        return `${bytes} B`;
+    }
+    if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 function resetSelectedFileUI(): void {
     fileDrop.classList.remove("file-selected");
@@ -520,7 +568,10 @@ function friendlyDocumentError(message: string): string {
         return "A CNH enviada não corresponde a esta verificação.";
     }
     const generic = "Não foi possível autenticar esta CNH Digital. Envie o PDF original gerado pelo aplicativo oficial.";
-    if (["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) {
+    if (
+        ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) ||
+        window.location.hostname.endsWith(".trycloudflare.com")
+    ) {
         return `${generic} Detalhe: ${message}`;
     }
     return generic;
