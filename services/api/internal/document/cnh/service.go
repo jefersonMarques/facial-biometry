@@ -2,6 +2,8 @@ package cnh
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -211,7 +213,7 @@ func (service *Service) referencePhoto(
 				Method:     "vio_embedded_portrait",
 				Confidence: "cryptographic",
 				MIME:       result.PreviewMIME,
-				SHA256:     result.Technical.PreviewSHA256,
+				SHA256:     hashBytesHex(result.PreviewImage),
 				Width:      result.Technical.PreviewWidth,
 				Height:     result.Technical.PreviewHeight,
 			}, nil
@@ -379,4 +381,10 @@ func fieldValue(fields []decoder.FieldValue, name string) string {
 		}
 	}
 	return ""
+}
+
+
+func hashBytesHex(value []byte) string {
+	sum := sha256.Sum256(value)
+	return hex.EncodeToString(sum[:])
 }
