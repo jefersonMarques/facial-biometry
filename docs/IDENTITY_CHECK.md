@@ -84,7 +84,7 @@ All require `X-FaceProof-Identity-Token`.
 The current strict profile requires:
 
 - a cryptographically valid detached PDF signature;
-- `pdfsig` to report the total document as signed;
+- native Go PDF signature validation (required); `pdfsig` is optional corroboration to report the total document as signed;
 - a DETRAN or SENATRAN signer identity;
 - SERPRO / ICP-Brasil in the signer distinguished name;
 - SHA-256, SHA-384 or SHA-512;
@@ -131,7 +131,7 @@ The public token itself is not persisted; its SHA-256 hash is used as the storag
 
 CNH Digital validation requires:
 
-- `pdfsig` for PDF signature inspection;
+- native Go PDF signature validation (required); `pdfsig` is optional corroboration for PDF signature inspection;
 - `pdfinfo` for PDF structure and metadata;
 - `pdftoppm` for page rendering and QR scanning;
 - `bpgdec` for VIO portraits encoded as BPG.
