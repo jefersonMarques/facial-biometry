@@ -38,7 +38,7 @@
             <div class="stage-index">2</div>
             <div class="stage-content">
                 <h2>Biometria facial</h2>
-                <p>Ao iniciar, a câmera orientará o enquadramento. Faremos duas capturas automáticas: primeiro com o rosto mais longe e depois mais perto.</p>
+                <p>A câmera inicia automaticamente. Preencha o oval com o rosto e siga as orientações para as duas capturas.</p>
 
                 <div class="camera-card identity-camera">
                     <video id="camera" playsinline muted></video>
@@ -47,15 +47,15 @@
                     <div class="guide-phase"><span id="guidePhaseText">1 de 2 · Mais longe</span></div>
                     <div class="camera-topline">
                         <span class="camera-dot"></span>
-                        <span id="cameraState">Câmera aguardando</span>
+                        <span id="cameraState">Iniciando câmera...</span>
                     </div>
                     <div class="camera-footer">
                         <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
-                        <div id="biometricStatus">Clique abaixo para iniciar a biometria.</div>
+                        <div id="biometricStatus">Iniciando câmera...</div>
                     </div>
                 </div>
 
-                <button id="startBiometryButton" class="button button-primary identity-action" type="button">Iniciar verificação facial</button>
+                <button id="startBiometryButton" class="button button-primary identity-action" type="button" hidden>Estou pronto</button>
                 <div class="privacy-note">
                     <strong>Privacidade</strong>
                     <span>O PDF e a foto da CNH são processados para esta verificação e não são armazenados como arquivos pelo FaceProof.</span>
