@@ -1,5 +1,5 @@
 import { FrameQualityAnalyzer } from "./frame-quality.js";
-const SDK_VERSION = "0.2.0";
+const SDK_VERSION = "0.4.0";
 const READINESS_TIMEOUT_MS = 4_000;
 const READINESS_SAMPLE_MS = 220;
 const REQUIRED_GOOD_SAMPLES = 2;
@@ -39,9 +39,22 @@ export class CameraCapture {
         this.stream = null;
         this.video.srcObject = null;
     }
-    async capture(session, hooks) {
+    isActive() {
+        return this.stream !== null && this.stream.getVideoTracks().some((track) => track.readyState === "live");
+    }
+    snapshotForGuide(maxWidth = 360, jpegQuality = 0.72) {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        return {
+            imageBase64: this.canvas.toDataURL("image/jpeg", jpegQuality),
+            quality: this.qualityAnalyzer.analyze(imageData),
+        };
+    }
+    async capture(session, hooks, options = {}) {
         this.assertReady();
-        await this.waitForReadiness(hooks);
+        if (!options.skipReadiness) {
+            await this.waitForReadiness(hooks);
+        }
         const frames = [];
         const startedAtUnixMs = Date.now();
         const startTime = performance.now();
@@ -124,14 +137,14 @@ export class CameraCapture {
             quality: this.qualityAnalyzer.analyze(imageData),
         };
     }
-    drawCurrentFrame() {
+    drawCurrentFrame(maxWidth = 640) {
         this.assertReady();
         const sourceWidth = this.video.videoWidth;
         const sourceHeight = this.video.videoHeight;
         if (sourceWidth === 0 || sourceHeight === 0) {
             throw new Error("Camera returned an empty frame");
         }
-        const outputWidth = Math.min(640, sourceWidth);
+        const outputWidth = Math.min(maxWidth, sourceWidth);
         const outputHeight = Math.round((outputWidth / sourceWidth) * sourceHeight);
         if (this.canvas.width !== outputWidth || this.canvas.height !== outputHeight) {
             this.canvas.width = outputWidth;

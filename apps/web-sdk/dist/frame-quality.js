@@ -1,8 +1,8 @@
 const SAMPLE_STEP = 4;
-const MIN_BRIGHTNESS = 0.16;
-const MAX_BRIGHTNESS = 0.88;
-const MIN_CONTRAST = 0.055;
-const MIN_SHARPNESS = 0.018;
+const MIN_BRIGHTNESS = 0.11;
+const MAX_BRIGHTNESS = 0.94;
+const MIN_CONTRAST = 0.028;
+const MIN_SHARPNESS = 0.008;
 export class FrameQualityAnalyzer {
     analyze(imageData) {
         const { brightness, contrast, sharpness } = this.measure(imageData);

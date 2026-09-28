@@ -1,5 +1,14 @@
-export type SessionKind = "enrollment" | "verification";
+export type SessionKind = "enrollment" | "verification" | "identity";
+export type BiometricSessionKind = Exclude<SessionKind, "identity">;
 export type Decision = "approved" | "review" | "rejected";
+export type IdentityStatus =
+    | "pending_document"
+    | "processing_document"
+    | "biometry_pending"
+    | "approved"
+    | "review"
+    | "rejected"
+    | "expired";
 
 export interface SessionResponse {
     sessionId: string;
@@ -26,6 +35,14 @@ export interface CapturedFrame {
     clientQuality: ClientFrameQuality;
 }
 
+export type GuidedCapturePhase = "far" | "near";
+
+export interface GuidedCapturedFrame {
+    imageBase64: string;
+    phase: GuidedCapturePhase;
+    clientQuality: ClientFrameQuality;
+}
+
 export interface CaptureMetadata {
     sdkVersion: string;
     startedAtUnixMs: number;
@@ -38,6 +55,7 @@ export interface CaptureMetadata {
 
 export interface CapturePackage {
     frames: CapturedFrame[];
+    guidedFrames?: GuidedCapturedFrame[];
     metadata: CaptureMetadata;
 }
 
@@ -49,6 +67,17 @@ export interface FrameQualityAssessment extends ClientFrameQuality {
 export interface SignalResult {
     score: number;
     status: string;
+}
+
+export interface IdentityGuideResult {
+    faceDetected: boolean;
+    confidence: number;
+    centerX: number;
+    centerY: number;
+    widthRatio: number;
+    heightRatio: number;
+    rollDegrees: number;
+    quality: QualityResult;
 }
 
 export interface QualityResult {
@@ -75,7 +104,56 @@ export interface CompletionResponse {
         passivePad: SignalResult;
         temporalMotion: SignalResult;
         illumination: SignalResult;
+        guidedCapture?: SignalResult;
     };
     quality: QualityResult;
     diagnostics: string[];
+}
+
+export interface IdentityCheckStatus {
+    id: string;
+    status: IdentityStatus;
+    expiresAt: string;
+    documentAccepted: boolean;
+    canStartBiometry: boolean;
+    decision?: Decision;
+}
+
+export interface IdentityDocumentDetails {
+    signatureValid: boolean;
+    vioSignatureValid: boolean;
+    cpfMatch: boolean;
+    freshnessValid: boolean;
+    name?: string;
+    cpf?: string;
+    birthDate?: string;
+    category?: string;
+    expiryDate?: string;
+    issuingUf?: string;
+    referencePhotoDataUrl?: string;
+}
+
+export interface IdentityDocumentResponse {
+    status: IdentityStatus;
+    document: IdentityDocumentDetails;
+}
+
+export interface IdentityCompletionResponse {
+    id: string;
+    status: IdentityStatus;
+    decision: Decision;
+    livenessScore: number;
+    similarity: number;
+    frameSimilarities: number[];
+    bestFrameIndex: number;
+    matchThreshold: number;
+    signals: {
+        passivePad: SignalResult;
+        temporalMotion: SignalResult;
+        illumination: SignalResult;
+        guidedCapture: SignalResult;
+    };
+    quality: QualityResult;
+    diagnostics: string[];
+    document: IdentityDocumentDetails;
 }

@@ -15,6 +15,16 @@
 - 1:1 verification only.
 - Configurable liveness and face-match thresholds.
 
+## CNH Digital identity checks
+
+The identity-check flow adds issuer-authenticated link creation, high-entropy public tokens stored only by SHA-256 hash, AES-GCM encrypted check state, strict PDF signature/full-document validation, metadata consistency checks, VIO signature verification, expected-CPF matching and signed-PDF freshness enforcement.
+
+The uploaded PDF and VIO portrait are not persisted by the application. The portrait is converted into a reference embedding and discarded; the reference embedding is removed after the final identity decision.
+
+PDF metadata is never the primary authenticity or freshness signal. The digitally signed PDF timestamp is used for the minimum-document-date rule, while metadata is treated as a consistency signal.
+
+The current PDF trust profile is deliberately strict and must be regression-tested across legitimate CNH Digital PDFs from multiple DETRAN issuers. The MVP does not claim complete historical OCSP/CRL or qualified timestamp validation.
+
 ## Browser trust model
 
 The browser is untrusted. WASM, JavaScript, timestamps, local quality metrics and browser metadata can all be modified by an attacker. They are useful for UX, telemetry and raising attack cost, but they are not a hardware-backed proof that frames came from a physical camera.

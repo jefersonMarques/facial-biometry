@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/browser-first-capture-v2
+      - feature/identity-check-cnh
   pull_request:
     branches:
       - main
@@ -17,9 +18,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23.x"
+      - name: Verify Go modules
+        working-directory: services/api
+        run: go mod tidy && git diff --exit-code -- go.mod go.sum
       - name: Test Go API
         working-directory: services/api
         run: go test ./...
+      - name: Validate development scripts
+        run: |
+          bash -n scripts/run-dev.sh scripts/create-identity-check.sh
+          pwsh -NoProfile -Command '$errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile("scripts/run-dev.ps1", [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile("scripts/create-identity-check.ps1", [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }'
 
   python:
     runs-on: ubuntu-latest

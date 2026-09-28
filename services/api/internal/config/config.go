@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -22,6 +24,17 @@ type Config struct {
 	ReviewLivenessThreshold float64
 	AllowReviewEnrollment   bool
 	RequirePassivePAD       bool
+	Debug                    bool
+
+	IdentityIssuerKey       []byte
+	IdentityStoreKey        []byte
+	IdentityDirectory       string
+	IdentityVerifyURL       string
+	IdentityLinkTTL         time.Duration
+	IdentityMaxPDFBytes     int64
+	PDFSigPath              string
+	PDFInfoPath             string
+	BPGDecoderPath          string
 }
 
 func Load() (Config, error) {
@@ -36,7 +49,17 @@ func Load() (Config, error) {
 		return Config{}, errors.New("FACEPROOF_TEMPLATE_KEY must be a Base64-encoded 32-byte key")
 	}
 
+	identityIssuerKey := []byte(strings.TrimSpace(os.Getenv("FACEPROOF_IDENTITY_ISSUER_KEY")))
+	if len(identityIssuerKey) > 0 && len(identityIssuerKey) < 32 {
+		return Config{}, errors.New("FACEPROOF_IDENTITY_ISSUER_KEY must contain at least 32 characters when configured")
+	}
+
 	sessionTTLSeconds := envInt("FACEPROOF_SESSION_TTL_SECONDS", 120)
+	identityTTLMinutes := envInt("FACEPROOF_IDENTITY_LINK_TTL_MINUTES", 60)
+	identityMaxPDFMB := envInt("FACEPROOF_IDENTITY_MAX_PDF_MB", 8)
+	if identityTTLMinutes <= 0 || identityMaxPDFMB <= 0 {
+		return Config{}, errors.New("identity TTL and PDF size limits must be positive")
+	}
 
 	return Config{
 		APIAddress:              envString("FACEPROOF_API_ADDR", ":8080"),
@@ -51,7 +74,23 @@ func Load() (Config, error) {
 		ReviewLivenessThreshold: envFloat("FACEPROOF_REVIEW_LIVENESS_THRESHOLD", 0.55),
 		AllowReviewEnrollment:   envBool("FACEPROOF_ALLOW_REVIEW_ENROLLMENT", false),
 		RequirePassivePAD:       envBool("FACEPROOF_REQUIRE_PASSIVE_PAD", true),
+		Debug:                   envBool("FACEPROOF_DEBUG", false),
+		IdentityIssuerKey:       identityIssuerKey,
+		IdentityStoreKey:        deriveIdentityStoreKey(templateKey),
+		IdentityDirectory:       envString("FACEPROOF_IDENTITY_DIR", "../../data/identity-checks"),
+		IdentityVerifyURL:       envString("FACEPROOF_IDENTITY_VERIFY_URL", "http://localhost:5173/verify.html"),
+		IdentityLinkTTL:         time.Duration(identityTTLMinutes) * time.Minute,
+		IdentityMaxPDFBytes:     int64(identityMaxPDFMB) << 20,
+		PDFSigPath:              strings.TrimSpace(os.Getenv("FACEPROOF_PDFSIG_PATH")),
+		PDFInfoPath:             strings.TrimSpace(os.Getenv("FACEPROOF_PDFINFO_PATH")),
+		BPGDecoderPath:          strings.TrimSpace(os.Getenv("FACEPROOF_BPGDEC_PATH")),
 	}, nil
+}
+
+func deriveIdentityStoreKey(master []byte) []byte {
+	mac := hmac.New(sha256.New, master)
+	_, _ = mac.Write([]byte("faceproof/identity-store/v1"))
+	return mac.Sum(nil)
 }
 
 func envString(name string, fallback string) string {

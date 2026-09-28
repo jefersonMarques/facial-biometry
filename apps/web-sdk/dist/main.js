@@ -1,7 +1,7 @@
+import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
-const apiBaseUrl = new URLSearchParams(window.location.search).get("api") ?? "http://localhost:8080";
-const client = new BiometricClient(apiBaseUrl);
+const client = new BiometricClient(resolveApiBaseUrl());
 const video = requiredElement("camera");
 const subjectInput = requiredElement("subjectId");
 const enrollmentButton = requiredElement("enrollButton");

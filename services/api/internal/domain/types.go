@@ -7,6 +7,7 @@ type SessionKind string
 const (
 	SessionKindEnrollment   SessionKind = "enrollment"
 	SessionKindVerification SessionKind = "verification"
+	SessionKindIdentity     SessionKind = "identity"
 )
 
 type CaptureSession struct {
@@ -36,6 +37,12 @@ type CapturedFrame struct {
 	ClientQuality  *ClientFrameQuality `json:"clientQuality,omitempty"`
 }
 
+type GuidedCapturedFrame struct {
+	ImageBase64   string              `json:"imageBase64"`
+	Phase         string              `json:"phase"`
+	ClientQuality *ClientFrameQuality `json:"clientQuality,omitempty"`
+}
+
 type CaptureMetadata struct {
 	SDKVersion      string `json:"sdkVersion"`
 	StartedAtUnixMS int64  `json:"startedAtUnixMs"`
@@ -47,8 +54,24 @@ type CaptureMetadata struct {
 }
 
 type EngineRequest struct {
-	Frames              []CapturedFrame `json:"frames"`
-	IlluminationPattern []float64       `json:"illuminationPattern"`
+	Frames              []CapturedFrame       `json:"frames"`
+	GuidedFrames        []GuidedCapturedFrame `json:"guidedFrames,omitempty"`
+	IlluminationPattern []float64             `json:"illuminationPattern"`
+}
+
+type EngineIdentityRequest struct {
+	GuidedFrames []GuidedCapturedFrame `json:"guidedFrames"`
+}
+
+type EngineGuideResult struct {
+	FaceDetected    bool          `json:"faceDetected"`
+	Confidence      float64       `json:"confidence"`
+	CenterX         float64       `json:"centerX"`
+	CenterY         float64       `json:"centerY"`
+	WidthRatio      float64       `json:"widthRatio"`
+	HeightRatio     float64       `json:"heightRatio"`
+	RollDegrees     float64       `json:"rollDegrees"`
+	Quality         EngineQuality `json:"quality"`
 }
 
 type EngineSignal struct {
@@ -66,16 +89,32 @@ type EngineQuality struct {
 	ProcessedFrames int     `json:"processedFrames"`
 }
 
+type EngineFaceEmbedding struct {
+	FrameIndex int       `json:"frameIndex"`
+	Phase      string    `json:"phase"`
+	Quality    float64   `json:"quality"`
+	Embedding  []float64 `json:"embedding"`
+}
+
 type EngineResult struct {
-	LivenessScore  float64       `json:"livenessScore"`
-	PassivePAD     EngineSignal  `json:"passivePad"`
-	TemporalMotion EngineSignal  `json:"temporalMotion"`
-	Illumination   EngineSignal  `json:"illumination"`
-	Quality        EngineQuality `json:"quality"`
+	LivenessScore  float64               `json:"livenessScore"`
+	PassivePAD     EngineSignal          `json:"passivePad"`
+	TemporalMotion EngineSignal          `json:"temporalMotion"`
+	Illumination   EngineSignal          `json:"illumination"`
+	GuidedCapture  EngineSignal          `json:"guidedCapture"`
+	Quality        EngineQuality         `json:"quality"`
+	Embedding      []float64             `json:"embedding"`
+	FaceEmbeddings []EngineFaceEmbedding `json:"faceEmbeddings,omitempty"`
+	EmbeddingModel string                `json:"embeddingModel"`
+	BestFrameIndex int                   `json:"bestFrameIndex"`
+	Diagnostics    []string              `json:"diagnostics"`
+}
+
+type ReferenceResult struct {
 	Embedding      []float64     `json:"embedding"`
+	Embeddings     [][]float64   `json:"embeddings,omitempty"`
 	EmbeddingModel string        `json:"embeddingModel"`
-	BestFrameIndex int           `json:"bestFrameIndex"`
-	Diagnostics    []string      `json:"diagnostics"`
+	Quality        EngineQuality `json:"quality"`
 }
 
 type BiometricTemplate struct {

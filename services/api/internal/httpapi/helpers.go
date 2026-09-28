@@ -19,12 +19,14 @@ func sessionErrorStatus(err error) int {
 
 func (handler *Handler) setCORS(writer http.ResponseWriter) {
 	writer.Header().Set("Access-Control-Allow-Origin", handler.config.AllowedOrigin)
-	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-FaceProof-Identity-Token")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	writer.Header().Set("Vary", "Origin")
 }
 
 func (handler *Handler) writeJSON(writer http.ResponseWriter, status int, payload any) {
 	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(payload)
 }
@@ -55,6 +57,14 @@ func decodeJSON(request *http.Request, target any, maxBytes int64) error {
 	decoder := json.NewDecoder(strings.NewReader(string(body)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("request body contains trailing JSON values")
+		}
 		return err
 	}
 	return nil

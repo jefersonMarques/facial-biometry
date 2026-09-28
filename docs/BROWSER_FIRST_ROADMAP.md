@@ -3,10 +3,10 @@
 The target product flow is:
 
 ```text
-CNH capture
+CNH Digital PDF
     |
-    v
-Document validation + portrait extraction
+    +--> PDF signature / metadata integrity
+    +--> VIO signature / expected CPF / official portrait
     |
     v
 Guided live face capture
@@ -16,15 +16,15 @@ Guided live face capture
     +--> randomized illumination challenge
     |
     v
-Live face <-> CNH portrait 1:1 match
+Live face <-> signed VIO portrait
     |
     v
 approved / review / rejected + evidence
 ```
 
-## Phase 1 - Web Capture SDK 2.0
+## Phase 1 - Web capture foundation
 
-Status: foundation implemented.
+Status: implemented.
 
 - Local brightness, contrast and sharpness preflight.
 - Guided capture status.
@@ -35,7 +35,41 @@ Status: foundation implemented.
 - Passive PAD fail-closed by default.
 - Architecture ready for a WASM capture runtime.
 
-Next additions:
+## Phase 2 - CNH Digital identity check
+
+Status: MVP implemented.
+
+- Issuer creates a check with expected CPF and minimum PDF signing date.
+- Opaque verification link.
+- Original CNH Digital PDF only.
+- PDF digital-signature validation.
+- Full-document signature coverage requirement.
+- Official signer and metadata consistency profile.
+- VIO v1-v6 decode and signature validation.
+- Expected CPF comparison.
+- Embedded official portrait extraction.
+- Reference SFace embedding.
+- Browser liveness capture.
+- CNH portrait vs live face 1:1 comparison.
+- Issuer result lookup by check ID.
+- Raw PDF and portrait are not persisted.
+- Reference embedding is cleared after completion or expiration.
+
+Physical CNH capture, front/back OCR and generic document onboarding are intentionally outside the current product scope.
+
+## Phase 3 - Identity hardening
+
+- Regression corpus of legitimate CNH Digital PDFs from multiple DETRAN issuers.
+- Stronger ICP-Brasil long-term signature/revocation validation.
+- Transactional shared identity/session store.
+- Per-tenant issuer credentials and authorization.
+- Distributed link/IP/device abuse controls.
+- Cross-check document reuse analytics using PDF hashes.
+- Audit events and trace IDs.
+- Explicit retention/deletion policy.
+- KMS/HSM key storage and rotation.
+
+## Phase 4 - Browser capture quality
 
 - Browser face tracking.
 - Landmark stability.
@@ -44,25 +78,7 @@ Next additions:
 - Occlusion and eye-visibility checks.
 - Web Worker/WASM execution boundary.
 
-## Phase 2 - CNH capture
-
-- Front/back capture UX.
-- Document edge detection.
-- Perspective correction.
-- Glare, blur and crop quality checks.
-- OCR and field normalization.
-- Portrait extraction.
-- Evidence package for document processing.
-
-## Phase 3 - CNH portrait vs live face
-
-- Separate document-portrait embedding pipeline.
-- Model/version metadata on every template.
-- 1:1 face comparison.
-- Configurable review band.
-- Mismatch diagnostics without exposing sensitive internals to the end user.
-
-## Phase 4 - Advanced liveness
+## Phase 5 - Advanced liveness
 
 - Multiple PAD models or calibrated ensemble.
 - Optical-flow consistency.
@@ -70,29 +86,20 @@ Next additions:
 - Regional illumination response.
 - Replay and repeated-frame detection.
 - Injection-oriented browser telemetry.
+- Native SDK/device attestation option for higher-risk use cases.
 
-## Phase 5 - Evaluation lab
+## Phase 6 - Evaluation lab
 
 Build a governed dataset and repeatable harness for:
 
-- Genuine captures across devices and lighting conditions.
-- Printed photos.
-- Photos displayed on phones and monitors.
-- Replayed videos.
-- Moved photos and moved screens.
-- Partial occlusion.
-- Masks where legally and operationally appropriate to test.
-- Deepfake and virtual-camera injection attempts.
-- Different ages, skin tones, camera qualities and environmental conditions representative of deployment.
+- genuine captures across devices and lighting conditions;
+- printed photos;
+- photos displayed on phones and monitors;
+- replayed videos;
+- moved photos and moved screens;
+- partial occlusion;
+- masks where operationally appropriate to test;
+- deepfake and virtual-camera injection attempts;
+- representative ages, skin tones, camera qualities and environments.
 
-Measure at minimum FMR/FNMR for identity matching and APCER/BPCER for PAD. Thresholds and liveness weights must be calibrated from measured results rather than treated as production constants.
-
-## Phase 6 - Production controls
-
-- Application/tenant authentication.
-- Per-tenant, per-subject and network abuse controls.
-- Audit events and trace IDs.
-- Key rotation and KMS/HSM storage.
-- Retention policies and deletion workflows.
-- Observability and evaluation drift monitoring.
-- Native SDK/device attestation option for higher-risk customers.
+Measure at minimum FMR/FNMR for identity matching and APCER/BPCER for PAD. Production thresholds and fusion weights must be calibrated from measured results rather than treated as fixed defaults.
