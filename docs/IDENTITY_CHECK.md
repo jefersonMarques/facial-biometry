@@ -30,21 +30,22 @@ reference SFace embedding
   |
   | raw PDF and portrait discarded
   v
-continuous camera guidance
-  |
-  +--> phase 1: face farther from camera
-  +--> phase 2: face closer to camera
-  +--> positioning/quality samples do not consume a biometric attempt
+user clicks Start biometrics
   |
   v
-server-generated liveness challenge
+camera starts and stays on
   |
-  +--> guided far/near frames
-  +--> challenge frames
-  +--> multi-frame SFace embedding
+  +--> phase 1: guide face into the smaller oval
+  +--> automatic first capture (short multi-frame burst)
+  +--> oval expands
+  +--> phase 2: guide face into the larger oval
+  +--> automatic second capture (short multi-frame burst)
   |
   v
-live embedding <-> CNH embedding
+passive PAD + far/near temporal/scale evidence
+  |
+  v
+multi-frame SFace embedding <-> CNH embedding
   |
   v
 approved / review / rejected
@@ -93,9 +94,9 @@ All require `X-FaceProof-Identity-Token`.
 
 The `/v1/identity/guide` endpoint is a low-resolution, non-persistent positioning preflight. It uses YuNet to return normalized face position, scale, roll and face-quality signals. It does not create or consume a biometric attempt.
 
-The browser keeps the same camera stream open while the user completes two guided phases. The first phase captures stable frames with the face farther from the camera; the second enlarges the oval and captures stable frames with the face closer. Only after both phases pass does the server issue the randomized liveness challenge.
+The browser keeps the same camera stream open for the entire biometric flow. After the user clicks **Start biometrics**, YuNet guides the face into a smaller oval. Once framing is stable, FaceProof makes the first automatic capture as a short multi-frame burst. The oval then expands, the user moves closer, and a second guided multi-frame capture is made automatically. There is no third visible capture/challenge step.
 
-Low-quality completed captures return a recapture-required response and keep the identity check in `biometry_pending`; they do not consume one of the final biometric attempts.
+The two capture bursts are analyzed together for passive PAD, temporal motion, far-to-near scale change, quality, face presence and a multi-frame SFace embedding. Poor-quality completion returns a recapture-required response while keeping the identity check in `biometry_pending`; this does not consume one of the final biometric attempts.
 
 ## PDF authenticity policy
 
