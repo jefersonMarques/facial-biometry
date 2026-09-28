@@ -46,7 +46,7 @@ export class BiometricClient {
             method: "POST",
         });
     }
-    async completeIdentityCheck(token, session, capture) {
+    async completeIdentityCheck(token, session, guidedFrames) {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
         }
@@ -55,9 +55,7 @@ export class BiometricClient {
             body: JSON.stringify({
                 sessionId: session.sessionId,
                 sessionToken: session.sessionToken,
-                frames: capture.frames,
-                guidedFrames: capture.guidedFrames ?? [],
-                metadata: capture.metadata,
+                guidedFrames,
             }),
         });
     }
