@@ -9,6 +9,7 @@ const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
 const QUALITY_FALLBACK_SAMPLES = 5;
+const FIRST_CAPTURE_MAX_GUIDE_POSTS = 8;
 const NEAR_HOLD_SECONDS = 3;
 const PHASE_GUIDE = {
     far: {
@@ -244,6 +245,8 @@ async function waitForFacePhase(phase) {
     let stableSamples = 0;
     let networkFailures = 0;
     let qualityLimitedSamples = 0;
+    let guidePosts = 0;
+    let firstCaptureFallbackEligible = false;
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
     biometricStatus.textContent = "Posicione o rosto no oval e siga as orientações.";
@@ -257,6 +260,7 @@ async function waitForFacePhase(phase) {
         try {
             guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
             networkFailures = 0;
+            guidePosts++;
         }
         catch (error) {
             networkFailures++;
@@ -275,6 +279,22 @@ async function waitForFacePhase(phase) {
         const qualityLimited = assessment.captureReady &&
             clientQualityUsable &&
             (!clientQualityGood || !serverQualityGood);
+        if (phase === "far" && assessment.captureReady && clientQualityUsable) {
+            firstCaptureFallbackEligible = true;
+        }
+        if (phase === "far" &&
+            firstCaptureFallbackEligible &&
+            guidePosts >= FIRST_CAPTURE_MAX_GUIDE_POSTS &&
+            !assessment.ready) {
+            cameraState.textContent = "Pronto para tentar";
+            biometricStatus.textContent = "O rosto está em uma posição utilizável. Se estiver pronto, continue.";
+            faceGuide.classList.remove("guide-ready");
+            faceGuide.classList.add("guide-near");
+            setProximityIndicator(assessment.proximityPercent, "yellow");
+            await waitForManualReady();
+            biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade na análise.";
+            return true;
+        }
         if (assessment.captureReady && !clientQualityUsable) {
             qualityLimitedSamples = 0;
             stableSamples = 0;
@@ -298,8 +318,10 @@ async function waitForFacePhase(phase) {
             setProximityIndicator(assessment.proximityPercent, "yellow");
             if (qualityLimitedSamples >= QUALITY_FALLBACK_SAMPLES) {
                 if (phase === "far") {
+                    cameraState.textContent = "Pronto para tentar";
+                    biometricStatus.textContent = "A qualidade está próxima do ideal. Se estiver pronto, continue.";
                     await waitForManualReady();
-                    biometricStatus.textContent = "Certo. Vamos tentar a captura e validar a qualidade na análise.";
+                    biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade na análise.";
                     return true;
                 }
                 const heldStill = await holdStillForAutomaticCapture(phase);
