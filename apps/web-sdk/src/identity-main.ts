@@ -539,7 +539,11 @@ function renderIdentityResult(
                 ${escapeHtml(match.summary)}
             </div>
 
-            <div class="match-scale" aria-label="Posição do score facial em relação ao limiar técnico">
+            <div
+                class="match-scale"
+                style="--threshold-position: ${scorePosition(result.matchThreshold)}%"
+                aria-label="Posição do score facial em relação ao limiar técnico"
+            >
                 <div class="match-scale-track">
                     <div
                         class="match-scale-threshold"
