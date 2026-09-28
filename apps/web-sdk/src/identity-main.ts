@@ -24,6 +24,9 @@ const biometryPanel = requiredElement<HTMLElement>("biometryPanel");
 const finalPanel = requiredElement<HTMLElement>("finalPanel");
 const fileInput = requiredElement<HTMLInputElement>("cnhFile");
 const uploadButton = requiredElement<HTMLButtonElement>("uploadButton");
+const fileDrop = fileInput.closest(".file-drop") as HTMLLabelElement;
+const fileTitle = requiredElement<HTMLElement>("cnhFileTitle");
+const fileName = requiredElement<HTMLElement>("cnhFileName");
 const startButton = requiredElement<HTMLButtonElement>("startBiometryButton");
 const documentStatus = requiredElement<HTMLDivElement>("documentStatus");
 const biometricStatus = requiredElement<HTMLDivElement>("biometricStatus");
@@ -45,6 +48,19 @@ let manualReadyResolver: (() => void) | null = null;
 void initialize();
 
 uploadButton.addEventListener("click", () => void uploadDocument());
+fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (!file) {
+        resetSelectedFileUI();
+        return;
+    }
+
+    fileDrop.classList.add("file-selected");
+    fileTitle.textContent = "CNH Digital selecionada";
+    fileName.textContent = file.name;
+    documentStatus.textContent = "Arquivo selecionado. Iniciando validação...";
+    window.setTimeout(() => void uploadDocument(), 100);
+});
 startButton.addEventListener("click", () => {
     if (manualReadyResolver) {
         const resolve = manualReadyResolver;
@@ -84,7 +100,9 @@ async function uploadDocument(): Promise<void> {
         documentStatus.textContent = "Selecione o PDF da sua CNH Digital.";
         return;
     }
-    if (file.type && file.type !== "application/pdf") {
+    const hasPDFExtension = file.name.toLowerCase().endsWith(".pdf");
+    const hasPDFMime = file.type.toLowerCase() === "application/pdf";
+    if (!hasPDFExtension && !hasPDFMime) {
         documentStatus.textContent = "Envie o arquivo PDF original da CNH Digital.";
         return;
     }
@@ -102,6 +120,7 @@ async function uploadDocument(): Promise<void> {
     } catch (error) {
         documentStatus.textContent = friendlyDocumentError(errorMessage(error));
         fileInput.value = "";
+        resetSelectedFileUI();
     } finally {
         busy = false;
         if (!biometryPanel.hidden) {
@@ -110,6 +129,13 @@ async function uploadDocument(): Promise<void> {
         uploadButton.disabled = false;
         fileInput.disabled = false;
     }
+}
+
+
+function resetSelectedFileUI(): void {
+    fileDrop.classList.remove("file-selected");
+    fileTitle.textContent = "Selecionar CNH Digital";
+    fileName.textContent = "Arquivo PDF";
 }
 
 async function runBiometry(): Promise<void> {
