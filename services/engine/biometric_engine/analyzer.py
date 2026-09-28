@@ -70,10 +70,28 @@ class BiometricAnalyzer:
         brightness, _ = brightness_score(face_crop)
         size_score = face_size_score(image, detected.bbox)
         quality = clamp01(0.45 * sharpness + 0.30 * brightness + 0.25 * size_score)
-        embedding = self._encoder.encode(image, detected)
+
+        reference_images = [
+            image,
+            _normalize_reference_lighting(image, clip_limit=1.35),
+            _normalize_reference_lighting(image, clip_limit=1.70),
+        ]
+        reference_embeddings = [
+            self._encoder.encode(reference_image, detected)
+            for reference_image in reference_images
+        ]
+        embedding = np.mean(np.vstack(reference_embeddings), axis=0).astype(np.float32)
+        embedding_norm = float(np.linalg.norm(embedding))
+        if embedding_norm <= 1e-8:
+            raise ValueError("combined reference embedding is zero")
+        embedding = embedding / embedding_norm
 
         return {
             "embedding": [round(float(value), 8) for value in embedding.tolist()],
+            "embeddings": [
+                [round(float(value), 8) for value in item.tolist()]
+                for item in reference_embeddings
+            ],
             "embeddingModel": self._encoder.model_name,
             "quality": {
                 "score": round(float(quality), 6),
@@ -165,7 +183,7 @@ class BiometricAnalyzer:
         frame_analyses: list[FrameAnalysis] = []
         face_crops: list[np.ndarray] = []
         normalized_centers: list[tuple[float, float, float]] = []
-        embeddings: list[tuple[float, np.ndarray]] = []
+        embeddings: list[tuple[float, str, int, np.ndarray]] = []
         far_scales: list[float] = []
         near_scales: list[float] = []
         center_scores: list[float] = []
@@ -176,7 +194,7 @@ class BiometricAnalyzer:
         far_count = 0
         near_count = 0
 
-        for frame_payload in frames_payload:
+        for frame_index, frame_payload in enumerate(frames_payload):
             if not isinstance(frame_payload, dict):
                 continue
             phase = str(frame_payload.get("phase", "")).strip().lower()
@@ -225,7 +243,7 @@ class BiometricAnalyzer:
                 near_count += 1
 
             embedding = self._encoder.encode(image, detected)
-            embeddings.append((quality, embedding))
+            embeddings.append((quality, phase, frame_index, embedding))
             face_crops.append(face_crop)
             normalized_centers.append((float(center_x), float(center_y), float(normalized_scale)))
             frame_analyses.append(
@@ -291,8 +309,13 @@ class BiometricAnalyzer:
             * (0.70 + 0.30 * presence_gate)
         )
 
-        embeddings.sort(key=lambda item: item[0], reverse=True)
-        selected_embeddings = [embedding for _, embedding in embeddings[:8]]
+        near_embeddings = [item for item in embeddings if item[1] == "near"]
+        near_embeddings.sort(key=lambda item: item[0], reverse=True)
+        selected_near = near_embeddings[:3]
+        if len(selected_near) < 3:
+            raise ValueError("not enough high-quality near face embeddings")
+
+        selected_embeddings = [embedding for _, _, _, embedding in selected_near]
         combined_embedding = np.mean(np.vstack(selected_embeddings), axis=0).astype(np.float32)
         embedding_norm = float(np.linalg.norm(combined_embedding))
         if embedding_norm <= 1e-8:
@@ -308,7 +331,16 @@ class BiometricAnalyzer:
         if temporal_score < 0.20:
             diagnostics.append("temporal motion signal is weak")
 
-        best_index = int(np.argmax([frame.quality for frame in frame_analyses]))
+        best_frame_index = int(selected_near[0][2])
+        face_embeddings = [
+            {
+                "frameIndex": int(frame_index),
+                "phase": phase,
+                "quality": round(float(quality), 6),
+                "embedding": [round(float(value), 8) for value in embedding.tolist()],
+            }
+            for quality, phase, frame_index, embedding in selected_near
+        ]
 
         return {
             "livenessScore": round(float(liveness_score), 6),
@@ -338,8 +370,9 @@ class BiometricAnalyzer:
                 "processedFrames": len(frames_payload),
             },
             "embedding": [round(float(value), 8) for value in combined_embedding.tolist()],
+            "faceEmbeddings": face_embeddings,
             "embeddingModel": self._encoder.model_name,
-            "bestFrameIndex": best_index,
+            "bestFrameIndex": best_frame_index,
             "diagnostics": diagnostics,
         }
 
@@ -627,10 +660,20 @@ def _guided_capture_score(
     )
 
 
+def _normalize_reference_lighting(image: np.ndarray, clip_limit: float) -> np.ndarray:
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    luminance, channel_a, channel_b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8))
+    normalized_luminance = clahe.apply(luminance)
+    blended_luminance = cv2.addWeighted(luminance, 0.68, normalized_luminance, 0.32, 0)
+    normalized = cv2.merge((blended_luminance, channel_a, channel_b))
+    return cv2.cvtColor(normalized, cv2.COLOR_LAB2BGR)
+
+
 def _prepare_reference_image(
     image: np.ndarray,
-    minimum_short_side: int = 240,
-    maximum_long_side: int = 960,
+    minimum_short_side: int = 480,
+    maximum_long_side: int = 1280,
 ) -> np.ndarray:
     height, width = image.shape[:2]
     if height <= 0 or width <= 0:
