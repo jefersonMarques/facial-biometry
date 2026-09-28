@@ -39,13 +39,23 @@ export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_r
 export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
 export FACEPROOF_ALLOW_REVIEW_ENROLLMENT="${FACEPROOF_ALLOW_REVIEW_ENROLLMENT:-true}"
 
+missing_required=()
 for tool in pdfsig pdfinfo pdftoppm; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "WARNING: $tool not found. CNH Digital validation requires Poppler."
+        missing_required+=("$tool")
+    fi
+done
+if [ "${#missing_required[@]}" -gt 0 ]; then
+    echo "WARNING: IDENTITY CHECK unavailable until these tools are installed/configured: ${missing_required[*]}"
+fi
+
+for tool in pdfimages pdftotext openssl; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "WARNING: $tool not found; complementary PDF forensics will be limited."
     fi
 done
 if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; then
-    echo "WARNING: bpgdec not found. The VIO portrait cannot be converted."
+    echo "INFO: bpgdec not found. CNH identity can still use the signed PDF portrait."
 fi
 
 cleanup() {
