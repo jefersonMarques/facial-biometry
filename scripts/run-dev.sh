@@ -40,13 +40,16 @@ export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/mi
 export FACEPROOF_ALLOW_REVIEW_ENROLLMENT="${FACEPROOF_ALLOW_REVIEW_ENROLLMENT:-true}"
 
 missing_required=()
-for tool in pdfsig pdfinfo pdftoppm; do
+for tool in pdfinfo pdftoppm; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         missing_required+=("$tool")
     fi
 done
 if [ "${#missing_required[@]}" -gt 0 ]; then
     echo "WARNING: IDENTITY CHECK unavailable until these tools are installed/configured: ${missing_required[*]}"
+fi
+if ! command -v pdfsig >/dev/null 2>&1; then
+    echo "INFO: pdfsig not found. FaceProof will use native Go cryptographic PDF signature verification."
 fi
 
 for tool in pdfimages pdftotext; do
@@ -55,7 +58,7 @@ for tool in pdfimages pdftotext; do
     fi
 done
 if ! command -v openssl >/dev/null 2>&1; then
-    echo "WARNING: openssl not found. CNHs with a currently expired signer certificate cannot prove that the certificate was valid at signing time."
+    echo "INFO: openssl not found. Native verification still checks certificate validity dates; openssl is complementary evidence."
 fi
 if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; then
     echo "INFO: bpgdec not found. CNH identity can still use the signed PDF portrait."
