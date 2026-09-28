@@ -10,6 +10,8 @@ func TestNormalizeGuidedFramesRequiresFarAndNearPhases(t *testing.T) {
 	frames := []domain.GuidedCapturedFrame{
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "near"},
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "near"},
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "near"},
 	}
@@ -18,13 +20,15 @@ func TestNormalizeGuidedFramesRequiresFarAndNearPhases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(normalized) != 4 {
+	if len(normalized) != 6 {
 		t.Fatalf("normalized guided frames = %d", len(normalized))
 	}
 }
 
 func TestNormalizeGuidedFramesRejectsSinglePhase(t *testing.T) {
 	frames := []domain.GuidedCapturedFrame{
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
 		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
