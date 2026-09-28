@@ -7,13 +7,10 @@ export function resolveApiBaseUrl(): string {
                 return url.origin;
             }
         } catch {
-            // Ignora override inválido e usa a configuração segura abaixo.
+            // Ignora override inválido e mantém o mesmo origin.
         }
     }
 
-    if (isLocalHostname(window.location.hostname)) {
-        return "http://localhost:8080";
-    }
     return window.location.origin;
 }
 
