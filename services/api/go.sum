@@ -1,3 +1,5 @@
+github.com/benedoc-inc/pdfer/v2 v2.9.0 h1:GetiW6H4xOu8s0f7TCxRWv85EhUcm5oW+fnhyocLuwE=
+github.com/benedoc-inc/pdfer/v2 v2.9.0/go.mod h1:YJxv/9mkt/P76NuedOMNJdrCXVO1oDcLCIxytaQBIOc=
 github.com/makiuchi-d/gozxing v0.1.1 h1:xxqijhoedi+/lZlhINteGbywIrewVdVv2wl9r5O9S1I=
 github.com/makiuchi-d/gozxing v0.1.1/go.mod h1:eRIHbOjX7QWxLIDJoQuMLhuXg9LAuw6znsUtRkNw9DU=
 golang.org/x/text v0.3.7 h1:olpwvP2KacW1ZWvsR7uQhoyTYvKAupfQrRGBFM352Gk=
