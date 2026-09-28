@@ -15,6 +15,9 @@ const biometryPanel = requiredElement("biometryPanel");
 const finalPanel = requiredElement("finalPanel");
 const fileInput = requiredElement("cnhFile");
 const uploadButton = requiredElement("uploadButton");
+const fileDrop = fileInput.closest(".file-drop");
+const fileTitle = requiredElement("cnhFileTitle");
+const fileName = requiredElement("cnhFileName");
 const startButton = requiredElement("startBiometryButton");
 const documentStatus = requiredElement("documentStatus");
 const biometricStatus = requiredElement("biometricStatus");
@@ -33,6 +36,18 @@ let autoBiometryScheduled = false;
 let manualReadyResolver = null;
 void initialize();
 uploadButton.addEventListener("click", () => void uploadDocument());
+fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (!file) {
+        resetSelectedFileUI();
+        return;
+    }
+    fileDrop.classList.add("file-selected");
+    fileTitle.textContent = "CNH Digital selecionada";
+    fileName.textContent = file.name;
+    documentStatus.textContent = "Arquivo selecionado. Iniciando validação...";
+    window.setTimeout(() => void uploadDocument(), 100);
+});
 startButton.addEventListener("click", () => {
     if (manualReadyResolver) {
         const resolve = manualReadyResolver;
@@ -68,7 +83,9 @@ async function uploadDocument() {
         documentStatus.textContent = "Selecione o PDF da sua CNH Digital.";
         return;
     }
-    if (file.type && file.type !== "application/pdf") {
+    const hasPDFExtension = file.name.toLowerCase().endsWith(".pdf");
+    const hasPDFMime = file.type.toLowerCase() === "application/pdf";
+    if (!hasPDFExtension && !hasPDFMime) {
         documentStatus.textContent = "Envie o arquivo PDF original da CNH Digital.";
         return;
     }
@@ -85,6 +102,7 @@ async function uploadDocument() {
     catch (error) {
         documentStatus.textContent = friendlyDocumentError(errorMessage(error));
         fileInput.value = "";
+        resetSelectedFileUI();
     }
     finally {
         busy = false;
@@ -94,6 +112,11 @@ async function uploadDocument() {
         uploadButton.disabled = false;
         fileInput.disabled = false;
     }
+}
+function resetSelectedFileUI() {
+    fileDrop.classList.remove("file-selected");
+    fileTitle.textContent = "Selecionar CNH Digital";
+    fileName.textContent = "Arquivo PDF";
 }
 async function runBiometry() {
     if (busy) {
