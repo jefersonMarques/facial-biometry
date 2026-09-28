@@ -218,11 +218,13 @@ async function runBiometry() {
         }
     }
     catch (error) {
-        biometricStatus.textContent = friendlyBiometryError(errorMessage(error));
+        const message = errorMessage(error);
+        const infrastructureFailure = isInfrastructureBiometryError(message);
+        biometricStatus.textContent = friendlyBiometryError(message);
         startButton.hidden = false;
         startButton.disabled = false;
-        startButton.textContent = "Estou pronto";
-        cameraState.textContent = "Câmera pausada";
+        startButton.textContent = infrastructureFailure ? "Tentar novamente" : "Estou pronto";
+        cameraState.textContent = infrastructureFailure ? "Falha temporária na análise" : "Câmera pausada";
         camera.stop();
     }
     finally {
@@ -793,6 +795,9 @@ function friendlyDocumentError(message) {
     return generic;
 }
 function friendlyBiometryError(message) {
+    if (isInfrastructureBiometryError(message)) {
+        return "A análise demorou mais que o esperado ou a conexão com o servidor foi interrompida. Tente novamente.";
+    }
     if (message.includes("attempt limit")) {
         return "O limite de tentativas biométricas desta verificação foi atingido.";
     }
@@ -806,6 +811,12 @@ function friendlyBiometryError(message) {
 }
 function isRecaptureRequired(message) {
     return message.includes("recapture required") || message.includes("capture quality insufficient");
+}
+function isInfrastructureBiometryError(message) {
+    return message.includes("HTTP 502") ||
+        message.includes("HTTP 503") ||
+        message.includes("FaceProof API unavailable") ||
+        message.includes("biometric engine failed");
 }
 function formatExpiration(value) {
     const date = new Date(value);
