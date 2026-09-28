@@ -19,7 +19,7 @@ CNH Digital PDF
     |
     +--> PDF signature / metadata integrity
     +--> VIO signature / CNH template / CPF
-    +--> official embedded portrait
+    +--> signed document portrait
     |
     v
 temporary reference embedding
