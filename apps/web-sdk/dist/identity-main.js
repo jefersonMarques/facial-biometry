@@ -3,8 +3,11 @@ import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
 const GUIDE_SAMPLE_MS = 420;
-const GUIDE_REQUIRED_STABLE_SAMPLES = 3;
+const GUIDE_READY_SAMPLES = 2;
+const PHASE_CAPTURE_FRAMES = 4;
+const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
+
 const client = new BiometricClient(resolveApiBaseUrl());
 const documentPanel = requiredElement("documentPanel");
 const biometryPanel = requiredElement("biometryPanel");
@@ -16,37 +19,43 @@ const documentStatus = requiredElement("documentStatus");
 const biometricStatus = requiredElement("biometricStatus");
 const resultPanel = requiredElement("identityResult");
 const video = requiredElement("camera");
-const lightLayer = requiredElement("lightLayer");
 const progressBar = requiredElement("progressBar");
 const cameraState = requiredElement("cameraState");
 const expiresText = requiredElement("expiresText");
 const faceGuide = requiredElement("faceGuide");
 const guidePhaseText = requiredElement("guidePhaseText");
+const captureFlash = requiredElement("captureFlash");
+
 const camera = new CameraCapture(video);
 let identityToken = "";
 let busy = false;
+
 void initialize();
+
 uploadButton.addEventListener("click", () => void uploadDocument());
 startButton.addEventListener("click", () => void runBiometry());
 window.addEventListener("beforeunload", () => camera.stop());
+
 async function initialize() {
     identityToken = consumeIdentityToken();
     if (!identityToken) {
         showFatal("Link de verificação inválido ou incompleto.");
         return;
     }
+
     try {
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
-    }
-    catch (error) {
+    } catch (error) {
         showFatal(errorMessage(error));
     }
 }
+
 async function uploadDocument() {
     if (busy) {
         return;
     }
+
     const file = fileInput.files?.[0];
     if (!file) {
         documentStatus.textContent = "Selecione o PDF da sua CNH Digital.";
@@ -56,21 +65,21 @@ async function uploadDocument() {
         documentStatus.textContent = "Envie o arquivo PDF original da CNH Digital.";
         return;
     }
+
     busy = true;
     uploadButton.disabled = true;
     fileInput.disabled = true;
     documentStatus.textContent = "Validando assinatura digital, QR Code e documento...";
+
     try {
         await client.uploadIdentityDocument(identityToken, file);
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
         documentStatus.textContent = "CNH Digital autenticada. Continue para a biometria.";
-    }
-    catch (error) {
+    } catch (error) {
         documentStatus.textContent = friendlyDocumentError(errorMessage(error));
         fileInput.value = "";
-    }
-    finally {
+    } finally {
         busy = false;
         if (!biometryPanel.hidden) {
             return;
@@ -79,91 +88,90 @@ async function uploadDocument() {
         fileInput.disabled = false;
     }
 }
+
 async function runBiometry() {
     if (busy) {
         return;
     }
+
     busy = true;
     startButton.disabled = true;
     startButton.textContent = "Verificação em andamento";
     biometricStatus.textContent = "Abrindo a câmera...";
     progressBar.style.width = "0%";
+
     let completed = false;
+
     try {
         await camera.start();
         cameraState.textContent = "Câmera ativa";
+
         while (!completed) {
-            const farFrames = await guideFacePhase("far");
-            const nearFrames = await guideFacePhase("near");
-            const guidedFrames = [...farFrames, ...nearFrames];
-            guidePhaseText.textContent = "Prova de vida";
-            faceGuide.className = "face-guide phase-near guide-ready";
-            biometricStatus.textContent = "Perfeito. Mantenha-se nessa posição.";
-            progressBar.style.width = "0%";
+            await waitForFacePhase("far");
+
             const session = await client.createIdentitySession(identityToken);
-            const capture = await camera.capture(session, {
-                onProgress(progress) {
-                    progressBar.style.width = `${Math.round(progress * 100)}%`;
-                },
-                onLightChange(value) {
-                    const opacity = Math.max(0, Math.min(0.72, value * 0.72));
-                    lightLayer.style.background = `rgba(255, 255, 255, ${opacity.toFixed(3)})`;
-                },
-                onQualityChange(quality) {
-                    renderCameraQuality(quality);
-                },
-                onStatus(message) {
-                    biometricStatus.textContent = message;
-                },
-            }, { skipReadiness: true });
-            capture.guidedFrames = guidedFrames;
+            const farFrames = await capturePhase("far");
+            await showCaptureSuccess("Primeira captura concluída");
+
+            await waitForFacePhase("near");
+            const nearFrames = await capturePhase("near");
+            await showCaptureSuccess("Segunda captura concluída");
+
+            biometricStatus.textContent = "Analisando sua identidade...";
+            guidePhaseText.textContent = "Verificando";
+            progressBar.style.width = "100%";
+
             try {
-                const result = await client.completeIdentityCheck(identityToken, session, capture);
+                const result = await client.completeIdentityCheck(
+                    identityToken,
+                    session,
+                    [...farFrames, ...nearFrames],
+                );
                 renderIdentityResult(result);
                 completed = true;
-            }
-            catch (error) {
+            } catch (error) {
                 const message = errorMessage(error);
                 if (isRecaptureRequired(message)) {
-                    lightLayer.style.background = "transparent";
                     progressBar.style.width = "0%";
                     faceGuide.className = "face-guide phase-far";
                     guidePhaseText.textContent = "1 de 2 · Mais longe";
-                    biometricStatus.textContent = "A captura não ficou boa o suficiente. A câmera continuará ligada; vamos reenquadrar.";
+                    biometricStatus.textContent = "A captura não ficou boa o suficiente. Vamos refazer sem desligar a câmera.";
                     await sleep(900);
                     continue;
                 }
                 throw error;
             }
         }
-    }
-    catch (error) {
+    } catch (error) {
         biometricStatus.textContent = friendlyBiometryError(errorMessage(error));
         startButton.disabled = false;
         startButton.textContent = "Continuar verificação facial";
         cameraState.textContent = "Câmera pausada";
         camera.stop();
-    }
-    finally {
-        lightLayer.style.background = "transparent";
+    } finally {
         if (completed) {
             camera.stop();
         }
         busy = false;
     }
 }
-async function guideFacePhase(phase) {
-    const stableFrames = [];
+
+async function waitForFacePhase(phase) {
+    let stableSamples = 0;
     let networkFailures = 0;
+
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "1 de 2 · Mais longe" : "2 de 2 · Mais perto";
     biometricStatus.textContent = phase === "far"
-        ? "Centralize o rosto e mantenha uma pequena distância da câmera."
-        : "Agora aproxime o rosto até preencher o oval maior.";
-    while (true) {
+        ? "Posicione o rosto dentro do oval."
+        : "Aproxime o rosto e encaixe-o no oval maior.";
+    progressBar.style.width = "0%";
+
+    while (stableSamples < GUIDE_READY_SAMPLES) {
         const snapshot = camera.snapshotForGuide();
+
         if (!snapshot.quality.acceptable) {
-            stableFrames.length = 0;
+            stableSamples = 0;
             faceGuide.classList.remove("guide-ready");
             cameraState.textContent = snapshot.quality.issue ?? "Ajuste a câmera";
             biometricStatus.textContent = snapshot.quality.issue ?? "Melhore a imagem para continuar.";
@@ -171,38 +179,73 @@ async function guideFacePhase(phase) {
             await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
+
         let guide;
         try {
             guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
             networkFailures = 0;
-        }
-        catch (error) {
+        } catch (error) {
             networkFailures++;
-            const message = errorMessage(error);
-            if (message.includes("expired") || message.includes("attempt limit")) {
-                throw error;
-            }
             if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
                 throw error;
             }
-            cameraState.textContent = "Câmera ativa";
-            biometricStatus.textContent = "Ajustando a análise do enquadramento...";
+            biometricStatus.textContent = "Ajustando o enquadramento...";
             await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
+
         const instruction = guideInstruction(guide, phase);
         cameraState.textContent = guide.faceDetected ? "Rosto detectado" : "Procurando rosto";
+
         if (!instruction.ready) {
-            stableFrames.length = 0;
+            stableSamples = 0;
             faceGuide.classList.remove("guide-ready");
             biometricStatus.textContent = instruction.message;
             progressBar.style.width = "0%";
             await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
+
+        stableSamples++;
         faceGuide.classList.add("guide-ready");
         biometricStatus.textContent = "Perfeito. Mantenha-se assim...";
-        stableFrames.push({
+        progressBar.style.width = `${Math.round((stableSamples / GUIDE_READY_SAMPLES) * 100)}%`;
+        await sleep(GUIDE_SAMPLE_MS);
+    }
+}
+
+async function capturePhase(phase) {
+    const frames = [];
+
+    biometricStatus.textContent = phase === "far"
+        ? "Capturando a primeira imagem..."
+        : "Capturando a segunda imagem...";
+    progressBar.style.width = "0%";
+
+    while (frames.length < PHASE_CAPTURE_FRAMES) {
+        const snapshot = camera.snapshotForGuide(480, 0.82);
+
+        if (!snapshot.quality.acceptable) {
+            frames.length = 0;
+            faceGuide.classList.remove("guide-ready");
+            biometricStatus.textContent = snapshot.quality.issue ?? "Mantenha o rosto imóvel.";
+            await waitForFacePhase(phase);
+            continue;
+        }
+
+        const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
+        const instruction = guideInstruction(guide, phase);
+
+        if (!instruction.ready) {
+            frames.length = 0;
+            faceGuide.classList.remove("guide-ready");
+            biometricStatus.textContent = instruction.message;
+            await waitForFacePhase(phase);
+            continue;
+        }
+
+        faceGuide.classList.add("guide-ready");
+        frames.push({
             imageBase64: snapshot.imageBase64,
             phase,
             clientQuality: {
@@ -211,37 +254,46 @@ async function guideFacePhase(phase) {
                 sharpness: snapshot.quality.sharpness,
             },
         });
-        if (stableFrames.length > GUIDE_REQUIRED_STABLE_SAMPLES) {
-            stableFrames.shift();
-        }
-        progressBar.style.width = `${Math.round((stableFrames.length / GUIDE_REQUIRED_STABLE_SAMPLES) * 100)}%`;
-        if (stableFrames.length >= GUIDE_REQUIRED_STABLE_SAMPLES) {
-            await sleep(250);
-            return [...stableFrames];
-        }
-        await sleep(GUIDE_SAMPLE_MS);
+        progressBar.style.width = `${Math.round((frames.length / PHASE_CAPTURE_FRAMES) * 100)}%`;
+        await sleep(PHASE_CAPTURE_SAMPLE_MS);
     }
+
+    return frames;
 }
-function guideInstruction(guide, phase) {
+
+async function showCaptureSuccess(message) {
+    biometricStatus.textContent = message;
+    captureFlash.classList.add("visible");
+    await sleep(220);
+    captureFlash.classList.remove("visible");
+    await sleep(280);
+}
+
+function guideInstruction(
+    guide,
+    phase,
+) {
     if (!guide.faceDetected || guide.confidence < 0.82) {
         return { ready: false, message: "Posicione seu rosto dentro do oval." };
     }
+
     if (Math.abs(guide.rollDegrees) > 12) {
         return { ready: false, message: "Mantenha a cabeça reta e olhe para a câmera." };
     }
+
     const centered = Math.abs(guide.centerX - 0.5) <= 0.11 && Math.abs(guide.centerY - 0.46) <= 0.13;
     if (!centered) {
         return { ready: false, message: "Centralize o rosto no oval." };
     }
+
     if (phase === "far") {
         if (guide.heightRatio < 0.26) {
-            return { ready: false, message: "Aproxime-se um pouco da câmera." };
+            return { ready: false, message: "Aproxime-se um pouco." };
         }
         if (guide.heightRatio > 0.42) {
-            return { ready: false, message: "Afaste-se um pouco da câmera." };
+            return { ready: false, message: "Afaste-se um pouco." };
         }
-    }
-    else {
+    } else {
         if (guide.heightRatio < 0.46) {
             return { ready: false, message: "Aproxime o rosto até preencher o oval." };
         }
@@ -249,52 +301,59 @@ function guideInstruction(guide, phase) {
             return { ready: false, message: "Afaste-se só um pouco." };
         }
     }
+
     if (guide.quality.score < 0.38) {
         if (guide.quality.sharpness < 0.30) {
-            return { ready: false, message: "Imagem pouco nítida. Mantenha o aparelho firme e limpe a câmera." };
+            return { ready: false, message: "Imagem pouco nítida. Mantenha o aparelho firme." };
         }
-        return { ready: false, message: "Melhore a iluminação do rosto para continuar." };
+        return { ready: false, message: "Melhore a iluminação do rosto." };
     }
+
     return { ready: true, message: "Perfeito. Mantenha-se assim..." };
 }
+
 function renderStatus(status) {
     expiresText.textContent = formatExpiration(status.expiresAt);
+
     switch (status.status) {
-        case "pending_document":
-        case "processing_document":
-            documentPanel.hidden = false;
-            biometryPanel.hidden = true;
-            finalPanel.hidden = true;
-            break;
-        case "biometry_pending":
-            documentPanel.hidden = true;
-            biometryPanel.hidden = false;
-            finalPanel.hidden = true;
-            startButton.disabled = false;
-            startButton.textContent = "Iniciar verificação facial";
-            break;
-        case "approved":
-        case "review":
-        case "rejected":
-            documentPanel.hidden = true;
-            biometryPanel.hidden = true;
-            finalPanel.hidden = false;
-            renderFinalStatus(status.status);
-            break;
-        case "expired":
-            showFatal("Este link de verificação expirou.");
-            break;
+    case "pending_document":
+    case "processing_document":
+        documentPanel.hidden = false;
+        biometryPanel.hidden = true;
+        finalPanel.hidden = true;
+        break;
+    case "biometry_pending":
+        documentPanel.hidden = true;
+        biometryPanel.hidden = false;
+        finalPanel.hidden = true;
+        startButton.disabled = false;
+        startButton.textContent = "Iniciar verificação facial";
+        break;
+    case "approved":
+    case "review":
+    case "rejected":
+        documentPanel.hidden = true;
+        biometryPanel.hidden = true;
+        finalPanel.hidden = false;
+        renderFinalStatus(status.status);
+        break;
+    case "expired":
+        showFatal("Este link de verificação expirou.");
+        break;
     }
 }
+
 function renderIdentityResult(result) {
     documentPanel.hidden = true;
     biometryPanel.hidden = true;
     finalPanel.hidden = false;
+
     const decisionLabel = {
         approved: "IDENTIDADE CONFIRMADA",
         review: "ANÁLISE NECESSÁRIA",
         rejected: "VERIFICAÇÃO NÃO APROVADA",
     }[result.decision];
+
     resultPanel.innerHTML = `
         <div class="result-header result-${escapeHtml(result.decision)}">
             <span>${escapeHtml(decisionLabel)}</span>
@@ -316,7 +375,8 @@ function renderIdentityResult(result) {
         </div>
     `;
 }
-function renderFinalStatus(status) {
+
+function renderFinalStatus(status: "approved" | "review" | "rejected") {
     const labels = {
         approved: "Identidade confirmada.",
         review: "A verificação será analisada.",
@@ -324,9 +384,7 @@ function renderFinalStatus(status) {
     };
     resultPanel.innerHTML = `<div class="result-header result-${status}"><span>${labels[status]}</span></div>`;
 }
-function renderCameraQuality(quality) {
-    cameraState.textContent = quality.acceptable ? "Qualidade de captura boa" : quality.issue ?? "Ajuste a câmera";
-}
+
 function showFatal(message) {
     camera.stop();
     documentPanel.hidden = true;
@@ -334,6 +392,7 @@ function showFatal(message) {
     finalPanel.hidden = false;
     resultPanel.innerHTML = `<div class="fatal-message">${escapeHtml(message)}</div>`;
 }
+
 function consumeIdentityToken() {
     const fragment = new URLSearchParams(window.location.hash.slice(1));
     const fromFragment = fragment.get("identity")?.trim() ?? "";
@@ -344,6 +403,7 @@ function consumeIdentityToken() {
     }
     return sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
 }
+
 function friendlyDocumentError(message) {
     if (message.includes("dependency") || message.includes("missing pdf") || message.includes("pdftoppm")) {
         return `O servidor ainda não está pronto para validar a CNH: ${message}`;
@@ -363,6 +423,7 @@ function friendlyDocumentError(message) {
     }
     return generic;
 }
+
 function friendlyBiometryError(message) {
     if (message.includes("attempt limit")) {
         return "O limite de tentativas biométricas desta verificação foi atingido.";
@@ -375,9 +436,11 @@ function friendlyBiometryError(message) {
     }
     return message;
 }
+
 function isRecaptureRequired(message) {
     return message.includes("recapture required") || message.includes("capture quality insufficient");
 }
+
 function formatExpiration(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
@@ -385,25 +448,31 @@ function formatExpiration(value) {
     }
     return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
+
 function metric(label, value) {
     return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
+
 function checkLine(label, passed) {
     return `<div class="identity-check"><span>${passed ? "✓" : "×"}</span><strong>${escapeHtml(label)}</strong></div>`;
 }
+
 function percentage(value) {
     return `${(value * 100).toFixed(1)}%`;
 }
-function requiredElement(id) {
+
+function requiredElement(id): T {
     const element = document.getElementById(id);
     if (!element) {
         throw new Error(`Missing required element: ${id}`);
     }
     return element;
 }
+
 function errorMessage(error) {
     return error instanceof Error ? error.message : "Erro inesperado";
 }
+
 function escapeHtml(value) {
     return value
         .replaceAll("&", "&amp;")
@@ -412,6 +481,7 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
 async function sleep(milliseconds) {
-    await new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
