@@ -35,6 +35,14 @@ export interface CapturedFrame {
     clientQuality: ClientFrameQuality;
 }
 
+export type GuidedCapturePhase = "far" | "near";
+
+export interface GuidedCapturedFrame {
+    imageBase64: string;
+    phase: GuidedCapturePhase;
+    clientQuality: ClientFrameQuality;
+}
+
 export interface CaptureMetadata {
     sdkVersion: string;
     startedAtUnixMs: number;
@@ -47,6 +55,7 @@ export interface CaptureMetadata {
 
 export interface CapturePackage {
     frames: CapturedFrame[];
+    guidedFrames?: GuidedCapturedFrame[];
     metadata: CaptureMetadata;
 }
 
@@ -58,6 +67,17 @@ export interface FrameQualityAssessment extends ClientFrameQuality {
 export interface SignalResult {
     score: number;
     status: string;
+}
+
+export interface IdentityGuideResult {
+    faceDetected: boolean;
+    confidence: number;
+    centerX: number;
+    centerY: number;
+    widthRatio: number;
+    heightRatio: number;
+    rollDegrees: number;
+    quality: QualityResult;
 }
 
 export interface QualityResult {
@@ -84,6 +104,7 @@ export interface CompletionResponse {
         passivePad: SignalResult;
         temporalMotion: SignalResult;
         illumination: SignalResult;
+        guidedCapture?: SignalResult;
     };
     quality: QualityResult;
     diagnostics: string[];
@@ -119,6 +140,7 @@ export interface IdentityCompletionResponse {
         passivePad: SignalResult;
         temporalMotion: SignalResult;
         illumination: SignalResult;
+        guidedCapture: SignalResult;
     };
     quality: QualityResult;
     diagnostics: string[];
