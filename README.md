@@ -19,7 +19,11 @@ PDF signature + metadata consistency
     ↓
 VIO signature + CPF + official portrait
     ↓
-browser liveness capture
+continuous far/near face guidance
+    ↓
+randomized liveness capture
+    ↓
+multi-frame live embedding
     ↓
 CNH portrait ↔ live face
     ↓
@@ -40,7 +44,10 @@ See `docs/IDENTITY_CHECK.md` for the protocol and endpoints.
 - expected CPF matching;
 - signed-PDF portrait extraction for biometrics, with VIO/BPG portrait fallback;
 - one-time reference embedding without permanent CNH enrollment;
-- guided browser capture with brightness/contrast/sharpness preflight;
+- continuous camera guidance with a two-stage far/near face oval;
+- YuNet positioning feedback before a biometric attempt is created;
+- low-quality recapture without consuming the biometric-attempt budget;
+- guided far/near evidence plus multiple SFace frames for the live embedding;
 - randomized server-generated illumination challenge;
 - single-use biometric sessions and server-side challenge reconstruction;
 - YuNet detection, SFace embeddings and MiniFASNet V2 passive PAD;
