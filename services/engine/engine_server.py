@@ -26,6 +26,7 @@ ANALYZER = BiometricAnalyzer(
     minifasnet_model_path=env_path("FACEPROOF_MINIFASNET_MODEL", "../../models/minifasnet/MiniFASNetV2.onnx"),
 )
 ANALYZER_LOCK = threading.Lock()
+GUIDE_LOCK = threading.Lock()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -55,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
 
             if self.path == "/guide":
                 payload = self._read_json(max_bytes=2 * 1024 * 1024)
-                with ANALYZER_LOCK:
+                with GUIDE_LOCK:
                     result = ANALYZER.guide(payload)
                 self._write_json(200, result)
                 return
