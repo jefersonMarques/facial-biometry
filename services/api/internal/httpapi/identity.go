@@ -465,6 +465,19 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	}
 
 	similarity, frameSimilarities := matching.RobustCosineSimilarity(referenceEmbeddings, liveEmbeddings)
+
+	if identityMatchNeedsRecapture(result, similarity, handler.config.MatchThreshold) {
+		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
+			if current.CaptureSessionID == payload.SessionID {
+				current.CaptureSessionID = ""
+				current.LastErrorCode = "match_recapture_required"
+			}
+			return nil
+		})
+		handler.writeError(writer, http.StatusUnprocessableEntity, "facial match inconclusive; recapture required")
+		return
+	}
+
 	passivePADAvailable := result.PassivePAD.Status == "available"
 	decision := handler.risk.VerificationDecision(result.LivenessScore, similarity, passivePADAvailable)
 	status := identity.StatusRejected
