@@ -252,8 +252,6 @@ func forensicRejectionReason(analysis pdfanalysis.Result) string {
 		return "PDF is not digitally signed"
 	case "signed_pdf_partially_covered":
 		return "PDF contains unsigned bytes after the signed revision"
-	case "signed_pdf_with_external_trailing_data":
-		return "PDF contains data outside the signed revision"
 	case "signature_not_checked":
 		return "PDF signature could not be checked"
 	case "signed_pdf_validity_confirmed":
