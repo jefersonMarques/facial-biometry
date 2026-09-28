@@ -12,12 +12,12 @@ import (
 
 const (
 	maxIdentityGuideRequestBytes       = 1 << 20
-	hardMinimumCaptureQuality          = 0.30
-	preferredCaptureQuality            = 0.50
+	hardMinimumCaptureQuality          = 0.18
+	preferredCaptureQuality            = 0.42
 	hardMinimumFacePresence            = 0.65
 	preferredFacePresence              = 0.80
-	hardMinimumGuidedCaptureScore      = 0.30
-	preferredGuidedCaptureScore        = 0.45
+	hardMinimumGuidedCaptureScore      = 0.20
+	preferredGuidedCaptureScore        = 0.35
 	identityMatchRetryMargin           = 0.05
 	borderlineQualityStrongMatchMargin = 0.12
 )
