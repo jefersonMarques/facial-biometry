@@ -322,7 +322,9 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     startButton.hidden = true;
     startButton.disabled = true;
 
-    while (stableSamples < GUIDE_READY_SAMPLES) {
+    const requiredStableSamples = phase === "far" ? 1 : GUIDE_READY_SAMPLES;
+
+    while (stableSamples < requiredStableSamples) {
         const snapshot = camera.snapshotForGuide();
 
         let guide: IdentityGuideResult;
@@ -389,8 +391,17 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
             continue;
         }
 
-        qualityLimitedSamples = 0;
-        renderGuideAssessment(assessment);
+        qualityLimitedSamples = Math.max(0, qualityLimitedSamples - 1);
+
+        if (!assessment.ready || phase === "near") {
+            renderGuideAssessment(assessment);
+        } else {
+            cameraState.textContent = "Posição ideal";
+            biometricStatus.textContent = "Capturando...";
+            faceGuide.classList.remove("guide-near");
+            faceGuide.classList.add("guide-ready");
+            setProximityIndicator(100, "green");
+        }
 
         if (assessment.ready) {
             stableSamples++;
@@ -398,7 +409,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
             stableSamples = 0;
         }
 
-        if (stableSamples >= GUIDE_READY_SAMPLES) {
+        if (stableSamples >= requiredStableSamples) {
             faceGuide.classList.remove("guide-near");
             faceGuide.classList.add("guide-ready");
             biometricStatus.textContent = "Posição ideal. Mantenha-se assim...";
