@@ -22,9 +22,12 @@ type DocumentEvidence struct {
 	PDFProducer           string    `json:"pdfProducer"`
 	PDFSourceIntegrity    string    `json:"pdfSourceIntegrity"`
 	PDFSignatureAlgorithm string    `json:"pdfSignatureAlgorithm"`
-	ReferencePhotoSource  string    `json:"referencePhotoSource"`
-	ReferencePhotoWidth   int       `json:"referencePhotoWidth,omitempty"`
-	ReferencePhotoHeight  int       `json:"referencePhotoHeight,omitempty"`
+	ReferencePhotoSource     string    `json:"referencePhotoSource"`
+	ReferencePhotoMethod     string    `json:"referencePhotoMethod,omitempty"`
+	ReferencePhotoConfidence string    `json:"referencePhotoConfidence,omitempty"`
+	ReferencePhotoSHA256     string    `json:"referencePhotoSha256,omitempty"`
+	ReferencePhotoWidth      int       `json:"referencePhotoWidth,omitempty"`
+	ReferencePhotoHeight     int       `json:"referencePhotoHeight,omitempty"`
 	VIOTemplateID          uint16    `json:"vioTemplateId"`
 	VIOCreatedAt           time.Time `json:"vioCreatedAt"`
 	VIOSignatureAlgorithm  string    `json:"vioSignatureAlgorithm"`
