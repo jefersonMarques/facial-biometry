@@ -157,3 +157,14 @@ CNH Digital validation requires:
 - `bpgdec` is optional fallback support for VIO portraits encoded as BPG.
 
 The identity repository is encrypted local-file storage for the MVP. Move it to a transactional shared store before multi-instance production.
+
+### Same-origin development gateway
+
+For local browser testing, port `5173` now serves both the static verification UI and an API reverse proxy:
+
+```text
+http://localhost:5173/verify.html  -> static UI
+http://localhost:5173/v1/*        -> http://127.0.0.1:8080/v1/*
+```
+
+This is required for single-host public tunnels such as a TryCloudflare Quick Tunnel. The browser uses its current origin for API calls, so a public `trycloudflare.com` URL can carry both the UI and API without a second public endpoint.
