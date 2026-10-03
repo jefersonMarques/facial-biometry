@@ -1,7 +1,7 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
-import { LocalCaptureGate } from "./local-capture-gate.js";
+import { LocalCaptureGate, } from "./local-capture-gate.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
 const DOCUMENT_PREVIEW_STORAGE_KEY = "faceproof.identity.document-preview";
 const GUIDE_SAMPLE_MS = 260;
