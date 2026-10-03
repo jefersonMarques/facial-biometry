@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
+import { LocalCaptureGate } from "./local-capture-gate.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
 const DOCUMENT_PREVIEW_STORAGE_KEY = "faceproof.identity.document-preview";
 const GUIDE_SAMPLE_MS = 260;
@@ -67,6 +68,7 @@ const faceGuide = requiredElement("faceGuide");
 const guidePhaseText = requiredElement("guidePhaseText");
 const captureFlash = requiredElement("captureFlash");
 const camera = new CameraCapture(video);
+const localCaptureGate = new LocalCaptureGate();
 let identityToken = "";
 let busy = false;
 let autoBiometryScheduled = false;
@@ -79,6 +81,7 @@ const handleLocalGuide = (event) => {
     const detail = event.detail;
     if (detail?.guide) {
         latestLocalGuide = detail.guide;
+        localCaptureGate.push(detail.guide);
     }
 };
 window.addEventListener("faceproof:local-guide", handleLocalGuide);
@@ -253,10 +256,12 @@ async function runBiometry() {
         cameraState.textContent = "Câmera ativa";
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
         while (!completed) {
+            localCaptureGate.reset();
             currentBiometryPhase = "far";
             const farRelaxedQuality = await waitForFacePhase("far");
             const session = await client.createIdentitySession(identityToken);
             const farFrames = await capturePhase("far", farRelaxedQuality);
+            localCaptureGate.lockFarReference();
             await showCaptureSuccess("Primeira captura concluída");
             currentBiometryPhase = "near";
             const nearRelaxedQuality = await waitForFacePhase("near");
@@ -344,6 +349,15 @@ async function waitForFacePhase(phase) {
         }
         guideSamples++;
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase, phaseStartedAt)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            stableSamples = 0;
+            renderLocalGateIssue(localGate, assessment);
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
         const clientQualityGood = quality.acceptable;
         const clientQualityUsable = isClientQualityUsable(quality);
         const qualityLimited = assessment.captureReady &&
@@ -459,6 +473,13 @@ async function holdStillForAutomaticCapture(phase) {
             return false;
         }
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            renderLocalGateIssue(localGate, assessment);
+            return false;
+        }
         if (!assessment.captureReady) {
             renderGuideAssessment(assessment);
             return false;
@@ -490,6 +511,15 @@ async function capturePhase(phase, relaxedQuality = false) {
             continue;
         }
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            frames.length = 0;
+            renderLocalGateIssue(localGate, assessment);
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
         renderGuideAssessment(assessment);
         if (!assessment.captureReady) {
             frames.length = 0;
@@ -708,6 +738,25 @@ function clientQualityInstruction(quality) {
         message: quality.issue ?? "Ajuste a câmera.",
         state: "Ajuste a câmera",
     };
+}
+function renderLocalGateIssue(gate, assessment) {
+    window.dispatchEvent(new CustomEvent("faceproof:local-capture-gate", {
+        detail: gate,
+    }));
+    if (!gate.nearScaleReady) {
+        cameraState.textContent = "Aproxime o rosto";
+        biometricStatus.textContent = "A segunda captura precisa ficar claramente mais próxima da câmera.";
+        faceGuide.classList.remove("guide-ready", "guide-near");
+        setProximityIndicator(assessment.proximityPercent, "red");
+        return;
+    }
+    cameraState.textContent = "Mantenha-se parado";
+    biometricStatus.textContent = gate.sampleCount < 3 || gate.spanMs < 320
+        ? "Aguarde um instante enquanto estabilizamos a captura..."
+        : "Movimento detectado. Fique parado por um instante.";
+    faceGuide.classList.remove("guide-ready");
+    faceGuide.classList.add("guide-near");
+    setProximityIndicator(assessment.proximityPercent, "yellow");
 }
 function renderGuideAssessment(assessment) {
     biometricStatus.textContent = assessment.message;
