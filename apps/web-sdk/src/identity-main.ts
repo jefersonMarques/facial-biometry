@@ -902,6 +902,31 @@ function clientQualityInstruction(
     };
 }
 
+function renderLocalGateIssue(
+    gate: LocalCaptureGateResult,
+    assessment: GuideAssessment,
+): void {
+    window.dispatchEvent(new CustomEvent("faceproof:local-capture-gate", {
+        detail: gate,
+    }));
+
+    if (!gate.nearScaleReady) {
+        cameraState.textContent = "Aproxime o rosto";
+        biometricStatus.textContent = "A segunda captura precisa ficar claramente mais próxima da câmera.";
+        faceGuide.classList.remove("guide-ready", "guide-near");
+        setProximityIndicator(assessment.proximityPercent, "red");
+        return;
+    }
+
+    cameraState.textContent = "Mantenha-se parado";
+    biometricStatus.textContent = gate.sampleCount < 3 || gate.spanMs < 320
+        ? "Aguarde um instante enquanto estabilizamos a captura..."
+        : "Movimento detectado. Fique parado por um instante.";
+    faceGuide.classList.remove("guide-ready");
+    faceGuide.classList.add("guide-near");
+    setProximityIndicator(assessment.proximityPercent, "yellow");
+}
+
 function renderGuideAssessment(assessment: GuideAssessment): void {
     biometricStatus.textContent = assessment.message;
     cameraState.textContent = assessment.state;
