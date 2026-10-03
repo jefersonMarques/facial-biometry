@@ -75,10 +75,7 @@ if (video && phaseLabel && biometryPanel) {
         renderDiagnostics();
 
         try {
-            await warmup;
-            if (warmupError) {
-                throw warmupError;
-            }
+            await ensureInitialized();
             syncPhase(true);
             await probe.start(video, renderSummary);
             runtime.engineState = "ready";
