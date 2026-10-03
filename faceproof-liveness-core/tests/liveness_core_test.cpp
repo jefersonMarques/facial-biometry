@@ -80,6 +80,19 @@ void push_phase(
     }
 }
 
+std::vector<FPLandmark> make_guide_landmarks() {
+    std::vector<FPLandmark> landmarks(kLandmarkCount, {0.5, 0.5, 0.0});
+
+    landmarks[234] = {0.32, 0.50, 0.0};
+    landmarks[454] = {0.68, 0.50, 0.0};
+    landmarks[10] = {0.50, 0.30, 0.0};
+    landmarks[152] = {0.50, 0.72, 0.0};
+    landmarks[33] = {0.40, 0.44, 0.0};
+    landmarks[263] = {0.60, 0.45, 0.0};
+
+    return landmarks;
+}
+
 FPLivenessResult run_case(bool perspective_change, double near_scale) {
     FPContext* context = fp_create();
     require(context != nullptr, "context must be created");
@@ -132,6 +145,26 @@ int main() {
         require(result.far_samples == 6, "far samples must be counted");
         require(result.near_samples == 0, "near samples must be zero");
         fp_destroy(context);
+    }
+
+    {
+        const auto landmarks = make_guide_landmarks();
+        FPGuideResult guide{};
+        require(
+            fp_analyze_guide(
+                landmarks.data(),
+                static_cast<uint32_t>(landmarks.size()),
+                &guide
+            ) == FP_OK,
+            "guide landmarks must be accepted"
+        );
+        require(guide.face_detected == 1, "guide must report a face");
+        require(near(guide.center_x, 0.50, 1e-6), "guide center x must match");
+        require(near(guide.center_y, 0.51, 1e-6), "guide center y must match");
+        require(near(guide.width_ratio, 0.36, 1e-6), "guide width must match");
+        require(near(guide.height_ratio, 0.42, 1e-6), "guide height must match");
+        require(std::abs(guide.roll_degrees) < 5.0, "guide roll must stay near level");
+        require(guide.face_size_score > 0.7, "guide face size must be usable");
     }
 
     const auto planar = run_case(false, 0.52);
