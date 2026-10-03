@@ -8,6 +8,8 @@
 
 namespace {
 
+constexpr std::uint32_t kResultValueCount = 10;
+
 struct FPWasmContext {
     FPContext* core = nullptr;
     std::vector<FPLandmark> landmarks;
@@ -103,22 +105,37 @@ int fp_wasm_push_landmarks_xyz(
 }
 
 EMSCRIPTEN_KEEPALIVE
-std::uintptr_t fp_wasm_get_result(std::uintptr_t handle) {
+int fp_wasm_write_result(
+    std::uintptr_t handle,
+    double* output,
+    std::uint32_t output_count
+) {
     auto* wrapper = from_handle(handle);
-    if (!wrapper || !wrapper->core) {
-        return 0;
+    if (!wrapper || !wrapper->core || !output || output_count < kResultValueCount) {
+        return FP_ERR_INVALID_ARGUMENT;
     }
 
     if (fp_get_result(wrapper->core, &wrapper->result) != FP_OK) {
-        return 0;
+        return FP_ERR_INVALID_ARGUMENT;
     }
 
-    return reinterpret_cast<std::uintptr_t>(&wrapper->result);
+    output[0] = static_cast<double>(wrapper->result.status);
+    output[1] = static_cast<double>(wrapper->result.sample_count);
+    output[2] = static_cast<double>(wrapper->result.far_samples);
+    output[3] = static_cast<double>(wrapper->result.near_samples);
+    output[4] = wrapper->result.scale_ratio;
+    output[5] = wrapper->result.transition_score;
+    output[6] = wrapper->result.perspective_change;
+    output[7] = wrapper->result.depth_change;
+    output[8] = wrapper->result.phase_stability;
+    output[9] = wrapper->result.evidence_score;
+
+    return FP_OK;
 }
 
 EMSCRIPTEN_KEEPALIVE
-std::uint32_t fp_wasm_result_size(void) {
-    return static_cast<std::uint32_t>(sizeof(FPLivenessResult));
+std::uint32_t fp_wasm_result_value_count(void) {
+    return kResultValueCount;
 }
 
 }  // extern "C"
