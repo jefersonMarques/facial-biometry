@@ -120,9 +120,12 @@ export class ExperimentalGeometryLiveness {
             this.onUpdate?.(this.summarize());
         });
         this.wasmShadow = wasmShadow;
-        void wasmShadow.initialize().catch(() => {
+        try {
+            await wasmShadow.initialize();
+        }
+        catch {
             // Shadow mode: WASM failure must never affect the active verification flow.
-        });
+        }
     }
     tick(timestampMs) {
         if (!this.running) {
