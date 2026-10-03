@@ -431,10 +431,19 @@ function formatGuideCalibration(
 
     const ageMs = Math.abs(local.timestampMs - server.timestampMs);
     const serverGuide = server.guide;
+    const localTop = local.centerY - local.heightRatio / 2;
+    const localBottom = local.centerY + local.heightRatio / 2;
+    const serverTop = serverGuide.centerY - serverGuide.heightRatio / 2;
+    const serverBottom = serverGuide.centerY + serverGuide.heightRatio / 2;
+    const heightScale = local.heightRatio > 1e-6
+        ? serverGuide.heightRatio / local.heightRatio
+        : 0;
+
     return [
         "Guide local C++ · calibração shadow",
         `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
         `YuNet: centro ${serverGuide.centerX.toFixed(3)}/${serverGuide.centerY.toFixed(3)} · tamanho ${serverGuide.widthRatio.toFixed(3)}×${serverGuide.heightRatio.toFixed(3)} · roll ${serverGuide.rollDegrees.toFixed(1)}° · faceSize ${percentage(serverGuide.quality.faceSize)} · conf ${percentage(serverGuide.confidence)}`,
+        `Vertical: top C++ ${localTop.toFixed(3)} / YuNet ${serverTop.toFixed(3)} · bottom C++ ${localBottom.toFixed(3)} / YuNet ${serverBottom.toFixed(3)} · fator altura ${heightScale.toFixed(3)}x`,
         `Delta aprox. (${ageMs.toFixed(0)}ms): X ${signed(local.centerX - serverGuide.centerX, 3)} · Y ${signed(local.centerY - serverGuide.centerY, 3)} · altura ${signed(local.heightRatio - serverGuide.heightRatio, 3)} · roll ${signed(local.rollDegrees - serverGuide.rollDegrees, 1)}°`,
         `Qualidade servidor: ${percentage(serverGuide.quality.score)} · cliente JS atual: brilho ${percentage(server.clientQuality.brightness)} · nitidez ${percentage(server.clientQuality.sharpness)}`,
     ];
