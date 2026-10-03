@@ -55,6 +55,23 @@ export class CameraCapture {
             quality: this.qualityAnalyzer.analyze(imageData),
         };
     }
+    async captureBlob(maxWidth = 640, jpegQuality = 0.80) {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const imageBlob = await new Promise((resolve, reject) => {
+            this.canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("Camera failed to encode JPEG"));
+                    return;
+                }
+                resolve(blob);
+            }, "image/jpeg", jpegQuality);
+        });
+        return {
+            imageBlob,
+            quality: this.qualityAnalyzer.analyze(imageData),
+        };
+    }
     async capture(session, hooks, options = {}) {
         this.assertReady();
         if (!options.skipReadiness) {
