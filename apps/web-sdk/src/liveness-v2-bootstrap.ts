@@ -49,18 +49,35 @@ if (video && phaseLabel && biometryPanel) {
         }
     };
 
-    let warmupError: unknown = null;
-    const warmup = probe.initialize()
-        .then(() => {
-            runtime.engineState = "ready";
-            renderDiagnostics();
+    let initialization: Promise<void> | null = null;
+
+    const ensureInitialized = async (): Promise<void> => {
+        if (initialization) {
+            return initialization;
+        }
+
+        runtime.engineState = "preparing";
+        runtime.errorMessage = "";
+        renderDiagnostics();
+
+        initialization = new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 350);
         })
-        .catch((error: unknown) => {
-            warmupError = error;
-            runtime.engineState = "error";
-            runtime.errorMessage = errorMessage(error);
-            renderDiagnostics();
-        });
+            .then(() => probe.initialize())
+            .then(() => {
+                runtime.engineState = "ready";
+                renderDiagnostics();
+            })
+            .catch((error: unknown) => {
+                initialization = null;
+                runtime.engineState = "error";
+                runtime.errorMessage = errorMessage(error);
+                renderDiagnostics();
+                throw error;
+            });
+
+        return initialization;
+    };
 
     const renderSummary = (summary: GeometryLivenessSummary): void => {
         lastSummary = summary;
@@ -91,10 +108,7 @@ if (video && phaseLabel && biometryPanel) {
         renderDiagnostics();
 
         try {
-            await warmup;
-            if (warmupError) {
-                throw warmupError;
-            }
+            await ensureInitialized();
             syncPhase(true);
             await probe.start(video, renderSummary);
             runtime.engineState = "ready";
