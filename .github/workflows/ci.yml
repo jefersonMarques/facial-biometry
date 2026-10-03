@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/liveness-v2
 
 jobs:
   go:
@@ -42,6 +43,22 @@ jobs:
         env:
           PYTHONPATH: services/engine
         run: python -m unittest discover -s services/engine/tests -v
+
+  cpp:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure liveness core
+        run: cmake -S faceproof-liveness-core -B build/liveness-core -DCMAKE_BUILD_TYPE=Release
+      - name: Build liveness core
+        run: cmake --build build/liveness-core --config Release
+      - name: Test liveness core
+        run: ctest --test-dir build/liveness-core -C Release --output-on-failure
 
   web:
     runs-on: ubuntu-latest
