@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -95,7 +94,7 @@ func decodeIdentityCompleteMultipart(
 
 		meta := manifest.GuidedFrames[index]
 		frames[index] = domain.GuidedCapturedFrame{
-			ImageBase64:   "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data),
+			ImageBytes:    data,
 			Phase:         meta.Phase,
 			ClientQuality: meta.ClientQuality,
 		}
