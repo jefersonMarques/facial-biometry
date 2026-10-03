@@ -362,10 +362,11 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
 
         let guide: IdentityGuideResult;
         try {
+            const guideRequestTimestampMs = performance.now();
             guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
             window.dispatchEvent(new CustomEvent("faceproof:server-guide", {
                 detail: {
-                    timestampMs: performance.now(),
+                    timestampMs: guideRequestTimestampMs,
                     guide,
                     clientQuality: snapshot.quality,
                 },
