@@ -10,6 +10,26 @@ if (-not (Get-Command emcmake -ErrorAction SilentlyContinue)) {
     throw "Emscripten nao encontrado. Ative o emsdk antes de executar este script."
 }
 
+$CMakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
+if (-not $CMakeCommand) {
+    $CMakeCandidates = @()
+    if ($env:ProgramFiles) {
+        $CMakeCandidates += Join-Path $env:ProgramFiles "CMake\bin\cmake.exe"
+    }
+    if (${env:ProgramFiles(x86)}) {
+        $CMakeCandidates += Join-Path ${env:ProgramFiles(x86)} "CMake\bin\cmake.exe"
+    }
+
+    $CMakeExe = $CMakeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $CMakeExe) {
+        throw "CMake nao encontrado. Instale o CMake ou adicione C:\Program Files\CMake\bin ao PATH."
+    }
+
+    $CMakeBin = Split-Path -Parent $CMakeExe
+    $env:Path = "$CMakeBin;$env:Path"
+    Write-Host "[info] CMake localizado em $CMakeExe"
+}
+
 if (-not $BuildDir) {
     $BuildDir = Join-Path $Root "build\liveness-wasm"
 }
