@@ -106,7 +106,6 @@ export class BiometricClient {
 function isErrorPayload(value) {
     return typeof value === "object" && value !== null && "error" in value && typeof value.error === "string";
 }
-
 function dataURLToBlob(value) {
     const separator = value.indexOf(",");
     if (separator < 0) {
