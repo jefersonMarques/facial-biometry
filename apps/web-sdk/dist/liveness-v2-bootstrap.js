@@ -27,7 +27,7 @@ if (video && phaseLabel && biometryPanel) {
         diagnostics.hidden = false;
         const output = diagnostics.querySelector("pre");
         if (output) {
-            output.textContent = formatDiagnostics(lastSummary, runtime, probe.getWasmShadowDiagnostics());
+            output.textContent = formatDiagnostics(lastSummary, runtime, probe.getWasmShadowDiagnostics(), latestServerGuide, localGuideHistory);
         }
     };
     let initialization = null;
@@ -59,7 +59,7 @@ if (video && phaseLabel && biometryPanel) {
         lastSummary = summary;
         renderDiagnostics();
         persistSummary(summary);
-        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, probe.getWasmShadowDiagnostics());
+        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, probe.getWasmShadowDiagnostics(), latestServerGuide, localGuideHistory);
     };
     const syncPhase = (forceReset = false) => {
         const phase = phaseFromLabel(phaseLabel.textContent ?? "");
@@ -101,7 +101,7 @@ if (video && phaseLabel && biometryPanel) {
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
-                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime, probe.getWasmShadowDiagnostics());
+                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime, probe.getWasmShadowDiagnostics(), latestServerGuide, localGuideHistory);
             }
         })
         : null;
