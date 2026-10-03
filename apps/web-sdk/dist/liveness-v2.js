@@ -1,8 +1,8 @@
 const DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
 const DEFAULT_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const DEFAULT_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-const DEFAULT_SAMPLE_INTERVAL_MS = 80;
-const DEFAULT_MAX_OBSERVATIONS = 240;
+const DEFAULT_SAMPLE_INTERVAL_MS = 180;
+const DEFAULT_MAX_OBSERVATIONS = 120;\nconst ANALYSIS_WIDTH = 384;
 const MIN_PHASE_SAMPLES = 4;
 export class ExperimentalGeometryLiveness {
     landmarker = null;
@@ -13,9 +13,17 @@ export class ExperimentalGeometryLiveness {
     lastInferenceAt = 0;
     phase = null;
     observations = [];
+    analysisCanvas;
+    analysisContext;
     onUpdate = null;
     options;
     constructor(options = {}) {
+        this.analysisCanvas = document.createElement("canvas");
+        const context = this.analysisCanvas.getContext("2d", { alpha: false });
+        if (!context) {
+            throw new Error("Canvas 2D is not supported");
+        }
+        this.analysisContext = context;
         this.options = {
             moduleUrl: options.moduleUrl ?? DEFAULT_MODULE_URL,
             wasmRoot: options.wasmRoot ?? DEFAULT_WASM_ROOT,
@@ -83,7 +91,7 @@ export class ExperimentalGeometryLiveness {
             minFacePresenceConfidence: 0.65,
             minTrackingConfidence: 0.60,
             outputFaceBlendshapes: false,
-            outputFacialTransformationMatrixes: true,
+            outputFacialTransformationMatrixes: false,
         });
         try {
             this.landmarker = await create("GPU");
@@ -104,7 +112,11 @@ export class ExperimentalGeometryLiveness {
                 video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
                 timestampMs - this.lastInferenceAt >= this.options.sampleIntervalMs) {
                 this.lastInferenceAt = timestampMs;
-                const result = this.landmarker.detectForVideo(video, timestampMs);
+                const analysisFrame = this.prepareAnalysisFrame(video);
+                if (!analysisFrame) {
+                    return;
+                }
+                const result = this.landmarker.detectForVideo(analysisFrame, timestampMs);
                 const landmarks = result.faceLandmarks?.[0];
                 if (landmarks) {
                     const observation = extractGeometryObservation(landmarks, this.phase, timestampMs);
@@ -123,6 +135,21 @@ export class ExperimentalGeometryLiveness {
                 this.animationFrame = window.requestAnimationFrame((nextTimestamp) => this.tick(nextTimestamp));
             }
         }
+    }
+    prepareAnalysisFrame(video) {
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+            return null;
+        }
+        const width = Math.min(ANALYSIS_WIDTH, sourceWidth);
+        const height = Math.max(1, Math.round((width / sourceWidth) * sourceHeight));
+        if (this.analysisCanvas.width !== width || this.analysisCanvas.height !== height) {
+            this.analysisCanvas.width = width;
+            this.analysisCanvas.height = height;
+        }
+        this.analysisContext.drawImage(video, 0, 0, width, height);
+        return this.analysisCanvas;
     }
 }
 export function extractGeometryObservation(landmarks, phase, timestampMs) {
