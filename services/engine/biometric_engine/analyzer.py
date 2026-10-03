@@ -6,7 +6,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .image_utils import crop_face, decode_data_url
+from .image_utils import crop_face, decode_data_url, decode_image_bytes
 from .metrics import (
     brightness_score,
     clamp01,
@@ -201,7 +201,7 @@ class BiometricAnalyzer:
             if phase not in {"far", "near"}:
                 continue
 
-            image = decode_data_url(str(frame_payload.get("imageBase64", "")))
+            image = _decode_frame_image(frame_payload)
             detected = self._detector.detect_primary(image)
             if detected is None:
                 continue
@@ -401,7 +401,7 @@ class BiometricAnalyzer:
         diagnostics: list[str] = []
 
         for frame_payload in frames_payload:
-            image = decode_data_url(str(frame_payload.get("imageBase64", "")))
+            image = _decode_frame_image(frame_payload)
             detected = self._detector.detect_primary(image)
             if detected is None:
                 continue
@@ -583,7 +583,7 @@ class BiometricAnalyzer:
             if phase not in {"far", "near"}:
                 continue
 
-            image = decode_data_url(str(frame_payload.get("imageBase64", "")))
+            image = _decode_frame_image(frame_payload)
             detected = self._detector.detect_primary(image)
             if detected is None:
                 continue
@@ -629,6 +629,13 @@ class BiometricAnalyzer:
         return embeddings, guided_score, diagnostics
 
 
+
+
+def _decode_frame_image(frame_payload: dict[str, Any]) -> np.ndarray:
+    image_bytes = frame_payload.get("imageBytes")
+    if isinstance(image_bytes, (bytes, bytearray, memoryview)):
+        return decode_image_bytes(image_bytes)
+    return decode_data_url(str(frame_payload.get("imageBase64", "")))
 
 
 def _empty_quality() -> dict[str, Any]:
