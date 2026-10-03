@@ -123,5 +123,5 @@ function dataURLToBlob(value) {
     for (let index = 0; index < binary.length; index += 1) {
         bytes[index] = binary.charCodeAt(index);
     }
-    return new Blob([bytes], { type: mimeMatch[1] });
+    return new Blob([bytes], { type: mimeMatch[1] ?? "image/jpeg" });
 }
