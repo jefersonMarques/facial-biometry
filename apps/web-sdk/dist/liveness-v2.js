@@ -1,3 +1,4 @@
+import { GeometryWasmShadow, } from "./liveness-core-shadow.js";
 const DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
 const DEFAULT_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const DEFAULT_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
@@ -16,6 +17,7 @@ export class ExperimentalGeometryLiveness {
     observations = [];
     analysisCanvas;
     analysisContext;
+    wasmShadow = null;
     onUpdate = null;
     options;
     constructor(options = {}) {
@@ -65,17 +67,27 @@ export class ExperimentalGeometryLiveness {
         this.stop();
         this.landmarker?.close();
         this.landmarker = null;
+        this.wasmShadow?.dispose();
+        this.wasmShadow = null;
         this.initialization = null;
     }
     reset() {
         this.observations.length = 0;
         this.lastInferenceAt = 0;
+        this.wasmShadow?.reset();
     }
     setPhase(phase) {
         this.phase = phase;
     }
     summarize() {
         return summarizeGeometryEvidence(this.observations);
+    }
+    getWasmShadowDiagnostics() {
+        return this.wasmShadow?.snapshot() ?? {
+            state: "idle",
+            summary: null,
+            errorMessage: "",
+        };
     }
     async initializeInternal() {
         const moduleUrl = this.options.moduleUrl;
@@ -100,6 +112,11 @@ export class ExperimentalGeometryLiveness {
         catch {
             this.landmarker = await create("CPU");
         }
+        const wasmShadow = new GeometryWasmShadow();
+        this.wasmShadow = wasmShadow;
+        void wasmShadow.initialize().catch(() => {
+            // Shadow mode: WASM failure must never affect the active verification flow.
+        });
     }
     tick(timestampMs) {
         if (!this.running) {
@@ -120,6 +137,7 @@ export class ExperimentalGeometryLiveness {
                 const result = this.landmarker.detectForVideo(analysisFrame, timestampMs);
                 const landmarks = result.faceLandmarks?.[0];
                 if (landmarks) {
+                    this.wasmShadow?.push(this.phase, timestampMs, landmarks);
                     const observation = extractGeometryObservation(landmarks, this.phase, timestampMs);
                     if (observation) {
                         this.observations.push(observation);
