@@ -25,6 +25,10 @@ export class GeometryWasmShadow {
     private resolveInitialization: (() => void) | null = null;
     private rejectInitialization: ((error: Error) => void) | null = null;
 
+    public constructor(
+        private readonly onUpdate?: (diagnostics: WasmShadowDiagnostics) => void,
+    ) {}
+
     public initialize(): Promise<void> {
         if (this.state === "ready") {
             return Promise.resolve();
@@ -60,6 +64,7 @@ export class GeometryWasmShadow {
     public reset(): void {
         this.summary = null;
         this.worker?.postMessage({ type: "reset" });
+        this.emitUpdate();
     }
 
     public push(
@@ -123,11 +128,13 @@ export class GeometryWasmShadow {
             this.resolveInitialization?.();
             this.resolveInitialization = null;
             this.rejectInitialization = null;
+            this.emitUpdate();
             return;
         }
 
         if (message.type === "summary") {
             this.summary = message.summary;
+            this.emitUpdate();
             return;
         }
 
@@ -142,5 +149,10 @@ export class GeometryWasmShadow {
         this.resolveInitialization = null;
         this.rejectInitialization = null;
         this.initialization = null;
+        this.emitUpdate();
+    }
+
+    private emitUpdate(): void {
+        this.onUpdate?.(this.snapshot());
     }
 }
