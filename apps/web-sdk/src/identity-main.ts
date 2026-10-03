@@ -8,7 +8,6 @@ import type {
     IdentityCheckStatus,
     IdentityCompletionResponse,
     IdentityDocumentDetails,
-    IdentityGuideResult,
 } from "./types.js";
 
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
@@ -555,8 +554,10 @@ async function holdStillForAutomaticCapture(phase: GuidedCapturePhase): Promise<
             return false;
         }
 
-        const guide = getFreshLocalGuide();
-        if (!guide) {
+        let guide: GuideGeometry;
+        try {
+            guide = await resolveGuideWithFallback(quality);
+        } catch {
             return false;
         }
 
@@ -591,8 +592,11 @@ async function capturePhase(
     const captureJPEGQuality = phase === "near" ? 0.92 : 0.86;
 
     while (frames.length < PHASE_CAPTURE_FRAMES) {
-        const guide = getFreshLocalGuide();
-        if (!guide) {
+        const guideQuality = camera.qualityForGuide();
+        let guide: GuideGeometry;
+        try {
+            guide = await resolveGuideWithFallback(guideQuality);
+        } catch {
             relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
@@ -782,6 +786,12 @@ function getFreshLocalGuide(minTimestampMs = 0): GuideGeometry | null {
         heightRatio: guide.heightRatio,
         rollDegrees: guide.rollDegrees,
     };
+}
+
+async function resolveGuideWithFallback(
+    clientQuality: { brightness: number; contrast: number; sharpness: number; acceptable: boolean; issue: string | null },
+): Promise<GuideGeometry> {
+    return getFreshLocalGuide() ?? requestServerGuideFallback(clientQuality);
 }
 
 async function requestServerGuideFallback(
@@ -1198,80 +1208,3 @@ function friendlyDocumentError(message: string): string {
     if (
         ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) ||
         window.location.hostname.endsWith(".trycloudflare.com")
-    ) {
-        return `${generic} Detalhe: ${message}`;
-    }
-    return generic;
-}
-
-function friendlyBiometryError(message: string): string {
-    if (isInfrastructureBiometryError(message)) {
-        return "A análise demorou mais que o esperado ou a conexão com o servidor foi interrompida. Tente novamente.";
-    }
-    if (message.includes("attempt limit")) {
-        return "O limite de tentativas biométricas desta verificação foi atingido.";
-    }
-    if (message.includes("expired")) {
-        return "Este link de verificação expirou.";
-    }
-    if (isRecaptureRequired(message)) {
-        return "A captura não ficou nítida o suficiente. Reenquadre o rosto e tente novamente.";
-    }
-    return message;
-}
-
-function isRecaptureRequired(message: string): boolean {
-    return message.includes("recapture required") || message.includes("capture quality insufficient");
-}
-
-function isInfrastructureBiometryError(message: string): boolean {
-    return message.includes("HTTP 502") ||
-        message.includes("HTTP 503") ||
-        message.includes("FaceProof API unavailable") ||
-        message.includes("biometric engine failed");
-}
-
-function formatExpiration(value: string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return "";
-    }
-    return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function metric(label: string, value: string): string {
-    return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
-}
-
-function checkLine(label: string, passed: boolean): string {
-    return `<div class="identity-check"><span>${passed ? "✓" : "×"}</span><strong>${escapeHtml(label)}</strong></div>`;
-}
-
-function percentage(value: number): string {
-    return `${(value * 100).toFixed(1)}%`;
-}
-
-function requiredElement<T extends HTMLElement>(id: string): T {
-    const element = document.getElementById(id);
-    if (!element) {
-        throw new Error(`Missing required element: ${id}`);
-    }
-    return element as T;
-}
-
-function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : "Erro inesperado";
-}
-
-function escapeHtml(value: string): string {
-    return value
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-async function sleep(milliseconds: number): Promise<void> {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
-}
