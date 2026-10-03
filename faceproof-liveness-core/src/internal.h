@@ -49,4 +49,10 @@ bool extract_observation(
 
 FPLivenessResult summarize(const std::vector<Observation>& observations);
 
+bool analyze_guide(
+    const FPLandmark* landmarks,
+    std::uint32_t landmark_count,
+    FPGuideResult& result
+);
+
 }  // namespace faceproof
