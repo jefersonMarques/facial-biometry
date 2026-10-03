@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
+import { LocalCaptureGate } from "./local-capture-gate.js";
 import type { LocalFaceGuideMetrics } from "./liveness-core-shadow.js";
 import type {
     GuidedCapturedFrame,
@@ -111,6 +112,7 @@ const guidePhaseText = requiredElement<HTMLSpanElement>("guidePhaseText");
 const captureFlash = requiredElement<HTMLDivElement>("captureFlash");
 
 const camera = new CameraCapture(video);
+const localCaptureGate = new LocalCaptureGate();
 let identityToken = "";
 let busy = false;
 let autoBiometryScheduled = false;
@@ -124,6 +126,7 @@ const handleLocalGuide = (event: Event): void => {
     const detail = (event as CustomEvent<{ guide?: LocalFaceGuideMetrics }>).detail;
     if (detail?.guide) {
         latestLocalGuide = detail.guide;
+        localCaptureGate.push(detail.guide);
     }
 };
 
