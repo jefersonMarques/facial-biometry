@@ -113,7 +113,12 @@ export class ExperimentalGeometryLiveness {
         catch {
             this.landmarker = await create("CPU");
         }
-        const wasmShadow = new GeometryWasmShadow();
+        const wasmShadow = new GeometryWasmShadow((diagnostics) => {
+            if (diagnostics.guide) {
+                dispatchLocalGuide(diagnostics.guide);
+            }
+            this.onUpdate?.(this.summarize());
+        });
         this.wasmShadow = wasmShadow;
         void wasmShadow.initialize().catch(() => {
             // Shadow mode: WASM failure must never affect the active verification flow.
@@ -332,7 +337,6 @@ function median(values) {
 function clamp01(value) {
     return Math.max(0, Math.min(1, value));
 }
-
 function dispatchLocalGuide(guide) {
     window.dispatchEvent(new CustomEvent("faceproof:local-guide", {
         detail: {
