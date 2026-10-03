@@ -92,12 +92,17 @@ if (video && phaseLabel && biometryPanel) {
     const phaseObserver = new MutationObserver(() => syncPhase());
     phaseObserver.observe(phaseLabel, { childList: true, characterData: true, subtree: true });
 
-    const resultObserver = resultPanel
+    const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
-            renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime);
+            if (!finalPanel.hidden) {
+                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime);
+            }
         })
         : null;
-    resultObserver?.observe(resultPanel, { childList: true });
+    finalPanelObserver?.observe(finalPanel, {
+        attributes: true,
+        attributeFilter: ["hidden"],
+    });
 
     const diagnosticTimer = window.setInterval(() => {
         lastSummary = probe.summarize();
@@ -123,7 +128,7 @@ if (video && phaseLabel && biometryPanel) {
     window.addEventListener("beforeunload", () => {
         window.clearInterval(diagnosticTimer);
         phaseObserver.disconnect();
-        resultObserver?.disconnect();
+        finalPanelObserver?.disconnect();
         probe.dispose();
     });
 }
