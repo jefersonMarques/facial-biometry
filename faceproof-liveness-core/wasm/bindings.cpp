@@ -9,6 +9,7 @@
 namespace {
 
 constexpr std::uint32_t kResultValueCount = 10;
+constexpr std::uint32_t kGuideValueCount = 7;
 
 struct FPWasmContext {
     FPContext* core = nullptr;
@@ -136,6 +137,51 @@ int fp_wasm_write_result(
 EMSCRIPTEN_KEEPALIVE
 std::uint32_t fp_wasm_result_value_count(void) {
     return kResultValueCount;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int fp_wasm_write_guide_xyz(
+    const double* xyz,
+    std::uint32_t landmark_count,
+    double* output,
+    std::uint32_t output_count
+) {
+    if (!xyz || landmark_count == 0 || !output || output_count < kGuideValueCount) {
+        return FP_ERR_INVALID_ARGUMENT;
+    }
+
+    std::vector<FPLandmark> landmarks(landmark_count);
+    for (std::uint32_t index = 0; index < landmark_count; ++index) {
+        const auto offset = static_cast<std::size_t>(index) * 3;
+        landmarks[index] = {
+            xyz[offset],
+            xyz[offset + 1],
+            xyz[offset + 2],
+        };
+    }
+
+    FPGuideResult result{};
+    if (fp_analyze_guide(landmarks.data(), landmark_count, &result) != FP_OK) {
+        output[0] = 0.0;
+        for (std::uint32_t index = 1; index < kGuideValueCount; ++index) {
+            output[index] = 0.0;
+        }
+        return FP_OK;
+    }
+
+    output[0] = static_cast<double>(result.face_detected);
+    output[1] = result.center_x;
+    output[2] = result.center_y;
+    output[3] = result.width_ratio;
+    output[4] = result.height_ratio;
+    output[5] = result.roll_degrees;
+    output[6] = result.face_size_score;
+    return FP_OK;
+}
+
+EMSCRIPTEN_KEEPALIVE
+std::uint32_t fp_wasm_guide_value_count(void) {
+    return kGuideValueCount;
 }
 
 }  // extern "C"
