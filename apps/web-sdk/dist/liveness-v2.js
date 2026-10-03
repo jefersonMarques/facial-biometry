@@ -86,6 +86,7 @@ export class ExperimentalGeometryLiveness {
         return this.wasmShadow?.snapshot() ?? {
             state: "idle",
             summary: null,
+            guide: null,
             errorMessage: "",
         };
     }
@@ -330,4 +331,13 @@ function median(values) {
 }
 function clamp01(value) {
     return Math.max(0, Math.min(1, value));
+}
+
+function dispatchLocalGuide(guide) {
+    window.dispatchEvent(new CustomEvent("faceproof:local-guide", {
+        detail: {
+            timestampMs: performance.now(),
+            guide,
+        },
+    }));
 }
