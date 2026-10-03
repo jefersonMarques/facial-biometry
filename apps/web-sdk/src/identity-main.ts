@@ -585,6 +585,13 @@ async function holdStillForAutomaticCapture(phase: GuidedCapturePhase): Promise<
         }
 
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            renderLocalGateIssue(localGate, assessment);
+            return false;
+        }
         if (!assessment.captureReady) {
             renderGuideAssessment(assessment);
             return false;
@@ -625,6 +632,16 @@ async function capturePhase(
         }
 
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            frames.length = 0;
+            renderLocalGateIssue(localGate, assessment);
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+
         renderGuideAssessment(assessment);
 
         if (!assessment.captureReady) {
