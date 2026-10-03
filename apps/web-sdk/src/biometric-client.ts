@@ -167,5 +167,5 @@ function dataURLToBlob(value: string): Blob {
         bytes[index] = binary.charCodeAt(index);
     }
 
-    return new Blob([bytes], { type: mimeMatch[1] });
+    return new Blob([bytes], { type: mimeMatch[1] ?? "image/jpeg" });
 }
