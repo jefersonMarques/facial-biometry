@@ -23,6 +23,11 @@ export interface CameraSnapshot {
     quality: FrameQualityAssessment;
 }
 
+export interface CameraBlobSnapshot {
+    imageBlob: Blob;
+    quality: FrameQualityAssessment;
+}
+
 export interface CaptureOptions {
     skipReadiness?: boolean;
 }
@@ -81,6 +86,28 @@ export class CameraCapture {
         const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
         return {
             imageBase64: this.canvas.toDataURL("image/jpeg", jpegQuality),
+            quality: this.qualityAnalyzer.analyze(imageData),
+        };
+    }
+
+    public async captureBlob(
+        maxWidth = 640,
+        jpegQuality = 0.80,
+    ): Promise<CameraBlobSnapshot> {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const imageBlob = await new Promise<Blob>((resolve, reject) => {
+            this.canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("Camera failed to encode JPEG"));
+                    return;
+                }
+                resolve(blob);
+            }, "image/jpeg", jpegQuality);
+        });
+
+        return {
+            imageBlob,
             quality: this.qualityAnalyzer.analyze(imageData),
         };
     }
