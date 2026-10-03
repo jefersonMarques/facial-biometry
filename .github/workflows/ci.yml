@@ -95,8 +95,8 @@ jobs:
       - name: Build web SDK
         working-directory: apps/web-sdk
         run: npm run build
-      - name: Test experimental liveness geometry
+      - name: Test web capture core
         working-directory: apps/web-sdk
-        run: node --test tests/liveness-v2.test.mjs
+        run: node --test tests/liveness-v2.test.mjs tests/local-capture-gate.test.mjs
       - name: Verify committed web bundle
         run: git diff --exit-code -- apps/web-sdk/dist
