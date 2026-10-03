@@ -1,3 +1,8 @@
+import {
+    GeometryWasmShadow,
+    type WasmShadowDiagnostics,
+} from "./liveness-core-shadow.js";
+
 export type GeometryCapturePhase = "far" | "near";
 
 interface NormalizedLandmark {
@@ -77,6 +82,7 @@ export class ExperimentalGeometryLiveness {
     private readonly observations: GeometryObservation[] = [];
     private readonly analysisCanvas: HTMLCanvasElement;
     private readonly analysisContext: CanvasRenderingContext2D;
+    private wasmShadow: GeometryWasmShadow | null = null;
     private onUpdate: ((summary: GeometryLivenessSummary) => void) | null = null;
     private readonly options: Required<GeometryLivenessOptions>;
 
@@ -135,12 +141,15 @@ export class ExperimentalGeometryLiveness {
         this.stop();
         this.landmarker?.close();
         this.landmarker = null;
+        this.wasmShadow?.dispose();
+        this.wasmShadow = null;
         this.initialization = null;
     }
 
     public reset(): void {
         this.observations.length = 0;
         this.lastInferenceAt = 0;
+        this.wasmShadow?.reset();
     }
 
     public setPhase(phase: GeometryCapturePhase | null): void {
@@ -149,6 +158,14 @@ export class ExperimentalGeometryLiveness {
 
     public summarize(): GeometryLivenessSummary {
         return summarizeGeometryEvidence(this.observations);
+    }
+
+    public getWasmShadowDiagnostics(): WasmShadowDiagnostics {
+        return this.wasmShadow?.snapshot() ?? {
+            state: "idle",
+            summary: null,
+            errorMessage: "",
+        };
     }
 
     private async initializeInternal(): Promise<void> {
@@ -176,6 +193,12 @@ export class ExperimentalGeometryLiveness {
         } catch {
             this.landmarker = await create("CPU");
         }
+
+        const wasmShadow = new GeometryWasmShadow();
+        this.wasmShadow = wasmShadow;
+        void wasmShadow.initialize().catch(() => {
+            // Shadow mode: WASM failure must never affect the active verification flow.
+        });
     }
 
     private tick(timestampMs: number): void {
@@ -200,6 +223,7 @@ export class ExperimentalGeometryLiveness {
                 const result = this.landmarker.detectForVideo(analysisFrame, timestampMs);
                 const landmarks = result.faceLandmarks?.[0];
                 if (landmarks) {
+                    this.wasmShadow?.push(this.phase, timestampMs, landmarks);
                     const observation = extractGeometryObservation(landmarks, this.phase, timestampMs);
                     if (observation) {
                         this.observations.push(observation);
