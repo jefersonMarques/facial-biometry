@@ -2,10 +2,15 @@ export class GeometryWasmShadow {
     worker = null;
     state = "idle";
     summary = null;
+    guide = null;
     errorMessage = "";
     initialization = null;
     resolveInitialization = null;
     rejectInitialization = null;
+    onUpdate;
+    constructor(onUpdate) {
+        this.onUpdate = onUpdate;
+    }
     initialize() {
         if (this.state === "ready") {
             return Promise.resolve();
@@ -32,7 +37,9 @@ export class GeometryWasmShadow {
     }
     reset() {
         this.summary = null;
+        this.guide = null;
         this.worker?.postMessage({ type: "reset" });
+        this.emitUpdate();
     }
     push(phase, timestampMs, landmarks) {
         if (this.state !== "ready" || !this.worker) {
@@ -60,6 +67,7 @@ export class GeometryWasmShadow {
         return {
             state: this.state,
             summary: this.summary,
+            guide: this.guide,
             errorMessage: this.errorMessage,
         };
     }
@@ -74,6 +82,7 @@ export class GeometryWasmShadow {
         this.rejectInitialization = null;
         this.state = "idle";
         this.summary = null;
+        this.guide = null;
         this.errorMessage = "";
     }
     onMessage(message) {
@@ -82,10 +91,13 @@ export class GeometryWasmShadow {
             this.resolveInitialization?.();
             this.resolveInitialization = null;
             this.rejectInitialization = null;
+            this.emitUpdate();
             return;
         }
         if (message.type === "summary") {
             this.summary = message.summary;
+            this.guide = message.guide;
+            this.emitUpdate();
             return;
         }
         this.fail(message.message);
@@ -98,5 +110,9 @@ export class GeometryWasmShadow {
         this.resolveInitialization = null;
         this.rejectInitialization = null;
         this.initialization = null;
+        this.emitUpdate();
+    }
+    emitUpdate() {
+        this.onUpdate?.(this.snapshot());
     }
 }
