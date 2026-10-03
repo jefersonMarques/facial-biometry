@@ -1,11 +1,9 @@
-import { ExperimentalGeometryLiveness } from "./liveness-v2.js";
-
+import { ExperimentalGeometryLiveness, } from "./liveness-v2.js";
 const video = document.getElementById("camera");
 const phaseLabel = document.getElementById("guidePhaseText");
 const biometryPanel = document.getElementById("biometryPanel");
 const finalPanel = document.getElementById("finalPanel");
 const resultPanel = document.getElementById("identityResult");
-
 if (video && phaseLabel && biometryPanel) {
     const diagnosticsHost = biometryPanel.querySelector(".stage-content");
     const diagnostics = createDiagnosticsPanel(diagnosticsHost ?? biometryPanel);
@@ -13,7 +11,6 @@ if (video && phaseLabel && biometryPanel) {
     let lastPhase = null;
     let lastSummary = probe.summarize();
     let startInProgress = false;
-
     const runtime = {
         engineState: "preparing",
         phase: null,
@@ -23,7 +20,6 @@ if (video && phaseLabel && biometryPanel) {
         cameraActive: false,
         errorMessage: "",
     };
-
     const renderDiagnostics = () => {
         refreshRuntime(runtime, video, phaseLabel);
         diagnostics.hidden = false;
@@ -32,27 +28,37 @@ if (video && phaseLabel && biometryPanel) {
             output.textContent = formatDiagnostics(lastSummary, runtime);
         }
     };
-
-    let warmupError = null;
-    const warmup = probe.initialize()
-        .then(() => {
+    let initialization = null;
+    const ensureInitialized = async () => {
+        if (initialization) {
+            return initialization;
+        }
+        runtime.engineState = "preparing";
+        runtime.errorMessage = "";
+        renderDiagnostics();
+        initialization = new Promise((resolve) => {
+            window.setTimeout(resolve, 350);
+        })
+            .then(() => probe.initialize())
+            .then(() => {
             runtime.engineState = "ready";
             renderDiagnostics();
         })
-        .catch((error) => {
-            warmupError = error;
+            .catch((error) => {
+            initialization = null;
             runtime.engineState = "error";
             runtime.errorMessage = errorMessage(error);
             renderDiagnostics();
+            throw error;
         });
-
+        return initialization;
+    };
     const renderSummary = (summary) => {
         lastSummary = summary;
         renderDiagnostics();
         persistSummary(summary);
         renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime);
     };
-
     const syncPhase = (forceReset = false) => {
         const phase = phaseFromLabel(phaseLabel.textContent ?? "");
         if (phase === "far" && (forceReset || lastPhase !== "far")) {
@@ -66,32 +72,30 @@ if (video && phaseLabel && biometryPanel) {
         lastPhase = phase;
         renderDiagnostics();
     };
-
     const start = async () => {
         if (startInProgress) {
             return;
         }
         startInProgress = true;
         renderDiagnostics();
-
         try {
             await ensureInitialized();
             syncPhase(true);
             await probe.start(video, renderSummary);
             runtime.engineState = "ready";
             renderDiagnostics();
-        } catch (error) {
+        }
+        catch (error) {
             runtime.engineState = "error";
             runtime.errorMessage = errorMessage(error);
             renderDiagnostics();
-        } finally {
+        }
+        finally {
             startInProgress = false;
         }
     };
-
     const phaseObserver = new MutationObserver(() => syncPhase());
     phaseObserver.observe(phaseLabel, { childList: true, characterData: true, subtree: true });
-
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
@@ -103,12 +107,10 @@ if (video && phaseLabel && biometryPanel) {
         attributes: true,
         attributeFilter: ["hidden"],
     });
-
     const diagnosticTimer = window.setInterval(() => {
         lastSummary = probe.summarize();
         renderDiagnostics();
     }, 500);
-
     video.addEventListener("playing", () => void start());
     video.addEventListener("pause", () => {
         probe.stop();
@@ -118,13 +120,12 @@ if (video && phaseLabel && biometryPanel) {
         probe.stop();
         renderDiagnostics();
     });
-
     if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
         void start();
-    } else {
+    }
+    else {
         renderDiagnostics();
     }
-
     window.addEventListener("beforeunload", () => {
         window.clearInterval(diagnosticTimer);
         phaseObserver.disconnect();
@@ -132,7 +133,6 @@ if (video && phaseLabel && biometryPanel) {
         probe.dispose();
     });
 }
-
 function phaseFromLabel(value) {
     const normalized = value.trim().toLowerCase();
     if (normalized.includes("captura 1")) {
@@ -143,52 +143,44 @@ function phaseFromLabel(value) {
     }
     return null;
 }
-
 function createDiagnosticsPanel(parent) {
     const existing = document.getElementById("livenessV2Diagnostics");
     if (existing) {
         return existing;
     }
-
     const details = document.createElement("details");
     details.id = "livenessV2Diagnostics";
     details.open = true;
     details.hidden = false;
     details.style.cssText = "margin-top:16px;padding:14px 16px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(8,15,28,.58);";
-
     const summary = document.createElement("summary");
     summary.textContent = "Liveness V2 · diagnóstico experimental";
     summary.style.cssText = "cursor:pointer;font-weight:700;";
-
     const note = document.createElement("p");
     note.textContent = "Somente diagnóstico. Este sinal ainda não altera aprovação, revisão ou rejeição.";
     note.style.cssText = "margin:10px 0 8px;font-size:12px;opacity:.72;";
-
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.textContent = "Copiar diagnóstico";
     copyButton.style.cssText = "margin:0 0 10px;padding:7px 11px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;font:inherit;";
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
-
     const output = document.createElement("pre");
     output.textContent = "Preparando motor local...";
     output.style.cssText = "margin:0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
-
     details.append(summary, note, copyButton, output);
     parent.append(details);
     return details;
 }
-
 async function copyDiagnostics(panel, button) {
     const output = panel.querySelector("pre");
     const text = output?.textContent?.trim() ?? "";
     if (!text) {
         return;
     }
-
     try {
         await navigator.clipboard.writeText(text);
-    } catch {
+    }
+    catch {
         const textarea = document.createElement("textarea");
         textarea.value = text;
         textarea.style.position = "fixed";
@@ -198,14 +190,12 @@ async function copyDiagnostics(panel, button) {
         document.execCommand("copy");
         textarea.remove();
     }
-
     const previousText = button.textContent;
     button.textContent = "Copiado ✓";
     window.setTimeout(() => {
         button.textContent = previousText;
-    }, 1500);
+    }, 1_500);
 }
-
 function refreshRuntime(runtime, video, phaseLabel) {
     runtime.phase = phaseFromLabel(phaseLabel.textContent ?? "");
     runtime.videoReadyState = video.readyState;
@@ -215,20 +205,17 @@ function refreshRuntime(runtime, video, phaseLabel) {
         !video.ended &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
 }
-
 function formatDiagnostics(summary, runtime) {
     const engineLabel = {
         preparing: "carregando",
         ready: "pronto",
         error: "erro",
     }[runtime.engineState];
-
     const phaseLabel = runtime.phase === "far"
         ? "longe"
         : runtime.phase === "near"
             ? "perto"
             : "fora da captura";
-
     const status = summary.status === "experimental" ? "EVIDÊNCIA COLETADA" : "AMOSTRA INSUFICIENTE";
     const lines = [
         `Motor: ${engineLabel}`,
@@ -243,54 +230,44 @@ function formatDiagnostics(summary, runtime) {
         `Estabilidade por fase: ${percentage(summary.phaseStability)}`,
         `Geometry evidence: ${percentage(summary.evidenceScore)} · NÃO CALIBRADO`,
     ];
-
     if (runtime.errorMessage) {
         lines.push(`Erro do motor: ${runtime.errorMessage}`);
     }
-
     return lines.join("\n");
 }
-
 function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime) {
     if (!resultPanel || !finalPanel || finalPanel.hidden) {
         return;
     }
     document.getElementById("livenessV2FinalDiagnostics")?.remove();
-
     const details = document.createElement("details");
     details.id = "livenessV2FinalDiagnostics";
     details.style.cssText = "margin-top:16px;padding:14px 16px;border:1px solid rgba(255,255,255,.12);border-radius:12px;";
-
     const title = document.createElement("summary");
     title.textContent = "Liveness V2 · geometria experimental";
     title.style.cssText = "cursor:pointer;font-weight:700;";
-
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.textContent = "Copiar diagnóstico";
     copyButton.style.cssText = "margin:12px 0 0;padding:7px 11px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;font:inherit;";
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
-
     const output = document.createElement("pre");
     output.textContent = formatDiagnostics(summary, runtime);
     output.style.cssText = "margin:12px 0 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
-
     details.append(title, copyButton, output);
     resultPanel.append(details);
 }
-
 function persistSummary(summary) {
     try {
         sessionStorage.setItem("faceproof.liveness-v2.last-summary", JSON.stringify(summary));
-    } catch {
+    }
+    catch {
         // Diagnóstico experimental; falhas de armazenamento não interferem no fluxo principal.
     }
 }
-
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-
 function percentage(value) {
     return `${(value * 100).toFixed(1)}%`;
 }
