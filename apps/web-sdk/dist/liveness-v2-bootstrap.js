@@ -10,6 +10,8 @@ if (video && phaseLabel && biometryPanel) {
     const probe = new ExperimentalGeometryLiveness();
     let lastPhase = null;
     let lastSummary = probe.summarize();
+    let latestServerGuide = null;
+    const localGuideHistory = [];
     let startInProgress = false;
     const runtime = {
         engineState: "preparing",
@@ -107,6 +109,27 @@ if (video && phaseLabel && biometryPanel) {
         attributes: true,
         attributeFilter: ["hidden"],
     });
+    const handleLocalGuide = (event) => {
+        const detail = event.detail;
+        if (!detail?.guide) {
+            return;
+        }
+        localGuideHistory.push(detail.guide);
+        if (localGuideHistory.length > 24) {
+            localGuideHistory.splice(0, localGuideHistory.length - 24);
+        }
+        renderDiagnostics();
+    };
+    const handleServerGuide = (event) => {
+        const detail = event.detail;
+        if (!detail?.guide) {
+            return;
+        }
+        latestServerGuide = detail;
+        renderDiagnostics();
+    };
+    window.addEventListener("faceproof:local-guide", handleLocalGuide);
+    window.addEventListener("faceproof:server-guide", handleServerGuide);
     const diagnosticTimer = window.setInterval(() => {
         lastSummary = probe.summarize();
         renderDiagnostics();
@@ -130,6 +153,8 @@ if (video && phaseLabel && biometryPanel) {
         window.clearInterval(diagnosticTimer);
         phaseObserver.disconnect();
         finalPanelObserver?.disconnect();
+        window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+        window.removeEventListener("faceproof:server-guide", handleServerGuide);
         probe.dispose();
     });
 }
@@ -205,7 +230,7 @@ function refreshRuntime(runtime, video, phaseLabel) {
         !video.ended &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
 }
-function formatDiagnostics(summary, runtime, wasm) {
+function formatDiagnostics(summary, runtime, wasm, serverGuide, localGuideHistory) {
     const engineLabel = {
         preparing: "carregando",
         ready: "pronto",
@@ -230,6 +255,7 @@ function formatDiagnostics(summary, runtime, wasm) {
         `Estabilidade por fase: ${percentage(summary.phaseStability)}`,
         `Geometry evidence: ${percentage(summary.evidenceScore)} · NÃO CALIBRADO`,
         ...formatWasmDiagnostics(summary, wasm),
+        ...formatGuideCalibration(serverGuide, localGuideHistory),
     ];
     if (runtime.errorMessage) {
         lines.push(`Erro do motor: ${runtime.errorMessage}`);
@@ -253,6 +279,15 @@ function formatWasmDiagnostics(typescriptSummary, wasm) {
         return ["WASM shadow: pronto · aguardando amostras"];
     }
     const candidate = wasm.summary;
+    if (candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples) {
+        return [
+            `WASM shadow: sincronizando · TS ${typescriptSummary.sampleCount} frames · WASM ${candidate.sampleCount} frames`,
+            `Amostras: TS ${typescriptSummary.farSamples}/${typescriptSummary.nearSamples} · WASM ${candidate.farSamples}/${candidate.nearSamples}`,
+            "Paridade TS × WASM: aguardando mesmas amostras",
+        ];
+    }
     const deltas = [
         Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
         Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
@@ -269,7 +304,41 @@ function formatWasmDiagnostics(typescriptSummary, wasm) {
         `Paridade TS × WASM: ${parity} · delta máx. ${maxDelta.toExponential(2)}`,
     ];
 }
-function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm) {
+function formatGuideCalibration(server, localHistory) {
+    if (!server || localHistory.length === 0) {
+        return ["Guide local: aguardando comparação com YuNet"];
+    }
+    const local = nearestLocalGuide(server.timestampMs, localHistory);
+    if (!local) {
+        return ["Guide local: sem amostra temporal próxima"];
+    }
+    const ageMs = Math.abs(local.timestampMs - server.timestampMs);
+    const serverGuide = server.guide;
+    return [
+        "Guide local C++ · calibração shadow",
+        `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
+        `YuNet: centro ${serverGuide.centerX.toFixed(3)}/${serverGuide.centerY.toFixed(3)} · tamanho ${serverGuide.widthRatio.toFixed(3)}×${serverGuide.heightRatio.toFixed(3)} · roll ${serverGuide.rollDegrees.toFixed(1)}° · faceSize ${percentage(serverGuide.quality.faceSize)} · conf ${percentage(serverGuide.confidence)}`,
+        `Delta aprox. (${ageMs.toFixed(0)}ms): X ${signed(local.centerX - serverGuide.centerX, 3)} · Y ${signed(local.centerY - serverGuide.centerY, 3)} · altura ${signed(local.heightRatio - serverGuide.heightRatio, 3)} · roll ${signed(local.rollDegrees - serverGuide.rollDegrees, 1)}°`,
+        `Qualidade servidor: ${percentage(serverGuide.quality.score)} · cliente JS atual: brilho ${percentage(server.clientQuality.brightness)} · nitidez ${percentage(server.clientQuality.sharpness)}`,
+    ];
+}
+function nearestLocalGuide(timestampMs, history) {
+    let best = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const item of history) {
+        const distance = Math.abs(item.timestampMs - timestampMs);
+        if (distance < bestDistance) {
+            best = item;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+function signed(value, digits) {
+    const prefix = value >= 0 ? "+" : "";
+    return `${prefix}${value.toFixed(digits)}`;
+}
+function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm, serverGuide, localGuideHistory) {
     if (!resultPanel || !finalPanel || finalPanel.hidden) {
         return;
     }
@@ -286,7 +355,7 @@ function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm)
     copyButton.style.cssText = "margin:12px 0 0;padding:7px 11px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;font:inherit;";
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
     const output = document.createElement("pre");
-    output.textContent = formatDiagnostics(summary, runtime, wasm);
+    output.textContent = formatDiagnostics(summary, runtime, wasm, serverGuide, localGuideHistory);
     output.style.cssText = "margin:12px 0 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
     details.append(title, copyButton, output);
     resultPanel.append(details);
