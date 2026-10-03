@@ -30,6 +30,16 @@ typedef struct FPLandmark {
     double z;
 } FPLandmark;
 
+typedef struct FPGuideResult {
+    int32_t face_detected;
+    double center_x;
+    double center_y;
+    double width_ratio;
+    double height_ratio;
+    double roll_degrees;
+    double face_size_score;
+} FPGuideResult;
+
 typedef struct FPLivenessResult {
     int32_t status;
     uint32_t sample_count;
@@ -59,6 +69,13 @@ int fp_push_landmarks(
 );
 
 int fp_get_result(const FPContext* context, FPLivenessResult* result);
+
+int fp_analyze_guide(
+    const FPLandmark* landmarks,
+    uint32_t landmark_count,
+    FPGuideResult* result
+);
+
 const char* fp_version(void);
 
 #ifdef __cplusplus
