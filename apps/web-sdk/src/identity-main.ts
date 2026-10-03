@@ -336,11 +336,13 @@ async function runBiometry(): Promise<void> {
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
 
         while (!completed) {
+            localCaptureGate.reset();
             currentBiometryPhase = "far";
             const farRelaxedQuality = await waitForFacePhase("far");
 
             const session = await client.createIdentitySession(identityToken);
             const farFrames = await capturePhase("far", farRelaxedQuality);
+            localCaptureGate.lockFarReference();
             await showCaptureSuccess("Primeira captura concluída");
 
             currentBiometryPhase = "near";
