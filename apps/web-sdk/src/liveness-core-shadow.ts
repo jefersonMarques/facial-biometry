@@ -5,21 +5,37 @@ import type {
 
 export type WasmShadowState = "idle" | "loading" | "ready" | "error";
 
+export interface LocalFaceGuideMetrics {
+    faceDetected: boolean;
+    centerX: number;
+    centerY: number;
+    widthRatio: number;
+    heightRatio: number;
+    rollDegrees: number;
+    faceSizeScore: number;
+}
+
 export interface WasmShadowDiagnostics {
     state: WasmShadowState;
     summary: GeometryLivenessSummary | null;
+    guide: LocalFaceGuideMetrics | null;
     errorMessage: string;
 }
 
 type WorkerResponse =
     | { type: "ready" }
-    | { type: "summary"; summary: GeometryLivenessSummary }
+    | {
+        type: "summary";
+        summary: GeometryLivenessSummary;
+        guide: LocalFaceGuideMetrics;
+    }
     | { type: "error"; message: string };
 
 export class GeometryWasmShadow {
     private worker: Worker | null = null;
     private state: WasmShadowState = "idle";
     private summary: GeometryLivenessSummary | null = null;
+    private guide: LocalFaceGuideMetrics | null = null;
     private errorMessage = "";
     private initialization: Promise<void> | null = null;
     private resolveInitialization: (() => void) | null = null;
@@ -63,6 +79,7 @@ export class GeometryWasmShadow {
 
     public reset(): void {
         this.summary = null;
+        this.guide = null;
         this.worker?.postMessage({ type: "reset" });
         this.emitUpdate();
     }
@@ -104,6 +121,7 @@ export class GeometryWasmShadow {
         return {
             state: this.state,
             summary: this.summary,
+            guide: this.guide,
             errorMessage: this.errorMessage,
         };
     }
@@ -119,6 +137,7 @@ export class GeometryWasmShadow {
         this.rejectInitialization = null;
         this.state = "idle";
         this.summary = null;
+        this.guide = null;
         this.errorMessage = "";
     }
 
@@ -134,6 +153,7 @@ export class GeometryWasmShadow {
 
         if (message.type === "summary") {
             this.summary = message.summary;
+            this.guide = message.guide;
             this.emitUpdate();
             return;
         }
