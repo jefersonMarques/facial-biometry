@@ -6,6 +6,7 @@ import type {
 export type WasmShadowState = "idle" | "loading" | "ready" | "error";
 
 export interface LocalFaceGuideMetrics {
+    timestampMs: number;
     faceDetected: boolean;
     centerX: number;
     centerY: number;
