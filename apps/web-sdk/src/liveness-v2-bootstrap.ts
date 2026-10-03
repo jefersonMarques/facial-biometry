@@ -3,6 +3,7 @@ import {
     type GeometryCapturePhase,
     type GeometryLivenessSummary,
 } from "./liveness-v2.js";
+import type { WasmShadowDiagnostics } from "./liveness-core-shadow.js";
 
 const video = document.getElementById("camera") as HTMLVideoElement | null;
 const phaseLabel = document.getElementById("guidePhaseText") as HTMLSpanElement | null;
@@ -45,7 +46,11 @@ if (video && phaseLabel && biometryPanel) {
         diagnostics.hidden = false;
         const output = diagnostics.querySelector("pre");
         if (output) {
-            output.textContent = formatDiagnostics(lastSummary, runtime);
+            output.textContent = formatDiagnostics(
+                lastSummary,
+                runtime,
+                probe.getWasmShadowDiagnostics(),
+            );
         }
     };
 
@@ -83,7 +88,13 @@ if (video && phaseLabel && biometryPanel) {
         lastSummary = summary;
         renderDiagnostics();
         persistSummary(summary);
-        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime);
+        renderFinalDiagnostics(
+            resultPanel,
+            finalPanel,
+            summary,
+            runtime,
+            probe.getWasmShadowDiagnostics(),
+        );
     };
 
     const syncPhase = (forceReset = false): void => {
@@ -128,7 +139,13 @@ if (video && phaseLabel && biometryPanel) {
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
-                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime);
+                renderFinalDiagnostics(
+                    resultPanel,
+                    finalPanel,
+                    lastSummary,
+                    runtime,
+                    probe.getWasmShadowDiagnostics(),
+                );
             }
         })
         : null;
@@ -256,6 +273,7 @@ function refreshRuntime(
 function formatDiagnostics(
     summary: GeometryLivenessSummary,
     runtime: RuntimeDiagnostics,
+    wasm: WasmShadowDiagnostics,
 ): string {
     const engineLabel = {
         preparing: "carregando",
@@ -282,6 +300,7 @@ function formatDiagnostics(
         `Mudança de profundidade: ${summary.depthChange.toFixed(5)}`,
         `Estabilidade por fase: ${percentage(summary.phaseStability)}`,
         `Geometry evidence: ${percentage(summary.evidenceScore)} · NÃO CALIBRADO`,
+        ...formatWasmDiagnostics(summary, wasm),
     ];
 
     if (runtime.errorMessage) {
@@ -291,11 +310,51 @@ function formatDiagnostics(
     return lines.join("\n");
 }
 
+function formatWasmDiagnostics(
+    typescriptSummary: GeometryLivenessSummary,
+    wasm: WasmShadowDiagnostics,
+): string[] {
+    if (wasm.state === "idle") {
+        return ["WASM shadow: aguardando"];
+    }
+    if (wasm.state === "loading") {
+        return ["WASM shadow: carregando"];
+    }
+    if (wasm.state === "error") {
+        return [
+            "WASM shadow: indisponível · fluxo principal preservado",
+            `Erro WASM: ${wasm.errorMessage || "não informado"}`,
+        ];
+    }
+    if (!wasm.summary) {
+        return ["WASM shadow: pronto · aguardando amostras"];
+    }
+
+    const candidate = wasm.summary;
+    const deltas = [
+        Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
+        Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
+        Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange),
+        Math.abs(candidate.depthChange - typescriptSummary.depthChange),
+        Math.abs(candidate.phaseStability - typescriptSummary.phaseStability),
+        Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore),
+    ];
+    const maxDelta = Math.max(...deltas);
+    const parity = maxDelta <= 1e-9 ? "OK" : "DIVERGENTE";
+
+    return [
+        `WASM shadow: pronto · ${candidate.sampleCount} frames`,
+        `WASM Geometry evidence: ${percentage(candidate.evidenceScore)}`,
+        `Paridade TS × WASM: ${parity} · delta máx. ${maxDelta.toExponential(2)}`,
+    ];
+}
+
 function renderFinalDiagnostics(
     resultPanel: HTMLElement | null,
     finalPanel: HTMLElement | null,
     summary: GeometryLivenessSummary,
     runtime: RuntimeDiagnostics,
+    wasm: WasmShadowDiagnostics,
 ): void {
     if (!resultPanel || !finalPanel || finalPanel.hidden) {
         return;
@@ -317,7 +376,7 @@ function renderFinalDiagnostics(
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
 
     const output = document.createElement("pre");
-    output.textContent = formatDiagnostics(summary, runtime);
+    output.textContent = formatDiagnostics(summary, runtime, wasm);
     output.style.cssText = "margin:12px 0 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
 
     details.append(title, copyButton, output);
