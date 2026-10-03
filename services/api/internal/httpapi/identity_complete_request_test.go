@@ -85,8 +85,11 @@ func TestDecodeIdentityCompleteMultipart(t *testing.T) {
 		t.Fatalf("unexpected frame phases: %+v", payload.GuidedFrames)
 	}
 	for _, frame := range payload.GuidedFrames {
-		if !strings.HasPrefix(frame.ImageBase64, "data:image/jpeg;base64,") {
-			t.Fatalf("expected normalized JPEG data URL, got %q", frame.ImageBase64)
+		if len(frame.ImageBytes) == 0 {
+			t.Fatal("expected binary JPEG bytes")
+		}
+		if frame.ImageBase64 != "" {
+			t.Fatalf("multipart path must not recreate base64, got %q", frame.ImageBase64)
 		}
 	}
 }
