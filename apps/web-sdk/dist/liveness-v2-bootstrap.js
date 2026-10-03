@@ -25,7 +25,7 @@ if (video && phaseLabel && biometryPanel) {
         diagnostics.hidden = false;
         const output = diagnostics.querySelector("pre");
         if (output) {
-            output.textContent = formatDiagnostics(lastSummary, runtime);
+            output.textContent = formatDiagnostics(lastSummary, runtime, probe.getWasmShadowDiagnostics());
         }
     };
     let initialization = null;
@@ -57,7 +57,7 @@ if (video && phaseLabel && biometryPanel) {
         lastSummary = summary;
         renderDiagnostics();
         persistSummary(summary);
-        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime);
+        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, probe.getWasmShadowDiagnostics());
     };
     const syncPhase = (forceReset = false) => {
         const phase = phaseFromLabel(phaseLabel.textContent ?? "");
@@ -99,7 +99,7 @@ if (video && phaseLabel && biometryPanel) {
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
-                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime);
+                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime, probe.getWasmShadowDiagnostics());
             }
         })
         : null;
@@ -205,7 +205,7 @@ function refreshRuntime(runtime, video, phaseLabel) {
         !video.ended &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
 }
-function formatDiagnostics(summary, runtime) {
+function formatDiagnostics(summary, runtime, wasm) {
     const engineLabel = {
         preparing: "carregando",
         ready: "pronto",
@@ -229,13 +229,47 @@ function formatDiagnostics(summary, runtime) {
         `Mudança de profundidade: ${summary.depthChange.toFixed(5)}`,
         `Estabilidade por fase: ${percentage(summary.phaseStability)}`,
         `Geometry evidence: ${percentage(summary.evidenceScore)} · NÃO CALIBRADO`,
+        ...formatWasmDiagnostics(summary, wasm),
     ];
     if (runtime.errorMessage) {
         lines.push(`Erro do motor: ${runtime.errorMessage}`);
     }
     return lines.join("\n");
 }
-function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime) {
+function formatWasmDiagnostics(typescriptSummary, wasm) {
+    if (wasm.state === "idle") {
+        return ["WASM shadow: aguardando"];
+    }
+    if (wasm.state === "loading") {
+        return ["WASM shadow: carregando"];
+    }
+    if (wasm.state === "error") {
+        return [
+            "WASM shadow: indisponível · fluxo principal preservado",
+            `Erro WASM: ${wasm.errorMessage || "não informado"}`,
+        ];
+    }
+    if (!wasm.summary) {
+        return ["WASM shadow: pronto · aguardando amostras"];
+    }
+    const candidate = wasm.summary;
+    const deltas = [
+        Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
+        Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
+        Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange),
+        Math.abs(candidate.depthChange - typescriptSummary.depthChange),
+        Math.abs(candidate.phaseStability - typescriptSummary.phaseStability),
+        Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore),
+    ];
+    const maxDelta = Math.max(...deltas);
+    const parity = maxDelta <= 1e-9 ? "OK" : "DIVERGENTE";
+    return [
+        `WASM shadow: pronto · ${candidate.sampleCount} frames`,
+        `WASM Geometry evidence: ${percentage(candidate.evidenceScore)}`,
+        `Paridade TS × WASM: ${parity} · delta máx. ${maxDelta.toExponential(2)}`,
+    ];
+}
+function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm) {
     if (!resultPanel || !finalPanel || finalPanel.hidden) {
         return;
     }
@@ -252,7 +286,7 @@ function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime) {
     copyButton.style.cssText = "margin:12px 0 0;padding:7px 11px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;font:inherit;";
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
     const output = document.createElement("pre");
-    output.textContent = formatDiagnostics(summary, runtime);
+    output.textContent = formatDiagnostics(summary, runtime, wasm);
     output.style.cssText = "margin:12px 0 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
     details.append(title, copyButton, output);
     resultPanel.append(details);
