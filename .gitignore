@@ -9,3 +9,5 @@ data/templates/*.json
 data/identity-checks/*
 !data/identity-checks/.gitkeep
 .dev/
+
+apps/web-sdk/wasm/liveness-core/
