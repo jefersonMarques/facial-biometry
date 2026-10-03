@@ -38,7 +38,8 @@ type CapturedFrame struct {
 }
 
 type GuidedCapturedFrame struct {
-	ImageBase64   string              `json:"imageBase64"`
+	ImageBase64   string              `json:"imageBase64,omitempty"`
+	ImageBytes    []byte              `json:"-"`
 	Phase         string              `json:"phase"`
 	ClientQuality *ClientFrameQuality `json:"clientQuality,omitempty"`
 }
