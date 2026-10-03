@@ -62,6 +62,7 @@ if(EMSCRIPTEN)
         -sFILESYSTEM=0
         -sNO_EXIT_RUNTIME=1
         "-sEXPORTED_FUNCTIONS=['_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=HEAPF64"
     )
 endif()
 
