@@ -60,6 +60,24 @@ jobs:
       - name: Test liveness core
         run: ctest --test-dir build/liveness-core -C Release --output-on-failure
 
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: "6.0.10"
+          actions-cache-folder: emsdk-cache
+      - name: Configure WASM liveness core
+        run: emcmake cmake -S faceproof-liveness-core -B build/liveness-wasm -DFACEPROOF_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: Build WASM liveness core
+        run: cmake --build build/liveness-wasm --config Release
+      - name: Verify WASM artifacts
+        run: |
+          test -s build/liveness-wasm/faceproof-liveness-core.js
+          test -s build/liveness-wasm/faceproof-liveness-core.wasm
+
   web:
     runs-on: ubuntu-latest
     steps:
