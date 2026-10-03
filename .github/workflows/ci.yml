@@ -27,8 +27,8 @@ jobs:
         run: go test ./...
       - name: Validate development scripts
         run: |
-          bash -n scripts/run-dev.sh scripts/create-identity-check.sh
-          pwsh -NoProfile -Command '$errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile("scripts/run-dev.ps1", [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile("scripts/create-identity-check.ps1", [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }'
+          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh
+          pwsh -NoProfile -Command '$files = @("scripts/run-dev.ps1", "scripts/create-identity-check.ps1", "scripts/build-liveness-wasm.ps1"); foreach ($file in $files) { $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 } }'
 
   python:
     runs-on: ubuntu-latest
