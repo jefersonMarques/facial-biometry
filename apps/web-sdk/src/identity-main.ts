@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
+import type { LocalFaceGuideMetrics } from "./liveness-core-shadow.js";
 import type {
     GuidedCapturedFrame,
     GuidedCapturePhase,
@@ -12,17 +13,31 @@ import type {
 
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
 const DOCUMENT_PREVIEW_STORAGE_KEY = "faceproof.identity.document-preview";
-const GUIDE_SAMPLE_MS = 360;
+const GUIDE_SAMPLE_MS = 260;
 const GUIDE_READY_SAMPLES = 2;
 const PHASE_CAPTURE_FRAMES = 4;
 const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
 const QUALITY_FALLBACK_SAMPLES = 5;
-const FIRST_CAPTURE_MAX_GUIDE_POSTS = 8;
+const FIRST_CAPTURE_MAX_GUIDE_SAMPLES = 8;
 const NEAR_HOLD_SECONDS = 3;
+const LOCAL_GUIDE_MAX_AGE_MS = 650;
+const LOCAL_GUIDE_FALLBACK_AFTER_MS = 1_500;
 
 type GuideTone = "red" | "yellow" | "green";
+
+type GuideSource = "local" | "server";
+
+interface GuideGeometry {
+    source: GuideSource;
+    faceDetected: boolean;
+    centerX: number;
+    centerY: number;
+    widthRatio: number;
+    heightRatio: number;
+    rollDegrees: number;
+}
 
 interface GuideAssessment {
     ready: boolean;
@@ -41,7 +56,7 @@ interface PhaseGuideConfig {
     target: number;
 }
 
-const PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
+const SERVER_PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
     far: {
         idealMin: 0.31,
         idealMax: 0.46,
@@ -55,6 +70,23 @@ const PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
         captureMin: 0.47,
         captureMax: 0.73,
         target: 0.60,
+    },
+};
+
+const LOCAL_PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
+    far: {
+        idealMin: 0.25,
+        idealMax: 0.41,
+        captureMin: 0.21,
+        captureMax: 0.45,
+        target: 0.33,
+    },
+    near: {
+        idealMin: 0.42,
+        idealMax: 0.61,
+        captureMin: 0.38,
+        captureMax: 0.66,
+        target: 0.515,
     },
 };
 
@@ -86,6 +118,16 @@ let autoBiometryScheduled = false;
 let manualReadyResolver: (() => void) | null = null;
 let currentBiometryPhase: GuidedCapturePhase = "far";
 let documentDetails: IdentityDocumentDetails | null = null;
+let latestLocalGuide: LocalFaceGuideMetrics | null = null;
+
+const handleLocalGuide = (event: Event): void => {
+    const detail = (event as CustomEvent<{ guide?: LocalFaceGuideMetrics }>).detail;
+    if (detail?.guide) {
+        latestLocalGuide = detail.guide;
+    }
+};
+
+window.addEventListener("faceproof:local-guide", handleLocalGuide);
 
 void initialize();
 
@@ -115,7 +157,10 @@ startButton.addEventListener("click", () => {
 
     void runBiometry();
 });
-window.addEventListener("beforeunload", () => camera.stop());
+window.addEventListener("beforeunload", () => {
+    window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+    camera.stop();
+});
 
 async function initialize(): Promise<void> {
     identityToken = consumeIdentityToken();
@@ -346,7 +391,8 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     let stableSamples = 0;
     let networkFailures = 0;
     let qualityLimitedSamples = 0;
-    let guidePosts = 0;
+    let guideSamples = 0;
+    const phaseStartedAt = performance.now();
 
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
@@ -358,43 +404,43 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     const requiredStableSamples = phase === "far" ? 1 : GUIDE_READY_SAMPLES;
 
     while (stableSamples < requiredStableSamples) {
-        const snapshot = camera.snapshotForGuide();
+        const quality = camera.qualityForGuide();
+        let guide = getFreshLocalGuide(phaseStartedAt);
 
-        let guide: IdentityGuideResult;
-        try {
-            const guideRequestTimestampMs = performance.now();
-            guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
-            window.dispatchEvent(new CustomEvent("faceproof:server-guide", {
-                detail: {
-                    timestampMs: guideRequestTimestampMs,
-                    guide,
-                    clientQuality: snapshot.quality,
-                },
-            }));
-            networkFailures = 0;
-            guidePosts++;
-        } catch (error) {
-            networkFailures++;
-            if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
-                throw error;
+        if (!guide) {
+            if (performance.now() - phaseStartedAt < LOCAL_GUIDE_FALLBACK_AFTER_MS) {
+                cameraState.textContent = "Analisando rosto";
+                biometricStatus.textContent = "Preparando análise local...";
+                await sleep(GUIDE_SAMPLE_MS);
+                continue;
             }
-            cameraState.textContent = "Analisando rosto";
-            biometricStatus.textContent = "Ajustando o enquadramento...";
-            await sleep(GUIDE_SAMPLE_MS);
-            continue;
+
+            try {
+                guide = await requestServerGuideFallback(quality);
+                networkFailures = 0;
+            } catch (error) {
+                networkFailures++;
+                if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
+                    throw error;
+                }
+                cameraState.textContent = "Analisando rosto";
+                biometricStatus.textContent = "Ajustando o enquadramento...";
+                await sleep(GUIDE_SAMPLE_MS);
+                continue;
+            }
         }
 
+        guideSamples++;
         const assessment = assessGuide(guide, phase);
-        const clientQualityGood = snapshot.quality.acceptable;
-        const clientQualityUsable = isClientQualityUsable(snapshot.quality);
-        const serverQualityGood = guide.quality.score >= 0.34;
+        const clientQualityGood = quality.acceptable;
+        const clientQualityUsable = isClientQualityUsable(quality);
         const qualityLimited = assessment.captureReady &&
             clientQualityUsable &&
-            (!clientQualityGood || !serverQualityGood);
+            !clientQualityGood;
 
         if (
             phase === "far" &&
-            guidePosts >= FIRST_CAPTURE_MAX_GUIDE_POSTS &&
+            guideSamples >= FIRST_CAPTURE_MAX_GUIDE_SAMPLES &&
             (!assessment.ready || !clientQualityGood)
         ) {
             cameraState.textContent = "Aguardando você";
@@ -418,7 +464,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
         if (assessment.captureReady && !clientQualityUsable) {
             qualityLimitedSamples = 0;
             stableSamples = 0;
-            const lightingHint = clientQualityInstruction(snapshot.quality);
+            const lightingHint = clientQualityInstruction(quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             faceGuide.classList.remove("guide-ready", "guide-near");
@@ -429,9 +475,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
 
         if (qualityLimited) {
             qualityLimitedSamples++;
-            const lightingHint = clientQualityGood
-                ? { message: "A qualidade está quase suficiente. Mantenha-se parado.", state: "Qualidade quase ideal" }
-                : clientQualityInstruction(snapshot.quality);
+            const lightingHint = clientQualityInstruction(quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             faceGuide.classList.remove("guide-ready");
@@ -443,7 +487,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
                     cameraState.textContent = "Pronto para tentar";
                     biometricStatus.textContent = "A qualidade está próxima do ideal. Se estiver pronto, continue.";
                     await waitForManualReady();
-                    biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade na análise.";
+                    biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade no servidor.";
                     return true;
                 }
 
@@ -502,22 +546,23 @@ async function holdStillForAutomaticCapture(phase: GuidedCapturePhase): Promise<
         cameraState.textContent = "Mantenha-se parado";
         setProximityIndicator(100, "yellow");
 
-        const snapshot = camera.snapshotForGuide();
-        if (!isClientQualityUsable(snapshot.quality)) {
-            const lightingHint = clientQualityInstruction(snapshot.quality);
+        const quality = camera.qualityForGuide();
+        if (!isClientQualityUsable(quality)) {
+            const lightingHint = clientQualityInstruction(quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             setProximityIndicator(0, "red");
             return false;
         }
-        try {
-            const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
-            const assessment = assessGuide(guide, phase);
-            if (!assessment.captureReady) {
-                renderGuideAssessment(assessment);
-                return false;
-            }
-        } catch {
+
+        const guide = getFreshLocalGuide();
+        if (!guide) {
+            return false;
+        }
+
+        const assessment = assessGuide(guide, phase);
+        if (!assessment.captureReady) {
+            renderGuideAssessment(assessment);
             return false;
         }
 
@@ -546,8 +591,12 @@ async function capturePhase(
     const captureJPEGQuality = phase === "near" ? 0.92 : 0.86;
 
     while (frames.length < PHASE_CAPTURE_FRAMES) {
-        const guideSnapshot = camera.snapshotForGuide(360, 0.72);
-        const guide = await client.guideIdentityFace(identityToken, guideSnapshot.imageBase64);
+        const guide = getFreshLocalGuide();
+        if (!guide) {
+            relaxedQuality = await waitForFacePhase(phase);
+            continue;
+        }
+
         const assessment = assessGuide(guide, phase);
         renderGuideAssessment(assessment);
 
@@ -557,23 +606,24 @@ async function capturePhase(
             continue;
         }
 
-        const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
+        const quality = camera.qualityForGuide(captureWidth);
         if (
-            !isClientQualityUsable(snapshot.quality) ||
-            (!snapshot.quality.acceptable && !relaxedQuality)
+            !isClientQualityUsable(quality) ||
+            (!quality.acceptable && !relaxedQuality)
         ) {
             frames.length = 0;
             relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
 
+        const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
         frames.push({
             imageBase64: snapshot.imageBase64,
             phase,
             clientQuality: {
-                brightness: snapshot.quality.brightness,
-                contrast: snapshot.quality.contrast,
-                sharpness: snapshot.quality.sharpness,
+                brightness: quality.brightness,
+                contrast: quality.contrast,
+                sharpness: quality.sharpness,
             },
         });
 
@@ -599,12 +649,15 @@ async function showCaptureSuccess(message: string): Promise<void> {
 }
 
 function assessGuide(
-    guide: IdentityGuideResult,
+    guide: GuideGeometry,
     phase: GuidedCapturePhase,
 ): GuideAssessment {
-    const config = PHASE_GUIDE[phase];
+    const config = guide.source === "local"
+        ? LOCAL_PHASE_GUIDE[phase]
+        : SERVER_PHASE_GUIDE[phase];
+    const centerTargetY = guide.source === "local" ? 0.50 : 0.46;
 
-    if (!guide.faceDetected || guide.confidence < 0.72) {
+    if (!guide.faceDetected) {
         return {
             ready: false,
             captureReady: false,
@@ -631,8 +684,8 @@ function assessGuide(
     }
 
     const horizontalOffset = Math.abs(guide.centerX - 0.5);
-    const verticalOffset = Math.abs(guide.centerY - 0.46);
-    if (horizontalOffset > 0.12 || verticalOffset > 0.14) {
+    const verticalOffset = Math.abs(guide.centerY - centerTargetY);
+    if (horizontalOffset > 0.14 || verticalOffset > 0.16) {
         return {
             ready: false,
             captureReady: false,
@@ -687,23 +740,12 @@ function assessGuide(
         };
     }
 
-    if (horizontalOffset > 0.09 || verticalOffset > 0.11) {
+    if (horizontalOffset > 0.10 || verticalOffset > 0.12) {
         return {
             ready: false,
             captureReady: true,
             message: "Quase lá. Centralize um pouco mais.",
             state: "Quase na posição",
-            tone: "yellow",
-            proximityPercent,
-        };
-    }
-
-    if (guide.quality.score < 0.34) {
-        return {
-            ready: false,
-            captureReady: true,
-            message: "Quase lá. Mantenha o aparelho firme.",
-            state: "Ajustando nitidez",
             tone: "yellow",
             proximityPercent,
         };
@@ -716,6 +758,55 @@ function assessGuide(
         state: "Posição ideal",
         tone: "green",
         proximityPercent: 100,
+    };
+}
+
+function getFreshLocalGuide(minTimestampMs = 0): GuideGeometry | null {
+    const guide = latestLocalGuide;
+    if (!guide) {
+        return null;
+    }
+    if (guide.timestampMs < minTimestampMs) {
+        return null;
+    }
+    if (performance.now() - guide.timestampMs > LOCAL_GUIDE_MAX_AGE_MS) {
+        return null;
+    }
+
+    return {
+        source: "local",
+        faceDetected: guide.faceDetected,
+        centerX: guide.centerX,
+        centerY: guide.centerY,
+        widthRatio: guide.widthRatio,
+        heightRatio: guide.heightRatio,
+        rollDegrees: guide.rollDegrees,
+    };
+}
+
+async function requestServerGuideFallback(
+    clientQuality: { brightness: number; contrast: number; sharpness: number; acceptable: boolean; issue: string | null },
+): Promise<GuideGeometry> {
+    const snapshot = camera.snapshotForGuide();
+    const requestTimestampMs = performance.now();
+    const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
+
+    window.dispatchEvent(new CustomEvent("faceproof:server-guide", {
+        detail: {
+            timestampMs: requestTimestampMs,
+            guide,
+            clientQuality,
+        },
+    }));
+
+    return {
+        source: "server",
+        faceDetected: guide.faceDetected && guide.confidence >= 0.72,
+        centerX: guide.centerX,
+        centerY: guide.centerY,
+        widthRatio: guide.widthRatio,
+        heightRatio: guide.heightRatio,
+        rollDegrees: guide.rollDegrees,
     };
 }
 
