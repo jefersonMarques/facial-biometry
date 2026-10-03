@@ -74,7 +74,7 @@ func normalizeGuidedFrames(frames []domain.GuidedCapturedFrame) ([]domain.Guided
 	for index, frame := range frames {
 		frame.ImageBase64 = strings.TrimSpace(frame.ImageBase64)
 		frame.Phase = strings.ToLower(strings.TrimSpace(frame.Phase))
-		if frame.ImageBase64 == "" {
+		if len(frame.ImageBytes) == 0 && frame.ImageBase64 == "" {
 			return nil, errors.New("guided capture contains an empty frame")
 		}
 		switch frame.Phase {
