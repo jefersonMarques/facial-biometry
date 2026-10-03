@@ -447,8 +447,11 @@ async function holdStillForAutomaticCapture(phase) {
             setProximityIndicator(0, "red");
             return false;
         }
-        const guide = getFreshLocalGuide();
-        if (!guide) {
+        let guide;
+        try {
+            guide = await resolveGuideWithFallback(quality);
+        }
+        catch {
             return false;
         }
         const assessment = assessGuide(guide, phase);
@@ -473,8 +476,12 @@ async function capturePhase(phase, relaxedQuality = false) {
     const captureWidth = phase === "near" ? 960 : 640;
     const captureJPEGQuality = phase === "near" ? 0.92 : 0.86;
     while (frames.length < PHASE_CAPTURE_FRAMES) {
-        const guide = getFreshLocalGuide();
-        if (!guide) {
+        const guideQuality = camera.qualityForGuide();
+        let guide;
+        try {
+            guide = await resolveGuideWithFallback(guideQuality);
+        }
+        catch {
             relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
@@ -637,6 +644,9 @@ function getFreshLocalGuide(minTimestampMs = 0) {
         heightRatio: guide.heightRatio,
         rollDegrees: guide.rollDegrees,
     };
+}
+async function resolveGuideWithFallback(clientQuality) {
+    return getFreshLocalGuide() ?? requestServerGuideFallback(clientQuality);
 }
 async function requestServerGuideFallback(clientQuality) {
     const snapshot = camera.snapshotForGuide();
