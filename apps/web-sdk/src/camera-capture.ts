@@ -70,6 +70,12 @@ export class CameraCapture {
         return this.stream !== null && this.stream.getVideoTracks().some((track) => track.readyState === "live");
     }
 
+    public qualityForGuide(maxWidth = 360): FrameQualityAssessment {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        return this.qualityAnalyzer.analyze(imageData);
+    }
+
     public snapshotForGuide(maxWidth = 360, jpegQuality = 0.72): CameraSnapshot {
         this.drawCurrentFrame(maxWidth);
         const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
