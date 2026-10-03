@@ -1,4 +1,5 @@
 import type { GeometryLivenessSummary } from "./liveness-v2.js";
+import type { LocalFaceGuideMetrics } from "./liveness-core-shadow.js";
 
 interface EmscriptenModule {
     HEAPF64: Float64Array;
@@ -20,6 +21,13 @@ interface EmscriptenModule {
         outputCount: number,
     ): number;
     _fp_wasm_result_value_count(): number;
+    _fp_wasm_write_guide_xyz(
+        xyzPointer: number,
+        landmarkCount: number,
+        outputPointer: number,
+        outputCount: number,
+    ): number;
+    _fp_wasm_guide_value_count(): number;
 }
 
 interface EmscriptenModuleFactory {
@@ -52,6 +60,8 @@ let moduleInstance: EmscriptenModule | null = null;
 let contextHandle = 0;
 let resultPointer = 0;
 let resultValueCount = 0;
+let guidePointer = 0;
+let guideValueCount = 0;
 
 workerScope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
     void handleMessage(event.data);
@@ -80,10 +90,11 @@ async function handleMessage(message: WorkerRequest): Promise<void> {
             return;
         }
 
-        pushSample(message);
+        const guide = pushSample(message);
         workerScope.postMessage({
             type: "summary",
             summary: readSummary(),
+            guide,
         });
     } catch (error) {
         workerScope.postMessage({
@@ -123,9 +134,21 @@ async function initialize(): Promise<void> {
     if (!resultPointer) {
         throw new Error("Unable to allocate FaceProof liveness result buffer");
     }
+
+    guideValueCount = moduleInstance._fp_wasm_guide_value_count();
+    if (guideValueCount !== 7) {
+        throw new Error(`Unexpected FaceProof guide result size: ${guideValueCount}`);
+    }
+
+    guidePointer = moduleInstance._malloc(guideValueCount * Float64Array.BYTES_PER_ELEMENT);
+    if (!guidePointer) {
+        throw new Error("Unable to allocate FaceProof guide result buffer");
+    }
 }
 
-function pushSample(message: Extract<WorkerRequest, { type: "sample" }>): void {
+function pushSample(
+    message: Extract<WorkerRequest, { type: "sample" }>,
+): LocalFaceGuideMetrics {
     if (!moduleInstance || !contextHandle) {
         throw new Error("FaceProof liveness WASM is not initialized");
     }
@@ -148,19 +171,54 @@ function pushSample(message: Extract<WorkerRequest, { type: "sample" }>): void {
         );
 
         const phase = message.phase === "far" ? 0 : 1;
+        const landmarkCount = landmarks.length / 3;
         ensureOk(
             moduleInstance._fp_wasm_push_landmarks_xyz(
                 contextHandle,
                 phase,
                 pointer,
-                landmarks.length / 3,
+                landmarkCount,
                 message.timestampMs,
             ),
             "push landmarks",
         );
+
+        return readGuide(pointer, landmarkCount);
     } finally {
         moduleInstance._free(pointer);
     }
+}
+
+function readGuide(
+    landmarksPointer: number,
+    landmarkCount: number,
+): LocalFaceGuideMetrics {
+    if (!moduleInstance || !guidePointer) {
+        throw new Error("FaceProof guide WASM is not initialized");
+    }
+
+    ensureOk(
+        moduleInstance._fp_wasm_write_guide_xyz(
+            landmarksPointer,
+            landmarkCount,
+            guidePointer,
+            guideValueCount,
+        ),
+        "read guide",
+    );
+
+    const start = guidePointer / Float64Array.BYTES_PER_ELEMENT;
+    const values = moduleInstance.HEAPF64.subarray(start, start + guideValueCount);
+
+    return {
+        faceDetected: values[0] === 1,
+        centerX: values[1] ?? 0,
+        centerY: values[2] ?? 0,
+        widthRatio: values[3] ?? 0,
+        heightRatio: values[4] ?? 0,
+        rollDegrees: values[5] ?? 0,
+        faceSizeScore: values[6] ?? 0,
+    };
 }
 
 function readSummary(): GeometryLivenessSummary {
@@ -203,6 +261,10 @@ function dispose(): void {
         moduleInstance._free(resultPointer);
         resultPointer = 0;
     }
+    if (guidePointer) {
+        moduleInstance._free(guidePointer);
+        guidePointer = 0;
+    }
     if (contextHandle) {
         moduleInstance._fp_wasm_destroy(contextHandle);
         contextHandle = 0;
@@ -210,6 +272,7 @@ function dispose(): void {
 
     moduleInstance = null;
     resultValueCount = 0;
+    guideValueCount = 0;
 }
 
 function ensureOk(code: number, operation: string): void {
