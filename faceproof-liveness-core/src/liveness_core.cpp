@@ -85,6 +85,23 @@ int fp_get_result(const FPContext* context, FPLivenessResult* result) {
     return FP_OK;
 }
 
+int fp_analyze_guide(
+    const FPLandmark* landmarks,
+    std::uint32_t landmark_count,
+    FPGuideResult* result
+) {
+    if (!landmarks || landmark_count == 0 || !result) {
+        return FP_ERR_INVALID_ARGUMENT;
+    }
+
+    if (!faceproof::analyze_guide(landmarks, landmark_count, *result)) {
+        *result = {};
+        return FP_ERR_INVALID_ARGUMENT;
+    }
+
+    return FP_OK;
+}
+
 const char* fp_version(void) {
     return FP_LIVENESS_CORE_VERSION;
 }
