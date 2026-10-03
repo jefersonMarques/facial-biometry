@@ -1,7 +1,9 @@
 #include "internal.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 namespace faceproof {
 namespace {
@@ -84,6 +86,81 @@ bool extract_observation(
     output.nose_to_forehead_ratio = distance2d(nose_tip, forehead) / scale;
     output.nose_depth_ratio = (cheek_depth - nose_tip.z) / scale;
     output.yaw_asymmetry = std::abs(left_nose_distance - right_nose_distance) / scale;
+
+    return true;
+}
+
+}  // namespace faceproof
+
+
+namespace faceproof {
+
+bool analyze_guide(
+    const FPLandmark* landmarks,
+    std::uint32_t landmark_count,
+    FPGuideResult& result
+) {
+    result = {};
+    if (!landmarks || landmark_count == 0) {
+        return false;
+    }
+
+    double min_x = std::numeric_limits<double>::infinity();
+    double min_y = std::numeric_limits<double>::infinity();
+    double max_x = -std::numeric_limits<double>::infinity();
+    double max_y = -std::numeric_limits<double>::infinity();
+    std::uint32_t finite_count = 0;
+
+    for (std::uint32_t index = 0; index < landmark_count; ++index) {
+        const auto& landmark = landmarks[index];
+        if (!finite_landmark(landmark)) {
+            continue;
+        }
+
+        min_x = std::min(min_x, landmark.x);
+        min_y = std::min(min_y, landmark.y);
+        max_x = std::max(max_x, landmark.x);
+        max_y = std::max(max_y, landmark.y);
+        finite_count++;
+    }
+
+    if (finite_count < 50 || !std::isfinite(min_x) || !std::isfinite(min_y) ||
+        !std::isfinite(max_x) || !std::isfinite(max_y)) {
+        return false;
+    }
+
+    const double width = std::max(0.0, max_x - min_x);
+    const double height = std::max(0.0, max_y - min_y);
+    if (width < 0.02 || height < 0.02) {
+        return false;
+    }
+
+    result.face_detected = 1;
+    result.center_x = clamp01(min_x + width / 2.0);
+    result.center_y = clamp01(min_y + height / 2.0);
+    result.width_ratio = clamp01(width);
+    result.height_ratio = clamp01(height);
+
+    if (landmark_count > kRightEyeOuter) {
+        const auto& left_eye = landmarks[kLeftEyeOuter];
+        const auto& right_eye = landmarks[kRightEyeOuter];
+        if (finite_landmark(left_eye) && finite_landmark(right_eye)) {
+            constexpr double kRadiansToDegrees = 57.2957795130823208768;
+            result.roll_degrees = std::atan2(
+                right_eye.y - left_eye.y,
+                right_eye.x - left_eye.x
+            ) * kRadiansToDegrees;
+        }
+    }
+
+    const double area_ratio = width * height;
+    if (area_ratio < 0.07) {
+        result.face_size_score = clamp01(area_ratio / 0.07);
+    } else if (area_ratio > 0.62) {
+        result.face_size_score = clamp01(1.0 - ((area_ratio - 0.62) / 0.30));
+    } else {
+        result.face_size_score = 1.0;
+    }
 
     return true;
 }
