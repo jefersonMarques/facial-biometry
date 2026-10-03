@@ -74,6 +74,7 @@ let manualReadyResolver = null;
 let currentBiometryPhase = "far";
 let documentDetails = null;
 let latestLocalGuide = null;
+let bestCaptureObjectURL = "";
 const handleLocalGuide = (event) => {
     const detail = event.detail;
     if (detail?.guide) {
@@ -108,6 +109,9 @@ startButton.addEventListener("click", () => {
 });
 window.addEventListener("beforeunload", () => {
     window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+    }
     camera.stop();
 });
 async function initialize() {
@@ -499,9 +503,9 @@ async function capturePhase(phase, relaxedQuality = false) {
             relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
-        const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
+        const snapshot = await camera.captureBlob(captureWidth, captureJPEGQuality);
         frames.push({
-            imageBase64: snapshot.imageBase64,
+            imageBlob: snapshot.imageBlob,
             phase,
             clientQuality: {
                 brightness: quality.brightness,
@@ -793,7 +797,15 @@ function renderIdentityResult(result, capturedFrames) {
         ...result.document,
         ...(documentDetails ?? {}),
     };
-    const bestCapture = capturedFrames[result.bestFrameIndex]?.imageBase64 ?? "";
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+        bestCaptureObjectURL = "";
+    }
+    const bestCaptureBlob = capturedFrames[result.bestFrameIndex]?.imageBlob;
+    if (bestCaptureBlob) {
+        bestCaptureObjectURL = URL.createObjectURL(bestCaptureBlob);
+    }
+    const bestCapture = bestCaptureObjectURL;
     const referencePhoto = documentDetails?.referencePhotoDataUrl ?? "";
     const match = faceMatchPresentation(result.similarity, result.matchThreshold);
     resultPanel.innerHTML = `
