@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -124,10 +125,13 @@ func (client *Client) postIdentityMultipart(
 		return err
 	}
 	for index, frame := range request.GuidedFrames {
-		part, err := writer.CreateFormFile(
-			"frame",
-			fmt.Sprintf("%02d-%s.jpg", index, frame.Phase),
+		header := make(textproto.MIMEHeader)
+		header.Set(
+			"Content-Disposition",
+			fmt.Sprintf(`form-data; name="frame"; filename="%02d-%s.jpg"`, index, frame.Phase),
 		)
+		header.Set("Content-Type", "image/jpeg")
+		part, err := writer.CreatePart(header)
 		if err != nil {
 			return err
 		}
