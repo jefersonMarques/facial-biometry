@@ -420,8 +420,20 @@ function formatGuideCalibration(
     server: ServerGuideSnapshot | null,
     localHistory: LocalFaceGuideMetrics[],
 ): string[] {
-    if (!server || localHistory.length === 0) {
-        return ["Guide local: aguardando comparação com YuNet"];
+    if (localHistory.length === 0) {
+        return ["Guide local C++: aguardando primeira amostra"];
+    }
+
+    if (!server) {
+        const local = localHistory[localHistory.length - 1];
+        if (!local) {
+            return ["Guide local C++: aguardando primeira amostra"];
+        }
+        return [
+            "Guide local C++: ATIVO · /identity/guide sem POST contínuo",
+            `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
+            "Servidor continua validando integralmente os frames finais.",
+        ];
     }
 
     const local = nearestLocalGuide(server.timestampMs, localHistory);
