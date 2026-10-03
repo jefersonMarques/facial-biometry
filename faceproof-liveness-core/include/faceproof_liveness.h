@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,10 +31,10 @@ typedef struct FPLandmark {
 } FPLandmark;
 
 typedef struct FPLivenessResult {
-    std::int32_t status;
-    std::uint32_t sample_count;
-    std::uint32_t far_samples;
-    std::uint32_t near_samples;
+    int32_t status;
+    uint32_t sample_count;
+    uint32_t far_samples;
+    uint32_t near_samples;
     double scale_ratio;
     double transition_score;
     double perspective_change;
@@ -54,7 +54,7 @@ int fp_begin_phase(FPContext* context, FPPhase phase);
 int fp_push_landmarks(
     FPContext* context,
     const FPLandmark* landmarks,
-    std::uint32_t landmark_count,
+    uint32_t landmark_count,
     double timestamp_ms
 );
 
