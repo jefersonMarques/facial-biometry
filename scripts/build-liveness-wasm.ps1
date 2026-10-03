@@ -30,6 +30,11 @@ if (-not $CMakeCommand) {
     Write-Host "[info] CMake localizado em $CMakeExe"
 }
 
+$NinjaCommand = Get-Command ninja -ErrorAction SilentlyContinue
+if (-not $NinjaCommand) {
+    throw "Ninja nao encontrado. Instale com: winget install --id Ninja-build.Ninja -e"
+}
+
 if (-not $BuildDir) {
     $BuildDir = Join-Path $Root "build\liveness-wasm"
 }
@@ -39,8 +44,12 @@ if (-not $PublishDir) {
 
 $SourceDir = Join-Path $Root "faceproof-liveness-core"
 
-emcmake cmake -S $SourceDir -B $BuildDir -DFACEPROOF_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
-cmake --build $BuildDir --config Release
+if (Test-Path $BuildDir) {
+    Remove-Item -Recurse -Force $BuildDir
+}
+
+emcmake cmake -G Ninja -S $SourceDir -B $BuildDir -DFACEPROOF_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build $BuildDir
 
 $JsPath = Join-Path $BuildDir "faceproof-liveness-core.js"
 $WasmPath = Join-Path $BuildDir "faceproof-liveness-core.wasm"
