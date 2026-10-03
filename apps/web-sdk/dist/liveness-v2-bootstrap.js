@@ -5,14 +5,16 @@ const biometryPanel = document.getElementById("biometryPanel");
 const finalPanel = document.getElementById("finalPanel");
 const resultPanel = document.getElementById("identityResult");
 if (video && phaseLabel && biometryPanel) {
-    const diagnostics = createDiagnosticsPanel(biometryPanel);
+    const diagnosticsHost = biometryPanel.querySelector(".stage-content");
+    const diagnostics = createDiagnosticsPanel(diagnosticsHost ?? biometryPanel);
     const probe = new ExperimentalGeometryLiveness();
     let lastPhase = null;
     let lastSummary = null;
     let startInProgress = false;
+    let warmupError = null;
     const warmup = probe.initialize().catch((error) => {
+        warmupError = error;
         renderUnavailable(diagnostics, error);
-        throw error;
     });
     const renderSummary = (summary) => {
         lastSummary = summary;
@@ -47,6 +49,9 @@ if (video && phaseLabel && biometryPanel) {
         }
         try {
             await warmup;
+            if (warmupError) {
+                throw warmupError;
+            }
             syncPhase(true);
             await probe.start(video, renderSummary);
         }
