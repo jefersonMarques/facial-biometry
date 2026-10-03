@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -28,7 +29,22 @@ func NewClient(baseURL string) *Client {
 
 func (client *Client) AnalyzeIdentity(ctx context.Context, request domain.EngineIdentityRequest) (domain.EngineResult, error) {
 	var result domain.EngineResult
-	if err := client.postJSON(ctx, "/identity-analyze", request, &result); err != nil {
+
+	hasBinary := false
+	for _, frame := range request.GuidedFrames {
+		if len(frame.ImageBytes) > 0 {
+			hasBinary = true
+			break
+		}
+	}
+
+	var err error
+	if hasBinary {
+		err = client.postIdentityMultipart(ctx, request, &result)
+	} else {
+		err = client.postJSON(ctx, "/identity-analyze", request, &result)
+	}
+	if err != nil {
 		return domain.EngineResult{}, err
 	}
 	if len(result.Embedding) == 0 {
@@ -67,6 +83,76 @@ func (client *Client) ExtractReference(ctx context.Context, imageBase64 string) 
 	return result, nil
 }
 
+func (client *Client) postIdentityMultipart(
+	ctx context.Context,
+	request domain.EngineIdentityRequest,
+	target *domain.EngineResult,
+) error {
+	if len(request.GuidedFrames) == 0 {
+		return errors.New("identity capture has no guided frames")
+	}
+
+	type manifestFrame struct {
+		Phase         string                     `json:"phase"`
+		ClientQuality *domain.ClientFrameQuality `json:"clientQuality,omitempty"`
+	}
+	type manifestPayload struct {
+		GuidedFrames []manifestFrame `json:"guidedFrames"`
+	}
+
+	manifest := manifestPayload{
+		GuidedFrames: make([]manifestFrame, len(request.GuidedFrames)),
+	}
+	for index, frame := range request.GuidedFrames {
+		if len(frame.ImageBytes) == 0 {
+			return errors.New("identity capture mixes binary and base64 frames")
+		}
+		manifest.GuidedFrames[index] = manifestFrame{
+			Phase:         frame.Phase,
+			ClientQuality: frame.ClientQuality,
+		}
+	}
+
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("manifest", string(manifestJSON)); err != nil {
+		return err
+	}
+	for index, frame := range request.GuidedFrames {
+		part, err := writer.CreateFormFile(
+			"frame",
+			fmt.Sprintf("%02d-%s.jpg", index, frame.Phase),
+		)
+		if err != nil {
+			return err
+		}
+		if _, err := part.Write(frame.ImageBytes); err != nil {
+			return err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	httpRequest, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		client.baseURL+"/identity-analyze",
+		bytes.NewReader(body.Bytes()),
+	)
+	if err != nil {
+		return err
+	}
+	httpRequest.Header.Set("Content-Type", writer.FormDataContentType())
+
+	return client.doJSONRequest(httpRequest, target)
+}
+
 func (client *Client) postJSON(ctx context.Context, path string, payload any, target any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -79,6 +165,10 @@ func (client *Client) postJSON(ctx context.Context, path string, payload any, ta
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 
+	return client.doJSONRequest(httpRequest, target)
+}
+
+func (client *Client) doJSONRequest(httpRequest *http.Request, target any) error {
 	response, err := client.httpClient.Do(httpRequest)
 	if err != nil {
 		return err
