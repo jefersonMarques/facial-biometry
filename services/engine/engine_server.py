@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import threading
+from email import policy
+from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -62,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if self.path == "/identity-analyze":
-                payload = self._read_json(max_bytes=10 * 1024 * 1024)
+                payload = self._read_identity_analyze(max_bytes=16 * 1024 * 1024)
                 with ANALYZER_LOCK:
                     result = ANALYZER.analyze_identity(payload)
                 self._write_json(200, result)
@@ -76,6 +78,81 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format_string: str, *args: Any) -> None:
         print(f"[engine] {self.address_string()} - {format_string % args}")
+
+    def _read_identity_analyze(self, max_bytes: int) -> dict[str, Any]:
+        content_type = self.headers.get("Content-Type", "").strip()
+        if not content_type.lower().startswith("multipart/form-data"):
+            return self._read_json(max_bytes=max_bytes)
+
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0 or content_length > max_bytes:
+            raise ValueError("invalid request size")
+
+        body = self.rfile.read(content_length)
+        message = BytesParser(policy=policy.default).parsebytes(
+            (
+                f"Content-Type: {content_type}\r\n"
+                "MIME-Version: 1.0\r\n"
+                "\r\n"
+            ).encode("ascii")
+            + body
+        )
+        if not message.is_multipart():
+            raise ValueError("invalid multipart identity capture")
+
+        manifest_raw: bytes | None = None
+        frame_bytes: list[bytes] = []
+
+        for part in message.iter_parts():
+            if part.get_content_disposition() != "form-data":
+                continue
+
+            field_name = part.get_param("name", header="content-disposition")
+            payload = part.get_payload(decode=True) or b""
+
+            if field_name == "manifest":
+                if manifest_raw is not None:
+                    raise ValueError("identity capture manifest is duplicated")
+                if len(payload) > 256 * 1024:
+                    raise ValueError("identity capture manifest is too large")
+                manifest_raw = payload
+                continue
+
+            if field_name != "frame":
+                continue
+            if len(frame_bytes) >= 12:
+                raise ValueError("identity capture has too many frames")
+            if not payload or len(payload) > 3 * 1024 * 1024:
+                raise ValueError("identity capture frame exceeds size limit")
+            if part.get_content_type() != "image/jpeg":
+                raise ValueError("identity capture frame must be JPEG")
+            if not payload.startswith(b"\xff\xd8\xff"):
+                raise ValueError("identity capture frame is not a JPEG")
+            frame_bytes.append(payload)
+
+        if manifest_raw is None:
+            raise ValueError("identity capture manifest is missing")
+
+        try:
+            manifest = json.loads(manifest_raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("identity capture manifest is invalid") from error
+
+        guided_frames = manifest.get("guidedFrames") if isinstance(manifest, dict) else None
+        if not isinstance(guided_frames, list) or not 6 <= len(guided_frames) <= 12:
+            raise ValueError("guidedFrames must contain between 6 and 12 items")
+        if len(guided_frames) != len(frame_bytes):
+            raise ValueError("identity capture frame count does not match manifest")
+
+        normalized_frames: list[dict[str, Any]] = []
+        for metadata, image_bytes in zip(guided_frames, frame_bytes, strict=True):
+            if not isinstance(metadata, dict):
+                raise ValueError("identity capture frame metadata is invalid")
+            frame = dict(metadata)
+            frame["imageBytes"] = image_bytes
+            normalized_frames.append(frame)
+
+        return {"guidedFrames": normalized_frames}
 
     def _read_json(self, max_bytes: int) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
