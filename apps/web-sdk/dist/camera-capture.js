@@ -42,6 +42,11 @@ export class CameraCapture {
     isActive() {
         return this.stream !== null && this.stream.getVideoTracks().some((track) => track.readyState === "live");
     }
+    qualityForGuide(maxWidth = 360) {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        return this.qualityAnalyzer.analyze(imageData);
+    }
     snapshotForGuide(maxWidth = 360, jpegQuality = 0.72) {
         this.drawCurrentFrame(maxWidth);
         const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
