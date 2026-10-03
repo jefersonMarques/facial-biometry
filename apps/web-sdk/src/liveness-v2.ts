@@ -1,5 +1,6 @@
 import {
     GeometryWasmShadow,
+    type LocalFaceGuideMetrics,
     type WasmShadowDiagnostics,
 } from "./liveness-core-shadow.js";
 
@@ -164,6 +165,7 @@ export class ExperimentalGeometryLiveness {
         return this.wasmShadow?.snapshot() ?? {
             state: "idle",
             summary: null,
+            guide: null,
             errorMessage: "",
         };
     }
@@ -194,7 +196,10 @@ export class ExperimentalGeometryLiveness {
             this.landmarker = await create("CPU");
         }
 
-        const wasmShadow = new GeometryWasmShadow(() => {
+        const wasmShadow = new GeometryWasmShadow((diagnostics) => {
+            if (diagnostics.guide) {
+                dispatchLocalGuide(diagnostics.guide);
+            }
             this.onUpdate?.(this.summarize());
         });
         this.wasmShadow = wasmShadow;
@@ -448,4 +453,13 @@ function median(values: number[]): number {
 
 function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value));
+}
+
+function dispatchLocalGuide(guide: LocalFaceGuideMetrics): void {
+    window.dispatchEvent(new CustomEvent("faceproof:local-guide", {
+        detail: {
+            timestampMs: performance.now(),
+            guide,
+        },
+    }));
 }
