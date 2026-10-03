@@ -378,8 +378,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		return
 	}
 
-	var payload identityCompleteRequest
-	if err := decodeJSON(request, &payload, 16<<20); err != nil {
+	payload, err := decodeIdentityCompleteRequest(writer, request)
+	if err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
