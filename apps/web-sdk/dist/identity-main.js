@@ -287,7 +287,15 @@ async function waitForFacePhase(phase) {
         const snapshot = camera.snapshotForGuide();
         let guide;
         try {
+            const guideRequestTimestampMs = performance.now();
             guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
+            window.dispatchEvent(new CustomEvent("faceproof:server-guide", {
+                detail: {
+                    timestampMs: guideRequestTimestampMs,
+                    guide,
+                    clientQuality: snapshot.quality,
+                },
+            }));
             networkFailures = 0;
             guidePosts++;
         }
