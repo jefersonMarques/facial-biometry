@@ -2,7 +2,8 @@ const DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision
 const DEFAULT_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const DEFAULT_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const DEFAULT_SAMPLE_INTERVAL_MS = 180;
-const DEFAULT_MAX_OBSERVATIONS = 120;\nconst ANALYSIS_WIDTH = 384;
+const DEFAULT_MAX_OBSERVATIONS = 120;
+const ANALYSIS_WIDTH = 384;
 const MIN_PHASE_SAMPLES = 4;
 export class ExperimentalGeometryLiveness {
     landmarker = null;
