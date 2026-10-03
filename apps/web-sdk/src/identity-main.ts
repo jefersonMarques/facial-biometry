@@ -1,7 +1,10 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
-import { LocalCaptureGate } from "./local-capture-gate.js";
+import {
+    LocalCaptureGate,
+    type LocalCaptureGateResult,
+} from "./local-capture-gate.js";
 import type { LocalFaceGuideMetrics } from "./liveness-core-shadow.js";
 import type {
     GuidedCapturedFrame,
@@ -440,6 +443,17 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
 
         guideSamples++;
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase, phaseStartedAt)
+            : null;
+
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            stableSamples = 0;
+            renderLocalGateIssue(localGate, assessment);
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+
         const clientQualityGood = quality.acceptable;
         const clientQualityUsable = isClientQualityUsable(quality);
         const qualityLimited = assessment.captureReady &&
