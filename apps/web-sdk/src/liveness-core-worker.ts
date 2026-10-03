@@ -26,6 +26,15 @@ interface EmscriptenModuleFactory {
     (options?: Record<string, unknown>): Promise<EmscriptenModule>;
 }
 
+interface WorkerScope {
+    addEventListener(
+        type: "message",
+        listener: (event: MessageEvent<WorkerRequest>) => void,
+    ): void;
+    postMessage(message: unknown): void;
+    close(): void;
+}
+
 type WorkerRequest =
     | { type: "init" }
     | { type: "reset" }
@@ -37,12 +46,14 @@ type WorkerRequest =
     }
     | { type: "dispose" };
 
+const workerScope = self as unknown as WorkerScope;
+
 let moduleInstance: EmscriptenModule | null = null;
 let contextHandle = 0;
 let resultPointer = 0;
 let resultValueCount = 0;
 
-self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
+workerScope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
     void handleMessage(event.data);
 });
 
@@ -50,13 +61,13 @@ async function handleMessage(message: WorkerRequest): Promise<void> {
     try {
         if (message.type === "init") {
             await initialize();
-            self.postMessage({ type: "ready" });
+            workerScope.postMessage({ type: "ready" });
             return;
         }
 
         if (message.type === "dispose") {
             dispose();
-            self.close();
+            workerScope.close();
             return;
         }
 
@@ -70,12 +81,12 @@ async function handleMessage(message: WorkerRequest): Promise<void> {
         }
 
         pushSample(message);
-        self.postMessage({
+        workerScope.postMessage({
             type: "summary",
             summary: readSummary(),
         });
     } catch (error) {
-        self.postMessage({
+        workerScope.postMessage({
             type: "error",
             message: errorMessage(error),
         });
