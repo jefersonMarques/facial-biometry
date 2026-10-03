@@ -194,7 +194,9 @@ export class ExperimentalGeometryLiveness {
             this.landmarker = await create("CPU");
         }
 
-        const wasmShadow = new GeometryWasmShadow();
+        const wasmShadow = new GeometryWasmShadow(() => {
+            this.onUpdate?.(this.summarize());
+        });
         this.wasmShadow = wasmShadow;
         void wasmShadow.initialize().catch(() => {
             // Shadow mode: WASM failure must never affect the active verification flow.
