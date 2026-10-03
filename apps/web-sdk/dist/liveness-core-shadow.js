@@ -1,4 +1,5 @@
 export class GeometryWasmShadow {
+    onUpdate;
     worker = null;
     state = "idle";
     summary = null;
@@ -7,7 +8,6 @@ export class GeometryWasmShadow {
     initialization = null;
     resolveInitialization = null;
     rejectInitialization = null;
-    onUpdate;
     constructor(onUpdate) {
         this.onUpdate = onUpdate;
     }
