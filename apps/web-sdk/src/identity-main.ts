@@ -118,6 +118,7 @@ let manualReadyResolver: (() => void) | null = null;
 let currentBiometryPhase: GuidedCapturePhase = "far";
 let documentDetails: IdentityDocumentDetails | null = null;
 let latestLocalGuide: LocalFaceGuideMetrics | null = null;
+let bestCaptureObjectURL = "";
 
 const handleLocalGuide = (event: Event): void => {
     const detail = (event as CustomEvent<{ guide?: LocalFaceGuideMetrics }>).detail;
@@ -158,6 +159,9 @@ startButton.addEventListener("click", () => {
 });
 window.addEventListener("beforeunload", () => {
     window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+    }
     camera.stop();
 });
 
@@ -620,9 +624,9 @@ async function capturePhase(
             continue;
         }
 
-        const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
+        const snapshot = await camera.captureBlob(captureWidth, captureJPEGQuality);
         frames.push({
-            imageBase64: snapshot.imageBase64,
+            imageBlob: snapshot.imageBlob,
             phase,
             clientQuality: {
                 brightness: quality.brightness,
@@ -964,7 +968,15 @@ function renderIdentityResult(
         ...result.document,
         ...(documentDetails ?? {}),
     };
-    const bestCapture = capturedFrames[result.bestFrameIndex]?.imageBase64 ?? "";
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+        bestCaptureObjectURL = "";
+    }
+    const bestCaptureBlob = capturedFrames[result.bestFrameIndex]?.imageBlob;
+    if (bestCaptureBlob) {
+        bestCaptureObjectURL = URL.createObjectURL(bestCaptureBlob);
+    }
+    const bestCapture = bestCaptureObjectURL;
     const referencePhoto = documentDetails?.referencePhotoDataUrl ?? "";
     const match = faceMatchPresentation(result.similarity, result.matchThreshold);
 
