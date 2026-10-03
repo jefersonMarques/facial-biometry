@@ -38,7 +38,7 @@ export interface CapturedFrame {
 export type GuidedCapturePhase = "far" | "near";
 
 export interface GuidedCapturedFrame {
-    imageBase64: string;
+    imageBlob: Blob;
     phase: GuidedCapturePhase;
     clientQuality: ClientFrameQuality;
 }
