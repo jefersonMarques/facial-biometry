@@ -3,6 +3,8 @@ let moduleInstance = null;
 let contextHandle = 0;
 let resultPointer = 0;
 let resultValueCount = 0;
+let guidePointer = 0;
+let guideValueCount = 0;
 workerScope.addEventListener("message", (event) => {
     void handleMessage(event.data);
 });
@@ -25,10 +27,11 @@ async function handleMessage(message) {
             ensureOk(moduleInstance._fp_wasm_reset(contextHandle), "reset");
             return;
         }
-        pushSample(message);
+        const guide = pushSample(message);
         workerScope.postMessage({
             type: "summary",
             summary: readSummary(),
+            guide,
         });
     }
     catch (error) {
@@ -61,6 +64,14 @@ async function initialize() {
     if (!resultPointer) {
         throw new Error("Unable to allocate FaceProof liveness result buffer");
     }
+    guideValueCount = moduleInstance._fp_wasm_guide_value_count();
+    if (guideValueCount !== 7) {
+        throw new Error(`Unexpected FaceProof guide result size: ${guideValueCount}`);
+    }
+    guidePointer = moduleInstance._malloc(guideValueCount * Float64Array.BYTES_PER_ELEMENT);
+    if (!guidePointer) {
+        throw new Error("Unable to allocate FaceProof guide result buffer");
+    }
 }
 function pushSample(message) {
     if (!moduleInstance || !contextHandle) {
@@ -78,11 +89,31 @@ function pushSample(message) {
     try {
         moduleInstance.HEAPF64.set(landmarks, pointer / Float64Array.BYTES_PER_ELEMENT);
         const phase = message.phase === "far" ? 0 : 1;
-        ensureOk(moduleInstance._fp_wasm_push_landmarks_xyz(contextHandle, phase, pointer, landmarks.length / 3, message.timestampMs), "push landmarks");
+        const landmarkCount = landmarks.length / 3;
+        ensureOk(moduleInstance._fp_wasm_push_landmarks_xyz(contextHandle, phase, pointer, landmarkCount, message.timestampMs), "push landmarks");
+        return readGuide(pointer, landmarkCount, message.timestampMs);
     }
     finally {
         moduleInstance._free(pointer);
     }
+}
+function readGuide(landmarksPointer, landmarkCount, timestampMs) {
+    if (!moduleInstance || !guidePointer) {
+        throw new Error("FaceProof guide WASM is not initialized");
+    }
+    ensureOk(moduleInstance._fp_wasm_write_guide_xyz(landmarksPointer, landmarkCount, guidePointer, guideValueCount), "read guide");
+    const start = guidePointer / Float64Array.BYTES_PER_ELEMENT;
+    const values = moduleInstance.HEAPF64.subarray(start, start + guideValueCount);
+    return {
+        timestampMs,
+        faceDetected: values[0] === 1,
+        centerX: values[1] ?? 0,
+        centerY: values[2] ?? 0,
+        widthRatio: values[3] ?? 0,
+        heightRatio: values[4] ?? 0,
+        rollDegrees: values[5] ?? 0,
+        faceSizeScore: values[6] ?? 0,
+    };
 }
 function readSummary() {
     if (!moduleInstance || !contextHandle || !resultPointer) {
@@ -112,12 +143,17 @@ function dispose() {
         moduleInstance._free(resultPointer);
         resultPointer = 0;
     }
+    if (guidePointer) {
+        moduleInstance._free(guidePointer);
+        guidePointer = 0;
+    }
     if (contextHandle) {
         moduleInstance._fp_wasm_destroy(contextHandle);
         contextHandle = 0;
     }
     moduleInstance = null;
     resultValueCount = 0;
+    guideValueCount = 0;
 }
 function ensureOk(code, operation) {
     if (code !== 0) {
