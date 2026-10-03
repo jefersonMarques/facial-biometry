@@ -183,7 +183,7 @@ function pushSample(
             "push landmarks",
         );
 
-        return readGuide(pointer, landmarkCount);
+        return readGuide(pointer, landmarkCount, message.timestampMs);
     } finally {
         moduleInstance._free(pointer);
     }
@@ -192,6 +192,7 @@ function pushSample(
 function readGuide(
     landmarksPointer: number,
     landmarkCount: number,
+    timestampMs: number,
 ): LocalFaceGuideMetrics {
     if (!moduleInstance || !guidePointer) {
         throw new Error("FaceProof guide WASM is not initialized");
@@ -211,6 +212,7 @@ function readGuide(
     const values = moduleInstance.HEAPF64.subarray(start, start + guideValueCount);
 
     return {
+        timestampMs,
         faceDetected: values[0] === 1,
         centerX: values[1] ?? 0,
         centerY: values[2] ?? 0,
