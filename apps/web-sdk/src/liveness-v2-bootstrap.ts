@@ -331,6 +331,18 @@ function formatWasmDiagnostics(
     }
 
     const candidate = wasm.summary;
+    if (
+        candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples
+    ) {
+        return [
+            `WASM shadow: sincronizando · TS ${typescriptSummary.sampleCount} frames · WASM ${candidate.sampleCount} frames`,
+            `Amostras: TS ${typescriptSummary.farSamples}/${typescriptSummary.nearSamples} · WASM ${candidate.farSamples}/${candidate.nearSamples}`,
+            "Paridade TS × WASM: aguardando mesmas amostras",
+        ];
+    }
+
     const deltas = [
         Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
         Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
