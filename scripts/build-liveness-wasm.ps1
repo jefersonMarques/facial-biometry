@@ -62,6 +62,29 @@ New-Item -ItemType Directory -Force -Path $PublishDir | Out-Null
 Copy-Item -Force $JsPath (Join-Path $PublishDir "faceproof-liveness-core.js")
 Copy-Item -Force $WasmPath (Join-Path $PublishDir "faceproof-liveness-core.wasm")
 
+$ManifestPath = Join-Path $BuildDir "faceproof-liveness-core.manifest.json"
+$JsHash = (Get-FileHash -Algorithm SHA256 $JsPath).Hash.ToLowerInvariant()
+$WasmHash = (Get-FileHash -Algorithm SHA256 $WasmPath).Hash.ToLowerInvariant()
+$Manifest = [ordered]@{
+    schemaVersion = 1
+    version = "0.1.0"
+    files = @(
+        [ordered]@{
+            path = "faceproof-liveness-core.js"
+            bytes = (Get-Item $JsPath).Length
+            sha256 = $JsHash
+        },
+        [ordered]@{
+            path = "faceproof-liveness-core.wasm"
+            bytes = (Get-Item $WasmPath).Length
+            sha256 = $WasmHash
+        }
+    )
+}
+$Manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $ManifestPath
+Copy-Item -Force $ManifestPath (Join-Path $PublishDir "faceproof-liveness-core.manifest.json")
+
 Write-Host "[ok] build: $JsPath"
 Write-Host "[ok] build: $WasmPath"
+Write-Host "[ok] manifest: $ManifestPath"
 Write-Host "[ok] publish: $PublishDir"
