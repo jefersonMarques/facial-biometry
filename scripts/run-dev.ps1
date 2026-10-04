@@ -4,6 +4,20 @@ Set-Location $Root
 
 python models/download_models.py
 
+$WebSdkDirectory = Join-Path $Root "apps\web-sdk"
+$MediaPipePackage = Join-Path $WebSdkDirectory "node_modules\@mediapipe\tasks-vision\package.json"
+if (-not (Test-Path $MediaPipePackage)) {
+    Write-Host "Installing pinned web SDK dependencies..." -ForegroundColor DarkCyan
+    Push-Location $WebSdkDirectory
+    try {
+        npm install --no-audit --no-fund
+    }
+    finally {
+        Pop-Location
+    }
+}
+python scripts\vendor-mediapipe.py
+
 if (-not (Test-Path ".venv")) {
     python -m venv .venv
 }
