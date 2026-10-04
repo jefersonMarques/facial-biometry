@@ -64,9 +64,9 @@ export interface GeometryLivenessOptions {
     maxObservations?: number;
 }
 
-const DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
-const DEFAULT_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const DEFAULT_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const DEFAULT_MODULE_URL = "/vendor/mediapipe/1.0.1/vision_bundle.mjs";
+const DEFAULT_WASM_ROOT = "/vendor/mediapipe/1.0.1/wasm";
+const DEFAULT_MODEL_URL = "/vendor/mediapipe/1.0.1/models/face_landmarker.task";
 const DEFAULT_SAMPLE_INTERVAL_MS = 180;
 const DEFAULT_MAX_OBSERVATIONS = 120;
 const ANALYSIS_WIDTH = 384;
