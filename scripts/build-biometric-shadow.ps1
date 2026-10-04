@@ -19,7 +19,14 @@ function Find-OpenCVConfig {
     if (-not (Test-Path $OpenCVInstall)) {
         return $null
     }
+
+    $StaticConfig = Join-Path $OpenCVInstall "x64\vc17\staticlib\OpenCVConfig.cmake"
+    if (Test-Path $StaticConfig) {
+        return Get-Item $StaticConfig
+    }
+
     return Get-ChildItem -Path $OpenCVInstall -Filter "OpenCVConfig.cmake" -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.DirectoryName -match "[\\/]staticlib$" } |
         Select-Object -First 1
 }
 
@@ -113,6 +120,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Configuring FaceProof native biometric shadow..." -ForegroundColor DarkCyan
+Remove-Item -Recurse -Force $ShadowBuild -ErrorAction SilentlyContinue
 $ShadowConfigureArgs = @(
     "-S", (Join-Path $Root "faceproof-biometric-core"),
     "-B", $ShadowBuild,
@@ -120,6 +128,7 @@ $ShadowConfigureArgs = @(
     "-A", "x64",
     "-DFACEPROOF_BIOMETRIC_WITH_OPENCV=ON",
     "-DFACEPROOF_BIOMETRIC_WITH_ONNXRUNTIME=OFF",
+    "-DOpenCV_STATIC=ON",
     "-DOpenCV_DIR=$($OpenCVConfig.DirectoryName)"
 )
 & cmake @ShadowConfigureArgs
