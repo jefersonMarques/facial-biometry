@@ -108,7 +108,7 @@ jobs:
         env:
           PYTHONPATH: services/engine
           FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
-          FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/opencv-zoo-sface-demo.jpg
+          FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
           FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
           FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
         run: >
