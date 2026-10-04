@@ -85,6 +85,38 @@ jobs:
           FACEPROOF_BIOMETRIC_MATH_CLI: ${{ github.workspace }}/build/biometric-core/faceproof_biometric_math_cli
         run: python -m unittest services.engine.tests.test_biometric_core_parity -v
 
+  biometric-vision-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native OpenCV parity dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopencv-dev python3-opencv python3-numpy
+      - name: Download pinned biometric models
+        run: /usr/bin/python3 models/download_models.py
+      - name: Download pinned OpenCV Zoo face fixture
+        run: /usr/bin/python3 scripts/download-biometric-parity-fixture.py
+      - name: Configure OpenCV biometric secure core
+        run: >
+          cmake -S faceproof-biometric-core -B build/biometric-vision
+          -DCMAKE_BUILD_TYPE=Release
+          -DFACEPROOF_BIOMETRIC_WITH_OPENCV=ON
+      - name: Build OpenCV biometric secure core
+        run: cmake --build build/biometric-vision --config Release
+      - name: Compare Python and C++ vision pipeline
+        env:
+          PYTHONPATH: services/engine
+          FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
+          FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/opencv-zoo-sface-demo.jpg
+          FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
+          FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
+        run: >
+          /usr/bin/python3 -m unittest discover
+          -s services/engine/tests
+          -p 'test_biometric_vision_parity.py'
+          -v
+
   wasm:
     runs-on: ubuntu-latest
     steps:
