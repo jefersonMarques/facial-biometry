@@ -8,8 +8,14 @@ export class CaptureLifecycle {
     nearStartedAtUnixMs = 0;
     submittingAtUnixMs = 0;
     state = "idle";
-    begin() {
-        this.runId = crypto.randomUUID();
+    begin(runId, protocolVersion) {
+        if (protocolVersion !== CAPTURE_PROTOCOL_VERSION) {
+            throw new Error(`Unsupported capture protocol version: ${protocolVersion}`);
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(runId)) {
+            throw new Error("Invalid server-issued capture run ID");
+        }
+        this.runId = runId;
         this.sequence = 0;
         this.startedAtUnixMs = Date.now();
         this.farStartedAtUnixMs = 0;
