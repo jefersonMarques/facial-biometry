@@ -97,6 +97,11 @@ jobs:
         with:
           path: build/opencv-4.14.0/install
           key: opencv-4.14.0-minimal-v1-${{ runner.os }}-${{ hashFiles('scripts/build-opencv-parity.sh') }}
+      - name: Cache ONNX Runtime native package
+        uses: actions/cache@v4
+        with:
+          path: build/onnxruntime-1.30.0
+          key: onnxruntime-1.30.0-linux-x64-v1
       - name: Install native build dependencies
         run: |
           sudo apt-get update
@@ -104,6 +109,8 @@ jobs:
           python -m pip install numpy==2.4.6 opencv-python-headless==4.14.0.94
       - name: Build pinned native OpenCV
         run: bash scripts/build-opencv-parity.sh
+      - name: Prepare pinned native ONNX Runtime
+        run: python scripts/vendor-onnxruntime.py
       - name: Download pinned biometric models
         run: python models/download_models.py
       - name: Download pinned face fixture
@@ -113,18 +120,22 @@ jobs:
           cmake -S faceproof-biometric-core -B build/biometric-vision
           -DCMAKE_BUILD_TYPE=Release
           -DFACEPROOF_BIOMETRIC_WITH_OPENCV=ON
+          -DFACEPROOF_BIOMETRIC_WITH_ONNXRUNTIME=ON
+          -DFACEPROOF_ONNXRUNTIME_ROOT=${{ github.workspace }}/build/onnxruntime-1.30.0
           -DOpenCV_DIR=${{ github.workspace }}/build/opencv-4.14.0/install/lib/cmake/opencv4
       - name: Build OpenCV biometric secure core
         run: cmake --build build/biometric-vision --config Release
       - name: Compare Python and C++ vision pipeline
         env:
           PYTHONPATH: services/engine
-          LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib:${{ github.workspace }}/build/onnxruntime-1.30.0/lib
           FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
           FACEPROOF_BIOMETRIC_REFERENCE_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_reference_cli
+          FACEPROOF_BIOMETRIC_PAD_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_pad_cli
           FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
           FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
           FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
+          FACEPROOF_MINIFAS_MODEL: ${{ github.workspace }}/models/minifasnet/MiniFASNetV2.onnx
         run: >
           python -m unittest discover
           -s services/engine/tests
