@@ -63,18 +63,23 @@ int main(int argc, char** argv) {
         return 4;
     }
 
+    std::vector<float> embedding(512);
+    size_t embedding_size = 0;
     FPBiometricFace face{};
     FPBiometricQuality quality{};
-    const int vision_code = fp_bio_vision_analyze_jpeg(
+    const int vision_code = fp_bio_vision_encode_jpeg(
         vision,
         image.data(),
         image.size(),
+        embedding.data(),
+        embedding.size(),
+        &embedding_size,
         &face,
         &quality
     );
-    fp_bio_vision_destroy(vision);
 
     if (vision_code != 0) {
+        fp_bio_vision_destroy(vision);
         std::cerr
             << "face detection failed: "
             << vision_code
@@ -102,6 +107,7 @@ int main(int argc, char** argv) {
         &result
     );
     fp_bio_pad_destroy(pad);
+    fp_bio_vision_destroy(vision);
 
     if (pad_code != 0) {
         std::cerr
@@ -127,9 +133,24 @@ int main(int argc, char** argv) {
               << "\"x\":" << face.x << ","
               << "\"y\":" << face.y << ","
               << "\"width\":" << face.width << ","
-              << "\"height\":" << face.height
-              << "}"
-              << "}\n";
+              << "\"height\":" << face.height << ","
+              << "\"confidence\":" << face.confidence
+              << "},\"quality\":{"
+              << "\"sharpness\":" << quality.sharpness << ","
+              << "\"brightness\":" << quality.brightness << ","
+              << "\"brightnessValue\":" << quality.brightness_value << ","
+              << "\"faceSize\":" << quality.face_size << ","
+              << "\"score\":" << quality.score
+              << "},\"embedding\":[";
+
+    for (size_t index = 0; index < embedding_size; ++index) {
+        if (index > 0) {
+            std::cout << ",";
+        }
+        std::cout << embedding[index];
+    }
+
+    std::cout << "]}\n";
 
     return 0;
 }
