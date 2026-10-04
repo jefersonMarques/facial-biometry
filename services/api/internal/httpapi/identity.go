@@ -409,7 +409,15 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := handler.signer.Verify(payload.SessionToken, payload.SessionID); err != nil {
+	if err := validateCaptureProtocolSession(payload.CaptureProtocol, captureSession); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := handler.signer.VerifyCapture(
+		payload.SessionToken,
+		payload.SessionID,
+		payload.CaptureProtocol.RunID,
+	); err != nil {
 		handler.writeError(writer, http.StatusUnauthorized, err.Error())
 		return
 	}
