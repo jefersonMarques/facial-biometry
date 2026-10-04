@@ -28,7 +28,7 @@ type Config struct {
 
 	RuntimeSDKVersion              string
 	RuntimeLivenessCoreVersion     string
-	RuntimeLivenessCoreWASM_SHA256 string
+	RuntimeLivenessCoreWASMSHA256 string
 	RuntimeMediaPipeVersion        string
 	RuntimeMediaPipeVisionSHA256   string
 	RuntimeFaceLandmarkerSHA256    string
@@ -84,7 +84,7 @@ func Load() (Config, error) {
 		Debug:                   envBool("FACEPROOF_DEBUG", false),
 		RuntimeSDKVersion:              envString("FACEPROOF_RUNTIME_SDK_VERSION", "0.3.0"),
 		RuntimeLivenessCoreVersion:     envString("FACEPROOF_RUNTIME_LIVENESS_CORE_VERSION", "0.1.0"),
-		RuntimeLivenessCoreWASM_SHA256: strings.ToLower(strings.TrimSpace(os.Getenv("FACEPROOF_RUNTIME_LIVENESS_WASM_SHA256"))),
+		RuntimeLivenessCoreWASMSHA256: strings.ToLower(strings.TrimSpace(os.Getenv("FACEPROOF_RUNTIME_LIVENESS_WASM_SHA256"))),
 		RuntimeMediaPipeVersion:        envString("FACEPROOF_RUNTIME_MEDIAPIPE_VERSION", "1.0.1"),
 		RuntimeMediaPipeVisionSHA256:   envString("FACEPROOF_RUNTIME_MEDIAPIPE_VISION_SHA256", "d885630c297c0b20b1fe86096cb06291c4c8080876f27852e724f24ac603713f"),
 		RuntimeFaceLandmarkerSHA256:    envString("FACEPROOF_RUNTIME_FACE_LANDMARKER_SHA256", "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"),
