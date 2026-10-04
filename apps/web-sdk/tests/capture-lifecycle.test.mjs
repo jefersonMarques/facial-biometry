@@ -24,7 +24,7 @@ test("emits ordered lifecycle and protocol metadata", () => {
     const handler = (event) => states.push(event.detail.state);
     window.addEventListener(CAPTURE_LIFECYCLE_EVENT, handler);
 
-    lifecycle.begin();
+    lifecycle.begin("123e4567-e89b-42d3-a456-426614174000", "1");
     lifecycle.transition("far");
     lifecycle.transition("near");
     lifecycle.transition("submitting");
@@ -44,10 +44,28 @@ test("emits ordered lifecycle and protocol metadata", () => {
 
 test("rejects invalid phase transitions", () => {
     const lifecycle = new CaptureLifecycle();
-    lifecycle.begin();
+    lifecycle.begin("123e4567-e89b-42d3-a456-426614174000", "1");
 
     assert.throws(
         () => lifecycle.transition("near"),
         /Invalid capture lifecycle transition/,
+    );
+});
+
+test("rejects a browser-created or malformed run ID", () => {
+    const lifecycle = new CaptureLifecycle();
+
+    assert.throws(
+        () => lifecycle.begin("browser-made-id", "1"),
+        /Invalid server-issued capture run ID/,
+    );
+});
+
+test("rejects an unsupported server capture protocol version", () => {
+    const lifecycle = new CaptureLifecycle();
+
+    assert.throws(
+        () => lifecycle.begin("123e4567-e89b-42d3-a456-426614174000", "2"),
+        /Unsupported capture protocol version/,
     );
 });
