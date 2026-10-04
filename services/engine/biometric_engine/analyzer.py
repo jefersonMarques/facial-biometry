@@ -6,7 +6,12 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .image_utils import crop_face, decode_data_url, decode_image_bytes
+from .image_utils import (
+    crop_face,
+    decode_data_url,
+    decode_data_url_bytes,
+    decode_image_bytes,
+)
 from .metrics import (
     brightness_score,
     clamp01,
@@ -20,6 +25,11 @@ from .metrics import (
     temporal_motion_score,
 )
 from .models import MiniFASNetV2, SFaceEncoder, YuNetDetector
+from .native_shadow import (
+    NativeBiometricShadow,
+    compare_identity_shadow,
+    compare_reference_shadow,
+)
 
 
 @dataclass
@@ -48,6 +58,11 @@ class BiometricAnalyzer:
         self._encoder = SFaceEncoder(sface_model_path)
         self._passive_pad: MiniFASNetV2 | None = None
         self._passive_pad_error: str | None = None
+        self._native_shadow = NativeBiometricShadow.from_environment(
+            yunet_model=yunet_model_path,
+            sface_model=sface_model_path,
+            minifas_model=minifasnet_model_path,
+        )
 
         try:
             self._passive_pad = MiniFASNetV2(minifasnet_model_path)
@@ -59,7 +74,8 @@ class BiometricAnalyzer:
         if not isinstance(image_base64, str) or not image_base64.strip():
             raise ValueError("imageBase64 is required")
 
-        image = _prepare_reference_image(decode_data_url(image_base64))
+        image_bytes = decode_data_url_bytes(image_base64)
+        image = _prepare_reference_image(decode_image_bytes(image_bytes))
         detected = self._detector.detect_primary(image)
         if detected is None:
             raise ValueError("no face detected in reference image")
@@ -88,7 +104,7 @@ class BiometricAnalyzer:
             raise ValueError("combined reference embedding is zero")
         embedding = embedding / embedding_norm
 
-        return {
+        result = {
             "embedding": [round(float(value), 8) for value in embedding.tolist()],
             "embeddings": [
                 [round(float(value), 8) for value in item.tolist()]
@@ -105,6 +121,16 @@ class BiometricAnalyzer:
                 "processedFrames": 1,
             },
         }
+
+        native_reference = self._native_shadow.reference(image_bytes)
+        native_comparison = compare_reference_shadow(
+            result,
+            native_reference,
+        )
+        if native_comparison is not None:
+            result["nativeShadow"] = native_comparison
+
+        return result
 
 
     def guide(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -192,6 +218,8 @@ class BiometricAnalyzer:
         quality_scores: list[float] = []
         passive_values: list[float] = []
         diagnostics: list[str] = []
+        native_frames: dict[int, dict[str, Any]] = {}
+        python_shadow_frames: dict[int, dict[str, Any]] = {}
 
         far_count = 0
         near_count = 0
@@ -203,7 +231,12 @@ class BiometricAnalyzer:
             if phase not in {"far", "near"}:
                 continue
 
-            image = _decode_frame_image(frame_payload)
+            image_bytes = _frame_image_bytes(frame_payload)
+            native_frame = self._native_shadow.frame(image_bytes)
+            if native_frame is not None:
+                native_frames[frame_index] = native_frame
+
+            image = decode_image_bytes(image_bytes)
             detected = self._detector.detect_primary(image)
             if detected is None:
                 continue
@@ -225,6 +258,22 @@ class BiometricAnalyzer:
                     passive_values.append(float(passive_probability))
                 except Exception as error:
                     diagnostics.append(f"passive PAD inference failed: {error}")
+
+            python_shadow_frames[frame_index] = {
+                "bbox": detected.bbox,
+                "confidence": float(detected.confidence),
+                "quality": {
+                    "sharpness": float(sharpness),
+                    "brightness": float(brightness_quality),
+                    "faceSize": float(size_score),
+                    "score": float(quality),
+                },
+                "passivePad": (
+                    float(passive_probability)
+                    if passive_probability is not None
+                    else None
+                ),
+            }
 
             image_height, image_width = image.shape[:2]
             x, y, width, height = detected.bbox
@@ -309,6 +358,10 @@ class BiometricAnalyzer:
             for quality, phase, frame_index, image, detected in selected_near_candidates
         ]
         selected_embeddings = [embedding for _, _, _, embedding in selected_near]
+        for _, _, frame_index, embedding in selected_near:
+            if frame_index in python_shadow_frames:
+                python_shadow_frames[frame_index]["embedding"] = embedding.tolist()
+
         combined_embedding = np.mean(np.vstack(selected_embeddings), axis=0).astype(np.float32)
         embedding_norm = float(np.linalg.norm(combined_embedding))
         if embedding_norm <= 1e-8:
@@ -335,7 +388,7 @@ class BiometricAnalyzer:
             for quality, phase, frame_index, embedding in selected_near
         ]
 
-        return {
+        result = {
             "livenessScore": round(float(liveness_score), 6),
             "passivePad": {
                 "score": round(float(passive_score), 6),
@@ -368,6 +421,28 @@ class BiometricAnalyzer:
             "bestFrameIndex": best_frame_index,
             "diagnostics": diagnostics,
         }
+
+        if self._native_shadow.enabled:
+            native_comparison = compare_identity_shadow(
+                python_frames=python_shadow_frames,
+                native_frames=native_frames,
+                selected_frame_indices=[
+                    int(frame_index)
+                    for _, _, frame_index, _ in selected_near
+                ],
+                python_combined_embedding=combined_embedding,
+            )
+            result["nativeShadow"] = native_comparison
+            diagnostics.append(
+                "native shadow "
+                f"{native_comparison.get('status', 'unknown')}: "
+                f"bboxΔ={native_comparison.get('bboxMaxDeltaPx', 0)}px "
+                f"qualityΔ={native_comparison.get('qualityMaxDelta', 0)} "
+                f"padΔ={native_comparison.get('passivePadMaxDelta', 0)} "
+                f"cos={native_comparison.get('combinedEmbeddingCosine', 0)}"
+            )
+
+        return result
 
     def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         frames_payload = payload.get("frames")
@@ -616,11 +691,20 @@ class BiometricAnalyzer:
 
 
 
-def _decode_frame_image(frame_payload: dict[str, Any]) -> np.ndarray:
+def _frame_image_bytes(frame_payload: dict[str, Any]) -> bytes:
     image_bytes = frame_payload.get("imageBytes")
     if isinstance(image_bytes, (bytes, bytearray, memoryview)):
-        return decode_image_bytes(image_bytes)
-    return decode_data_url(str(frame_payload.get("imageBase64", "")))
+        binary = bytes(image_bytes)
+        if not binary:
+            raise ValueError("image payload is empty")
+        return binary
+    return decode_data_url_bytes(
+        str(frame_payload.get("imageBase64", ""))
+    )
+
+
+def _decode_frame_image(frame_payload: dict[str, Any]) -> np.ndarray:
+    return decode_image_bytes(_frame_image_bytes(frame_payload))
 
 
 def _empty_quality() -> dict[str, Any]:
