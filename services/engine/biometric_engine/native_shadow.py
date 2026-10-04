@@ -306,6 +306,13 @@ def compare_identity_shadow(
     if errors or len(comparable_indices) != len(python_frames):
         status = "partial"
 
+    python_pad_expected = any(
+        frame.get("passivePad") is not None
+        for frame in python_frames.values()
+    )
+    if python_pad_expected and passive_comparisons == 0:
+        status = "partial"
+
     drift = (
         bbox_max_delta > 1.0
         or confidence_max_delta > 1e-5
