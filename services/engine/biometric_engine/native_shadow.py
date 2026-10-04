@@ -337,6 +337,7 @@ def compare_identity_shadow(
         "bboxMaxDeltaPx": round(bbox_max_delta, 6),
         "confidenceMaxDelta": round(confidence_max_delta, 8),
         "qualityMaxDelta": round(quality_max_delta, 8),
+        "padComparedFrames": passive_comparisons,
         "passivePadMaxDelta": round(passive_pad_max_delta, 8),
         "selectedEmbeddingMinCosine": round(
             min(embedding_cosines) if embedding_cosines else 0.0,
