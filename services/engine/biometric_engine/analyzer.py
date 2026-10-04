@@ -635,31 +635,6 @@ def _empty_quality() -> dict[str, Any]:
     }
 
 
-def guided_capture_score(
-    far_scales: list[float],
-    near_scales: list[float],
-    center_scores: list[float],
-    quality_scores: list[float],
-) -> float:
-    if not far_scales or not near_scales:
-        return 0.0
-
-    far_median = float(np.median(far_scales))
-    near_median = float(np.median(near_scales))
-    scale_delta = near_median - far_median
-    transition_score = clamp01((scale_delta - 0.05) / 0.15)
-    coverage_score = clamp01(min(len(far_scales), len(near_scales)) / 3.0)
-    centering_score = robust_mean(center_scores) if center_scores else 0.0
-    quality_score = robust_mean(quality_scores) if quality_scores else 0.0
-
-    return clamp01(
-        0.40 * transition_score
-        + 0.25 * coverage_score
-        + 0.20 * centering_score
-        + 0.15 * quality_score
-    )
-
-
 def _normalize_reference_lighting(image: np.ndarray, clip_limit: float) -> np.ndarray:
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
     luminance, channel_a, channel_b = cv2.split(lab)
