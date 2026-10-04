@@ -76,6 +76,21 @@ func setSecurityHeaders(writer http.ResponseWriter) {
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.Header().Set("X-Frame-Options", "DENY")
 	writer.Header().Set("Permissions-Policy", "camera=(self), microphone=()")
+	writer.Header().Set(
+		"Content-Security-Policy",
+		"default-src 'self'; "+
+			"script-src 'self' 'wasm-unsafe-eval'; "+
+			"connect-src 'self'; "+
+			"img-src 'self' data: blob:; "+
+			"media-src 'self' blob:; "+
+			"worker-src 'self' blob:; "+
+			"style-src 'self' 'unsafe-inline'; "+
+			"font-src 'self'; "+
+			"object-src 'none'; "+
+			"base-uri 'none'; "+
+			"frame-ancestors 'none'; "+
+			"form-action 'self'",
+	)
 }
 
 func envString(name string, fallback string) string {
