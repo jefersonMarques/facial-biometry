@@ -21,6 +21,16 @@ export interface SessionResponse {
     illuminationPattern: number[];
 }
 
+export interface RuntimeFingerprint {
+    sdkVersion: string;
+    livenessCoreVersion: string;
+    livenessCoreWasmSha256: string;
+    mediaPipeVersion: string;
+    mediaPipeVisionSha256: string;
+    faceLandmarkerSha256: string;
+    runtimeId: string;
+}
+
 export interface ClientFrameQuality {
     brightness: number;
     contrast: number;
