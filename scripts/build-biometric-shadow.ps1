@@ -124,9 +124,10 @@ if (-not $Force -and $OpenCVConfig -and $MissingADELibrary -and $ExportsADETarge
 $OpenCVCachePath = Join-Path $OpenCVBuild "CMakeCache.txt"
 $OpenCVUsesStaticCRT = $false
 if (Test-Path $OpenCVCachePath) {
-    $OpenCVUsesStaticCRT = (
-        (Get-Content -Raw $OpenCVCachePath) -match "(?m)^BUILD_WITH_STATIC_CRT:BOOL=ON$"
-    )
+    $OpenCVUsesStaticCRT = Select-String `
+        -Path $OpenCVCachePath `
+        -Pattern "^BUILD_WITH_STATIC_CRT:BOOL=ON$" `
+        -Quiet
 }
 
 if (-not $Force -and $OpenCVConfig -and $OpenCVUsesStaticCRT) {
