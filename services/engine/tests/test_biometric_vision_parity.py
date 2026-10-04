@@ -41,9 +41,17 @@ class BiometricVisionParityTest(unittest.TestCase):
 
         completed = subprocess.run(
             [cli, image_path, yunet_path, sface_path],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=(
+                f"C++ vision probe failed with {completed.returncode}: "
+                f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+            ),
         )
         cpp = json.loads(completed.stdout)
 
