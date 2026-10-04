@@ -72,11 +72,12 @@ type identityDocumentResponse struct {
 }
 
 type identityCompleteRequest struct {
-	SessionID    string                       `json:"sessionId"`
-	SessionToken string                       `json:"sessionToken"`
-	GuidedFrames []domain.GuidedCapturedFrame `json:"guidedFrames"`
-	Metadata     *domain.CaptureMetadata      `json:"metadata,omitempty"`
-	Runtime      domain.RuntimeFingerprint    `json:"runtime"`
+	SessionID       string                         `json:"sessionId"`
+	SessionToken    string                         `json:"sessionToken"`
+	GuidedFrames    []domain.GuidedCapturedFrame   `json:"guidedFrames"`
+	Metadata        *domain.CaptureMetadata        `json:"metadata,omitempty"`
+	Runtime         domain.RuntimeFingerprint      `json:"runtime"`
+	CaptureProtocol domain.CaptureProtocolMetadata `json:"captureProtocol"`
 }
 
 type issuerIdentityCheckResponse struct {
@@ -89,7 +90,8 @@ type issuerIdentityCheckResponse struct {
 	Document            *identity.DocumentEvidence `json:"document,omitempty"`
 	LivenessScore       float64                    `json:"livenessScore,omitempty"`
 	FaceSimilarity      float64                    `json:"faceSimilarity,omitempty"`
-	Runtime             *domain.RuntimeFingerprint `json:"runtime,omitempty"`
+	Runtime             *domain.RuntimeFingerprint      `json:"runtime,omitempty"`
+	CaptureProtocol     *domain.CaptureProtocolMetadata `json:"captureProtocol,omitempty"`
 }
 
 type identityCompleteResponse struct {
@@ -393,6 +395,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusUpgradeRequired, err.Error())
 		return
 	}
+	if err := validateCaptureProtocol(payload.CaptureProtocol); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	captureSession, err := handler.sessions.Get(payload.SessionID)
 	if err != nil {
@@ -511,6 +517,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		current.CaptureSessionID = ""
 		runtimeCopy := payload.Runtime
 		current.RuntimeFingerprint = &runtimeCopy
+		protocolCopy := payload.CaptureProtocol
+		current.CaptureProtocol = &protocolCopy
 		current.ReferenceEmbedding = nil
 		current.ReferenceEmbeddings = nil
 		current.ReferenceEmbeddingModel = ""
@@ -735,6 +743,7 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		LivenessScore:       check.LivenessScore,
 		FaceSimilarity:      check.FaceSimilarity,
 		Runtime:             check.RuntimeFingerprint,
+		CaptureProtocol:     check.CaptureProtocol,
 	})
 }
 
