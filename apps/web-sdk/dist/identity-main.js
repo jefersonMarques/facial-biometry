@@ -959,6 +959,7 @@ function renderIdentityResult(result, capturedFrames) {
                     <strong>${signedFaceScore(match.margin)}</strong>
                 </div>
                 ${frameScoreLine(result.frameSimilarities)}
+                ${nativeShadowDiagnosticLine(result.diagnostics)}
                 <p>
                     O score facial é uma similaridade cosseno do modelo biométrico.
                     Ele não representa uma porcentagem de certeza ou probabilidade.
@@ -1029,6 +1030,20 @@ function photoCard(label, imageBase64) {
             <figcaption>${escapeHtml(label)}</figcaption>
         </figure>
     `;
+}
+function nativeShadowDiagnosticLine(diagnostics) {
+    if (!isLocalDevelopmentHost()) {
+        return "";
+    }
+    const diagnostic = diagnostics.find((item) => item.startsWith("native shadow "));
+    if (!diagnostic) {
+        return "";
+    }
+    const value = diagnostic.slice("native shadow ".length);
+    return `<div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+function isLocalDevelopmentHost() {
+    return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 function frameScoreLine(scores) {
     if (!scores.length) {
