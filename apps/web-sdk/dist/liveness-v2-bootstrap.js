@@ -1,10 +1,10 @@
+import { CAPTURE_LIFECYCLE_EVENT, } from "./capture-lifecycle.js";
 import { ExperimentalGeometryLiveness, } from "./liveness-v2.js";
 const video = document.getElementById("camera");
-const phaseLabel = document.getElementById("guidePhaseText");
 const biometryPanel = document.getElementById("biometryPanel");
 const finalPanel = document.getElementById("finalPanel");
 const resultPanel = document.getElementById("identityResult");
-if (video && phaseLabel && biometryPanel) {
+if (video && biometryPanel) {
     const diagnosticsHost = biometryPanel.querySelector(".stage-content");
     const diagnostics = createDiagnosticsPanel(diagnosticsHost ?? biometryPanel);
     const probe = new ExperimentalGeometryLiveness();
@@ -16,6 +16,9 @@ if (video && phaseLabel && biometryPanel) {
     const runtime = {
         engineState: "preparing",
         phase: null,
+        lifecycleState: "idle",
+        lifecycleRunId: "",
+        lifecycleSequence: 0,
         videoReadyState: video.readyState,
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
@@ -23,7 +26,7 @@ if (video && phaseLabel && biometryPanel) {
         errorMessage: "",
     };
     const renderDiagnostics = () => {
-        refreshRuntime(runtime, video, phaseLabel);
+        refreshRuntime(runtime, video);
         diagnostics.hidden = false;
         const output = diagnostics.querySelector("pre");
         if (output) {
@@ -61,18 +64,41 @@ if (video && phaseLabel && biometryPanel) {
         persistSummary(summary);
         renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, probe.getWasmShadowDiagnostics(), latestServerGuide, localGuideHistory);
     };
-    const syncPhase = (forceReset = false) => {
-        const phase = phaseFromLabel(phaseLabel.textContent ?? "");
-        if (phase === "far" && (forceReset || lastPhase !== "far")) {
+    const applyLifecycle = (detail) => {
+        if (detail.protocolVersion !== "1" || !detail.runId) {
+            return;
+        }
+        if (detail.runId === runtime.lifecycleRunId &&
+            detail.sequence <= runtime.lifecycleSequence) {
+            return;
+        }
+        const previousPhase = lastPhase;
+        const runChanged = detail.runId !== runtime.lifecycleRunId;
+        const phase = detail.state === "far" || detail.state === "near"
+            ? detail.state
+            : null;
+        runtime.lifecycleState = detail.state;
+        runtime.lifecycleRunId = detail.runId;
+        runtime.lifecycleSequence = detail.sequence;
+        runtime.phase = phase;
+        if (detail.state === "far" && (runChanged || previousPhase !== "far")) {
             probe.reset();
             lastSummary = probe.summarize();
         }
         probe.setPhase(phase);
-        if (phase === null && lastPhase !== null) {
-            renderSummary(probe.summarize());
-        }
         lastPhase = phase;
+        if (phase === null && previousPhase !== null) {
+            renderSummary(probe.summarize());
+            return;
+        }
         renderDiagnostics();
+    };
+    const handleCaptureLifecycle = (event) => {
+        const detail = event.detail;
+        if (!detail) {
+            return;
+        }
+        applyLifecycle(detail);
     };
     const start = async () => {
         if (startInProgress) {
@@ -82,7 +108,6 @@ if (video && phaseLabel && biometryPanel) {
         renderDiagnostics();
         try {
             await ensureInitialized();
-            syncPhase(true);
             await probe.start(video, renderSummary);
             runtime.engineState = "ready";
             renderDiagnostics();
@@ -96,8 +121,6 @@ if (video && phaseLabel && biometryPanel) {
             startInProgress = false;
         }
     };
-    const phaseObserver = new MutationObserver(() => syncPhase());
-    phaseObserver.observe(phaseLabel, { childList: true, characterData: true, subtree: true });
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
@@ -128,6 +151,7 @@ if (video && phaseLabel && biometryPanel) {
         latestServerGuide = detail;
         renderDiagnostics();
     };
+    window.addEventListener(CAPTURE_LIFECYCLE_EVENT, handleCaptureLifecycle);
     window.addEventListener("faceproof:local-guide", handleLocalGuide);
     window.addEventListener("faceproof:server-guide", handleServerGuide);
     const diagnosticTimer = window.setInterval(() => {
@@ -151,22 +175,12 @@ if (video && phaseLabel && biometryPanel) {
     }
     window.addEventListener("beforeunload", () => {
         window.clearInterval(diagnosticTimer);
-        phaseObserver.disconnect();
         finalPanelObserver?.disconnect();
+        window.removeEventListener(CAPTURE_LIFECYCLE_EVENT, handleCaptureLifecycle);
         window.removeEventListener("faceproof:local-guide", handleLocalGuide);
         window.removeEventListener("faceproof:server-guide", handleServerGuide);
         probe.dispose();
     });
-}
-function phaseFromLabel(value) {
-    const normalized = value.trim().toLowerCase();
-    if (normalized.includes("captura 1")) {
-        return "far";
-    }
-    if (normalized.includes("captura 2")) {
-        return "near";
-    }
-    return null;
 }
 function createDiagnosticsPanel(parent) {
     const existing = document.getElementById("livenessV2Diagnostics");
@@ -221,8 +235,7 @@ async function copyDiagnostics(panel, button) {
         button.textContent = previousText;
     }, 1_500);
 }
-function refreshRuntime(runtime, video, phaseLabel) {
-    runtime.phase = phaseFromLabel(phaseLabel.textContent ?? "");
+function refreshRuntime(runtime, video) {
     runtime.videoReadyState = video.readyState;
     runtime.videoWidth = video.videoWidth;
     runtime.videoHeight = video.videoHeight;
@@ -245,7 +258,8 @@ function formatDiagnostics(summary, runtime, wasm, serverGuide, localGuideHistor
     const lines = [
         `Motor: ${engineLabel}`,
         `Câmera: ${runtime.cameraActive ? "ativa" : "inativa"} · ${runtime.videoWidth}x${runtime.videoHeight} · readyState ${runtime.videoReadyState}`,
-        `Fase observada: ${phaseLabel}`,
+        `Lifecycle: ${runtime.lifecycleState} · seq ${runtime.lifecycleSequence} · run ${runtime.lifecycleRunId ? runtime.lifecycleRunId.slice(0, 8) : "—"}`,
+        `Fase explícita: ${phaseLabel}`,
         `Estado geométrico: ${status}`,
         `Frames geométricos válidos: ${summary.sampleCount} (longe ${summary.farSamples} · perto ${summary.nearSamples})`,
         `Escala perto/longe: ${summary.scaleRatio.toFixed(3)}x`,
