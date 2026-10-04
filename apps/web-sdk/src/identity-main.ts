@@ -6,6 +6,7 @@ import {
     type LocalCaptureGateResult,
 } from "./local-capture-gate.js";
 import type { LocalFaceGuideMetrics } from "./liveness-core-shadow.js";
+import { getRuntimeFingerprint } from "./runtime-fingerprint.js";
 import type {
     GuidedCapturedFrame,
     GuidedCapturePhase,
@@ -334,6 +335,7 @@ async function runBiometry(): Promise<void> {
     let completed = false;
 
     try {
+        const runtimeFingerprint = await getRuntimeFingerprint();
         await camera.start();
         cameraState.textContent = "Câmera ativa";
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
@@ -363,6 +365,7 @@ async function runBiometry(): Promise<void> {
                     identityToken,
                     session,
                     capturedFrames,
+                    runtimeFingerprint,
                 );
                 renderIdentityResult(result, capturedFrames);
                 completed = true;
