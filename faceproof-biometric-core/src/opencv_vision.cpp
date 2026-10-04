@@ -13,6 +13,11 @@
 #include <utility>
 #include <vector>
 
+struct FPBiometricVisionEngine {
+    cv::Ptr<cv::FaceDetectorYN> detector;
+    cv::Ptr<cv::FaceRecognizerSF> recognizer;
+};
+
 namespace {
 
 thread_local std::string g_last_error;
@@ -279,11 +284,6 @@ bool encode_normalized_embedding(
 
 
 }  // namespace
-
-struct FPBiometricVisionEngine {
-    cv::Ptr<cv::FaceDetectorYN> detector;
-    cv::Ptr<cv::FaceRecognizerSF> recognizer;
-};
 
 namespace {
 
