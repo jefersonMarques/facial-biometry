@@ -1,5 +1,6 @@
 #include "faceproof_biometric_vision.h"
 
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -7,9 +8,24 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 namespace {
 
 std::vector<uint8_t> read_file(const std::string& path) {
+    if (path == "-") {
+#ifdef _WIN32
+        _setmode(_fileno(stdin), _O_BINARY);
+#endif
+        return std::vector<uint8_t>(
+            std::istreambuf_iterator<char>(std::cin),
+            std::istreambuf_iterator<char>()
+        );
+    }
+
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         return {};
