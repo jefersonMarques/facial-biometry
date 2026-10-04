@@ -14,6 +14,16 @@ if [ ! -f "$MEDIAPIPE_PACKAGE" ]; then
 fi
 python3 scripts/vendor-mediapipe.py
 
+LIVENESS_RUNTIME_MANIFEST="$ROOT/apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json"
+if [ ! -f "$LIVENESS_RUNTIME_MANIFEST" ]; then
+    echo "FaceProof Liveness Core manifest not found. Run scripts/build-liveness-wasm.sh first." >&2
+    exit 1
+fi
+export FACEPROOF_RUNTIME_SDK_VERSION="0.3.0"
+export FACEPROOF_RUNTIME_LIVENESS_CORE_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "$LIVENESS_RUNTIME_MANIFEST")"
+export FACEPROOF_RUNTIME_LIVENESS_WASM_SHA256="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print(next(x["sha256"] for x in d["files"] if x["path"]=="faceproof-liveness-core.wasm"))' "$LIVENESS_RUNTIME_MANIFEST")"
+export FACEPROOF_RUNTIME_MEDIAPIPE_VERSION="1.0.1"
+
 if [ ! -d .venv ]; then
     python3 -m venv .venv
 fi
