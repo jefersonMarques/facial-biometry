@@ -20,6 +20,36 @@ mkdir -p "$PUBLISH_DIR"
 cp "$BUILD_DIR/faceproof-liveness-core.js" "$PUBLISH_DIR/faceproof-liveness-core.js"
 cp "$BUILD_DIR/faceproof-liveness-core.wasm" "$PUBLISH_DIR/faceproof-liveness-core.wasm"
 
+python3 - "$BUILD_DIR" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+build_dir = pathlib.Path(sys.argv[1])
+files = []
+for name in ("faceproof-liveness-core.js", "faceproof-liveness-core.wasm"):
+    path = build_dir / name
+    files.append({
+        "path": name,
+        "bytes": path.stat().st_size,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    })
+
+manifest = {
+    "schemaVersion": 1,
+    "version": "0.1.0",
+    "files": files,
+}
+(build_dir / "faceproof-liveness-core.manifest.json").write_text(
+    json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+PY
+
+cp "$BUILD_DIR/faceproof-liveness-core.manifest.json" "$PUBLISH_DIR/faceproof-liveness-core.manifest.json"
+
 echo "[ok] build: $BUILD_DIR/faceproof-liveness-core.js"
 echo "[ok] build: $BUILD_DIR/faceproof-liveness-core.wasm"
+echo "[ok] manifest: $BUILD_DIR/faceproof-liveness-core.manifest.json"
 echo "[ok] publish: $PUBLISH_DIR"
