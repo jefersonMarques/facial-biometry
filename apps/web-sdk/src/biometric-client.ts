@@ -1,6 +1,7 @@
 import type {
     BiometricSessionKind,
     CapturePackage,
+    CaptureProtocolMetadata,
     CompletionResponse,
     GuidedCapturedFrame,
     IdentityCheckStatus,
@@ -80,6 +81,7 @@ export class BiometricClient {
         session: SessionResponse,
         guidedFrames: GuidedCapturedFrame[],
         runtime: RuntimeFingerprint,
+        captureProtocol: CaptureProtocolMetadata,
     ): Promise<IdentityCompletionResponse> {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
@@ -89,6 +91,7 @@ export class BiometricClient {
         form.append("sessionToken", session.sessionToken);
         form.append("manifest", JSON.stringify({
             runtime,
+            captureProtocol,
             guidedFrames: guidedFrames.map((frame) => ({
                 phase: frame.phase,
                 clientQuality: frame.clientQuality,
