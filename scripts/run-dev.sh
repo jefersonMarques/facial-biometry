@@ -4,6 +4,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+NATIVE_SHADOW=false
+for argument in "$@"; do
+    case "$argument" in
+        --native-shadow)
+            NATIVE_SHADOW=true
+            ;;
+        *)
+            echo "Unknown argument: $argument" >&2
+            echo "Usage: scripts/run-dev.sh [--native-shadow]" >&2
+            exit 2
+            ;;
+    esac
+done
+
 python3 models/download_models.py
 
 WEB_SDK_DIR="$ROOT/apps/web-sdk"
@@ -55,6 +69,33 @@ export FACEPROOF_IDENTITY_VERIFY_URL="${FACEPROOF_IDENTITY_VERIFY_URL:-http://lo
 export FACEPROOF_YUNET_MODEL="${FACEPROOF_YUNET_MODEL:-$ROOT/models/yunet/face_detection_yunet_2023mar.onnx}"
 export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_recognition_sface_2021dec.onnx}"
 export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
+
+export FACEPROOF_NATIVE_SHADOW_ENABLED="false"
+if [ "$NATIVE_SHADOW" = true ]; then
+    NATIVE_SHADOW_MANIFEST="$ROOT/.dev/native-shadow.json"
+    if [ ! -f "$NATIVE_SHADOW_MANIFEST" ]; then
+        echo "Native biometric shadow not prepared. Run scripts/build-biometric-shadow.sh first." >&2
+        exit 1
+    fi
+
+    export FACEPROOF_NATIVE_SHADOW_ENABLED="true"
+    export FACEPROOF_BIOMETRIC_VISION_CLI="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["visionCli"])' "$NATIVE_SHADOW_MANIFEST")"
+    export FACEPROOF_BIOMETRIC_REFERENCE_CLI="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["referenceCli"])' "$NATIVE_SHADOW_MANIFEST")"
+    export FACEPROOF_BIOMETRIC_PAD_CLI="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["padCli"])' "$NATIVE_SHADOW_MANIFEST")"
+    OPENCV_LIB_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["openCvLibDir"])' "$NATIVE_SHADOW_MANIFEST")"
+    ONNXRUNTIME_LIB_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["onnxRuntimeLibDir"])' "$NATIVE_SHADOW_MANIFEST")"
+
+    for executable in "$FACEPROOF_BIOMETRIC_VISION_CLI" "$FACEPROOF_BIOMETRIC_REFERENCE_CLI" "$FACEPROOF_BIOMETRIC_PAD_CLI"; do
+        if [ ! -x "$executable" ]; then
+            echo "Native shadow executable not found: $executable" >&2
+            exit 1
+        fi
+    done
+
+    export LD_LIBRARY_PATH="$OPENCV_LIB_DIR:$ONNXRUNTIME_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    echo "Native biometric shadow: ENABLED (vision + PAD)"
+fi
+
 export FACEPROOF_ALLOW_REVIEW_ENROLLMENT="${FACEPROOF_ALLOW_REVIEW_ENROLLMENT:-true}"
 export FACEPROOF_DEBUG="${FACEPROOF_DEBUG:-true}"
 
@@ -110,4 +151,7 @@ echo "FaceProof demo: http://localhost:5173"
 echo "Identity verification: http://localhost:5173/verify.html"
 echo "Identity issuer key: $ROOT/.dev/identity-issuer-key"
 echo "Development mode: review enrollments are stored as provisional templates."
+if [ "$NATIVE_SHADOW" = true ]; then
+    echo "Native biometric shadow: active; Python remains authoritative."
+fi
 wait
