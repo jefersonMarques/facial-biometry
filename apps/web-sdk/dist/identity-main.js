@@ -260,12 +260,12 @@ async function runBiometry() {
         cameraState.textContent = "Câmera ativa";
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
         while (!completed) {
-            captureLifecycle.begin();
+            const session = await client.createIdentitySession(identityToken);
+            captureLifecycle.begin(session.captureRunId, session.captureProtocolVersion);
             localCaptureGate.reset();
             currentBiometryPhase = "far";
             captureLifecycle.transition("far");
             const farRelaxedQuality = await waitForFacePhase("far");
-            const session = await client.createIdentitySession(identityToken);
             const farFrames = await capturePhase("far", farRelaxedQuality);
             localCaptureGate.lockFarReference();
             await showCaptureSuccess("Primeira captura concluída");
