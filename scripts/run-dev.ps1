@@ -1,3 +1,7 @@
+param(
+    [switch]$NativeShadow
+)
+
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $Root
@@ -71,6 +75,36 @@ $env:FACEPROOF_IDENTITY_VERIFY_URL = "http://localhost:5173/verify.html"
 $env:FACEPROOF_YUNET_MODEL = Join-Path $Root "models\yunet\face_detection_yunet_2023mar.onnx"
 $env:FACEPROOF_SFACE_MODEL = Join-Path $Root "models\sface\face_recognition_sface_2021dec.onnx"
 $env:FACEPROOF_MINIFASNET_MODEL = Join-Path $Root "models\minifasnet\MiniFASNetV2.onnx"
+
+$env:FACEPROOF_NATIVE_SHADOW_ENABLED = "false"
+if ($NativeShadow) {
+    $NativeShadowManifestPath = Join-Path $Root ".dev\native-shadow.json"
+    if (-not (Test-Path $NativeShadowManifestPath)) {
+        throw "Native biometric shadow nao preparado. Execute .\scripts\build-biometric-shadow.ps1 primeiro."
+    }
+
+    $NativeShadowManifest = Get-Content -Raw $NativeShadowManifestPath | ConvertFrom-Json
+    if (-not $NativeShadowManifest.visionCli -or -not (Test-Path $NativeShadowManifest.visionCli)) {
+        throw "Native shadow vision CLI nao encontrado. Reexecute .\scripts\build-biometric-shadow.ps1."
+    }
+    if (-not $NativeShadowManifest.referenceCli -or -not (Test-Path $NativeShadowManifest.referenceCli)) {
+        throw "Native shadow reference CLI nao encontrado. Reexecute .\scripts\build-biometric-shadow.ps1."
+    }
+
+    $env:FACEPROOF_NATIVE_SHADOW_ENABLED = "true"
+    $env:FACEPROOF_BIOMETRIC_VISION_CLI = [string]$NativeShadowManifest.visionCli
+    $env:FACEPROOF_BIOMETRIC_REFERENCE_CLI = [string]$NativeShadowManifest.referenceCli
+
+    if ($NativeShadowManifest.padCli -and (Test-Path $NativeShadowManifest.padCli)) {
+        $env:FACEPROOF_BIOMETRIC_PAD_CLI = [string]$NativeShadowManifest.padCli
+    }
+    else {
+        Remove-Item Env:FACEPROOF_BIOMETRIC_PAD_CLI -ErrorAction SilentlyContinue
+    }
+
+    Write-Host "Native biometric shadow: ENABLED ($($NativeShadowManifest.mode))" -ForegroundColor Magenta
+}
+
 $env:FACEPROOF_ALLOW_REVIEW_ENROLLMENT = "true"
 $env:FACEPROOF_DEBUG = "true"
 
@@ -134,6 +168,9 @@ Write-Host "FaceProof demo: http://localhost:5173"
 Write-Host "Identity verification: http://localhost:5173/verify.html"
 Write-Host "Identity issuer key: $IdentityIssuerKeyFile"
 Write-Host "Development mode: review enrollments are stored as provisional templates."
+if ($NativeShadow) {
+    Write-Host "Native biometric shadow: active; Python remains authoritative." -ForegroundColor Magenta
+}
 Write-Host ""
 Write-Host "Press Ctrl+C to stop all FaceProof services." -ForegroundColor Yellow
 Write-Host ""
