@@ -1,10 +1,14 @@
 # FaceProof
 
-Browser-first, self-hosted identity verification and facial biometric MVP.
+Browser-first facial biometric enrollment, liveness and verification platform.
 
-The primary flow now accepts an original Brazilian CNH Digital PDF, authenticates the signed PDF and VIO payload, extracts a biometric reference portrait from the cryptographically intact signed PDF, with the signed VIO portrait as fallback, performs browser-based live capture with liveness, and compares the live face against that portrait.
+The FaceProof core is biometric capture, liveness, enrollment and 1:1 re-verification with the server as the final authority. Document identity flows are optional product modules.
 
-## CNH Digital Identity Check
+The current repository also includes a Brazilian CNH Digital Identity module that authenticates the signed PDF and VIO payload, extracts an official biometric reference portrait and compares it against a live capture.
+
+See `docs/BROWSER_FIRST_ROADMAP.md` for the SDK, licensing, Control Plane and Go + HTMX Console direction.
+
+## Optional CNH Digital Identity Check
 
 ```text
 Issuer creates check
