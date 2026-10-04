@@ -1,6 +1,10 @@
 package identity
 
-import "time"
+import (
+	"time"
+
+	"faceproof/services/api/internal/domain"
+)
 
 type Status string
 
@@ -57,5 +61,6 @@ type Check struct {
 	LivenessScore          float64           `json:"livenessScore,omitempty"`
 	FaceSimilarity         float64           `json:"faceSimilarity,omitempty"`
 	CompletedAt            *time.Time        `json:"completedAt,omitempty"`
-	LastErrorCode          string            `json:"lastErrorCode,omitempty"`
+	LastErrorCode          string                     `json:"lastErrorCode,omitempty"`
+	RuntimeFingerprint     *domain.RuntimeFingerprint `json:"runtimeFingerprint,omitempty"`
 }
