@@ -106,7 +106,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libjpeg-dev libpng-dev zlib1g-dev
-          python -m pip install numpy==2.4.6 opencv-python-headless==4.14.0.94
+          python -m pip install numpy==2.4.6 opencv-python-headless==4.14.0.94 onnxruntime==1.30.0
       - name: Build pinned native OpenCV
         run: bash scripts/build-opencv-parity.sh
       - name: Prepare pinned native ONNX Runtime
