@@ -41,12 +41,24 @@ int main(int argc, char** argv) {
         return 4;
     }
 
-    std::vector<float> embedding(512);
-    size_t embedding_size = 0;
     FPBiometricFace face{};
     FPBiometricQuality quality{};
+    const int analyze_code = fp_bio_vision_analyze_jpeg(
+        engine,
+        image.data(),
+        image.size(),
+        &face,
+        &quality
+    );
+    if (analyze_code != 0) {
+        fp_bio_vision_destroy(engine);
+        std::cerr << "vision detect/quality failed: " << analyze_code << "\n";
+        return 5;
+    }
 
-    const int code = fp_bio_vision_encode_jpeg(
+    std::vector<float> embedding(512);
+    size_t embedding_size = 0;
+    const int encode_code = fp_bio_vision_encode_jpeg(
         engine,
         image.data(),
         image.size(),
@@ -58,9 +70,10 @@ int main(int argc, char** argv) {
     );
     fp_bio_vision_destroy(engine);
 
-    if (code != 0) {
-        std::cerr << "vision analysis failed: " << code << "\n";
-        return 5;
+    if (encode_code != 0) {
+        std::cerr << "vision SFace encoding failed: " << encode_code
+                  << " required_embedding_size=" << embedding_size << "\n";
+        return 6;
     }
 
     std::cout << std::setprecision(17)
