@@ -42,7 +42,7 @@ python3 models/download_models.py
 echo "Configuring FaceProof native biometric shadow..."
 rm -rf "$SHADOW_BUILD"
 
-cmake     -S "$ROOT/faceproof-biometric-core"     -B "$SHADOW_BUILD"     -GNinja     -DCMAKE_BUILD_TYPE=Release     -DFACEPROOF_BIOMETRIC_BUILD_TESTS=OFF     -DFACEPROOF_BIOMETRIC_WITH_OPENCV=ON     -DFACEPROOF_BIOMETRIC_WITH_ONNXRUNTIME=ON     -DFACEPROOF_ONNXRUNTIME_ROOT="$ONNXRUNTIME_ROOT"     -DOpenCV_DIR="$OPENCV_CONFIG"
+cmake     -S "$ROOT/faceproof-biometric-core"     -B "$SHADOW_BUILD"     -GNinja     -DCMAKE_BUILD_TYPE=Release     -DFACEPROOF_BIOMETRIC_BUILD_TESTS=OFF     -DFACEPROOF_BIOMETRIC_WITH_OPENCV=ON     -DFACEPROOF_BIOMETRIC_WITH_ONNXRUNTIME=ON     -DFACEPROOF_ONNXRUNTIME_ROOT="$ONNXRUNTIME_ROOT"     -DOpenCV_DIR="$OPENCV_CMAKE_DIR"
 
 cmake --build "$SHADOW_BUILD" --parallel 2 --target     faceproof_biometric_vision_cli     faceproof_biometric_reference_cli     faceproof_biometric_pad_cli
 
