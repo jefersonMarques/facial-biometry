@@ -21,6 +21,15 @@ export interface SessionResponse {
     illuminationPattern: number[];
 }
 
+export interface CaptureProtocolMetadata {
+    version: "1";
+    runId: string;
+    startedAtUnixMs: number;
+    farStartedAtUnixMs: number;
+    nearStartedAtUnixMs: number;
+    submittingAtUnixMs: number;
+}
+
 export interface RuntimeFingerprint {
     sdkVersion: string;
     livenessCoreVersion: string;
