@@ -30,6 +30,28 @@ double fp_bio_identity_liveness_score(
     double face_presence
 );
 
+typedef struct FPBiometricCenter {
+    double x;
+    double y;
+    double scale;
+} FPBiometricCenter;
+
+double fp_bio_temporal_motion_score(
+    const double* pixel_differences,
+    size_t pixel_difference_count,
+    const FPBiometricCenter* centers,
+    size_t center_count
+);
+
+double fp_bio_illumination_correlation(
+    const int* challenge_indices,
+    const double* observed_brightness,
+    size_t observation_count,
+    const double* illumination_pattern,
+    size_t pattern_count,
+    double* correlation
+);
+
 const char* fp_biometric_version(void);
 
 #ifdef __cplusplus
