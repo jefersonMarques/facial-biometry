@@ -41,10 +41,10 @@ class BiometricVisionParityTest(unittest.TestCase):
             self.skipTest("missing parity environment: " + ", ".join(missing))
 
         completed = subprocess.run(
-            [cli, image_path, yunet_path, sface_path],
+            [cli, "-", yunet_path, sface_path],
+            input=Path(image_path).read_bytes(),
             check=False,
             capture_output=True,
-            text=True,
         )
         self.assertEqual(
             completed.returncode,
