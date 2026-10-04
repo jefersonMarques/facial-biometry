@@ -91,6 +91,7 @@ int main(int argc, char** argv) {
 
     FPBiometricPAD* pad = fp_bio_pad_create(argv[4]);
     if (pad == nullptr) {
+        fp_bio_vision_destroy(vision);
         std::cerr
             << "PAD engine could not be created: "
             << fp_bio_pad_last_error()
