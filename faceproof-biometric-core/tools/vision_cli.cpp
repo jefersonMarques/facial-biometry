@@ -52,7 +52,8 @@ int main(int argc, char** argv) {
     );
     if (analyze_code != 0) {
         fp_bio_vision_destroy(engine);
-        std::cerr << "vision detect/quality failed: " << analyze_code << "\n";
+        std::cerr << "vision detect/quality failed: " << analyze_code
+                  << " error=" << fp_bio_vision_last_error() << "\n";
         return 5;
     }
 
@@ -72,7 +73,8 @@ int main(int argc, char** argv) {
 
     if (encode_code != 0) {
         std::cerr << "vision SFace encoding failed: " << encode_code
-                  << " required_embedding_size=" << embedding_size << "\n";
+                  << " required_embedding_size=" << embedding_size
+                  << " error=" << fp_bio_vision_last_error() << "\n";
         return 6;
     }
 
