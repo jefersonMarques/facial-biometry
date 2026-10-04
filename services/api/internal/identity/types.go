@@ -62,5 +62,6 @@ type Check struct {
 	FaceSimilarity         float64           `json:"faceSimilarity,omitempty"`
 	CompletedAt            *time.Time        `json:"completedAt,omitempty"`
 	LastErrorCode          string                     `json:"lastErrorCode,omitempty"`
-	RuntimeFingerprint     *domain.RuntimeFingerprint `json:"runtimeFingerprint,omitempty"`
+	RuntimeFingerprint     *domain.RuntimeFingerprint      `json:"runtimeFingerprint,omitempty"`
+	CaptureProtocol        *domain.CaptureProtocolMetadata `json:"captureProtocol,omitempty"`
 }
