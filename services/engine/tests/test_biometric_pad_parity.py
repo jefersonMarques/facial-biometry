@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import subprocess
 import unittest
 
@@ -35,14 +36,14 @@ class BiometricPADParityTest(unittest.TestCase):
         completed = subprocess.run(
             [
                 cli,
-                image_path,
+                "-",
                 yunet_path,
                 sface_path,
                 minifas_path,
             ],
+            input=Path(image_path).read_bytes(),
             check=False,
             capture_output=True,
-            text=True,
         )
         self.assertEqual(
             completed.returncode,
@@ -52,7 +53,7 @@ class BiometricPADParityTest(unittest.TestCase):
                 f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
             ),
         )
-        cpp = json.loads(completed.stdout)
+        cpp = json.loads(completed.stdout.decode("utf-8"))
 
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         self.assertIsNotNone(image)
