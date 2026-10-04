@@ -23,6 +23,16 @@ type CaptureSession struct {
 	Completed            bool
 }
 
+type RuntimeFingerprint struct {
+	SDKVersion                 string `json:"sdkVersion"`
+	LivenessCoreVersion        string `json:"livenessCoreVersion"`
+	LivenessCoreWASM_SHA256    string `json:"livenessCoreWasmSha256"`
+	MediaPipeVersion           string `json:"mediaPipeVersion"`
+	MediaPipeVisionSHA256      string `json:"mediaPipeVisionSha256"`
+	FaceLandmarkerSHA256       string `json:"faceLandmarkerSha256"`
+	RuntimeID                  string `json:"runtimeId"`
+}
+
 type ClientFrameQuality struct {
 	Brightness float64 `json:"brightness"`
 	Contrast   float64 `json:"contrast"`
