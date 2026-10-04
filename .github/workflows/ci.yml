@@ -59,6 +59,31 @@ jobs:
         run: cmake --build build/liveness-core --config Release
       - name: Test liveness core
         run: ctest --test-dir build/liveness-core -C Release --output-on-failure
+      - name: Configure biometric secure core
+        run: cmake -S faceproof-biometric-core -B build/biometric-core -DCMAKE_BUILD_TYPE=Release
+      - name: Build biometric secure core
+        run: cmake --build build/biometric-core --config Release
+      - name: Test biometric secure core
+        run: ctest --test-dir build/biometric-core -C Release --output-on-failure
+
+  biometric-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install engine dependencies
+        run: python -m pip install -r services/engine/requirements.txt
+      - name: Configure biometric secure core
+        run: cmake -S faceproof-biometric-core -B build/biometric-core -DCMAKE_BUILD_TYPE=Release
+      - name: Build biometric secure core
+        run: cmake --build build/biometric-core --config Release
+      - name: Compare Python and C++ scoring
+        env:
+          PYTHONPATH: services/engine
+          FACEPROOF_BIOMETRIC_MATH_CLI: ${{ github.workspace }}/build/biometric-core/faceproof_biometric_math_cli
+        run: python -m unittest services.engine.tests.test_biometric_core_parity -v
 
   wasm:
     runs-on: ubuntu-latest
