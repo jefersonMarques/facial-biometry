@@ -77,7 +77,9 @@ jobs:
           test -s build/liveness-wasm/faceproof-liveness-core.wasm
           test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.js
           test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json
           grep -q "HEAPF64" build/liveness-wasm/faceproof-liveness-core.js
+          python -c 'import json; d=json.load(open("apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json")); assert d["version"]=="0.1.0"; assert any(x["path"]=="faceproof-liveness-core.wasm" and len(x["sha256"])==64 for x in d["files"])'
 
   web:
     runs-on: ubuntu-latest
