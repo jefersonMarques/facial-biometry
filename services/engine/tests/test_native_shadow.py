@@ -119,6 +119,56 @@ class NativeShadowComparisonTest(unittest.TestCase):
         self.assertEqual(result["status"], "drift")
         self.assertLess(result["selectedEmbeddingMinCosine"], 0.99999)
 
+
+    def test_identity_marks_vision_only_shadow_as_partial_when_python_has_pad(self) -> None:
+        python_frames = {
+            4: {
+                "bbox": (10, 20, 100, 120),
+                "confidence": 0.95,
+                "quality": {
+                    "sharpness": 0.7,
+                    "brightness": 0.8,
+                    "faceSize": 1.0,
+                    "score": 0.8,
+                },
+                "passivePad": 0.9,
+                "embedding": [1.0, 0.0, 0.0],
+            }
+        }
+        native_frames = {
+            4: {
+                "face": {
+                    "x": 10,
+                    "y": 20,
+                    "width": 100,
+                    "height": 120,
+                    "confidence": 0.95,
+                },
+                "quality": {
+                    "sharpness": 0.7,
+                    "brightness": 0.8,
+                    "faceSize": 1.0,
+                    "score": 0.8,
+                },
+                "embedding": [1.0, 0.0, 0.0],
+                "padStatus": "not_compared",
+            }
+        }
+
+        result = compare_identity_shadow(
+            python_frames=python_frames,
+            native_frames=native_frames,
+            selected_frame_indices=[4],
+            python_combined_embedding=np.asarray(
+                [1.0, 0.0, 0.0],
+                dtype=np.float32,
+            ),
+        )
+
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["padComparedFrames"], 0)
+        self.assertEqual(result["combinedEmbeddingCosine"], 1.0)
+
     def test_identity_reports_partial_on_native_error(self) -> None:
         result = compare_identity_shadow(
             python_frames={
