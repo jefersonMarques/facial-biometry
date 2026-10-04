@@ -6,6 +6,14 @@ cd "$ROOT"
 
 python3 models/download_models.py
 
+WEB_SDK_DIR="$ROOT/apps/web-sdk"
+MEDIAPIPE_PACKAGE="$WEB_SDK_DIR/node_modules/@mediapipe/tasks-vision/package.json"
+if [ ! -f "$MEDIAPIPE_PACKAGE" ]; then
+    echo "Installing pinned web SDK dependencies..."
+    (cd "$WEB_SDK_DIR" && npm install --no-audit --no-fund)
+fi
+python3 scripts/vendor-mediapipe.py
+
 if [ ! -d .venv ]; then
     python3 -m venv .venv
 fi
