@@ -28,7 +28,7 @@ jobs:
       - name: Validate development scripts
         run: |
           bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh
-          pwsh -NoProfile -Command '$files = @("scripts/run-dev.ps1", "scripts/create-identity-check.ps1", "scripts/build-liveness-wasm.ps1"); foreach ($file in $files) { $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 } }'
+          pwsh -NoProfile -Command '$files = @("scripts/run-dev.ps1", "scripts/create-identity-check.ps1", "scripts/build-liveness-wasm.ps1", "scripts/build-biometric-shadow.ps1"); foreach ($file in $files) { $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 } }'
 
   python:
     runs-on: ubuntu-latest
