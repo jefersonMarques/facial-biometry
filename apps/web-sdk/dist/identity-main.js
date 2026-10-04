@@ -959,7 +959,7 @@ function renderIdentityResult(result, capturedFrames) {
                     <strong>${signedFaceScore(match.margin)}</strong>
                 </div>
                 ${frameScoreLine(result.frameSimilarities)}
-                ${nativeShadowDiagnosticLine(result.diagnostics)}
+                ${nativeShadowDetails(result.nativeShadow, result.diagnostics)}
                 <p>
                     O score facial é uma similaridade cosseno do modelo biométrico.
                     Ele não representa uma porcentagem de certeza ou probabilidade.
@@ -1031,16 +1031,51 @@ function photoCard(label, imageBase64) {
         </figure>
     `;
 }
-function nativeShadowDiagnosticLine(diagnostics) {
+function nativeShadowDetails(shadow, diagnostics) {
     if (!isLocalDevelopmentHost()) {
         return "";
     }
+    if (!shadow) {
+        return nativeShadowDiagnosticFallback(diagnostics);
+    }
+    const padValue = shadow.padComparedFrames > 0
+        ? `${shadow.padComparedFrames} frames · Δ máx. ${shadowDelta(shadow.passivePadMaxDelta)}`
+        : "não comparado";
+    const errors = shadow.errors?.length
+        ? `<div class="technical-row"><span>Shadow warnings</span><strong>${escapeHtml(shadow.errors.join(" · "))}</strong></div>`
+        : "";
+    return `
+        <div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(shadow.status.toUpperCase())}</strong></div>
+        <div class="technical-row"><span>Frames Python × C++</span><strong>${shadow.pythonFrames} × ${shadow.nativeFrames}</strong></div>
+        <div class="technical-row"><span>YuNet bbox Δ máx.</span><strong>${shadow.bboxMaxDeltaPx.toFixed(3)} px</strong></div>
+        <div class="technical-row"><span>YuNet confiança Δ máx.</span><strong>${shadowDelta(shadow.confidenceMaxDelta)}</strong></div>
+        <div class="technical-row"><span>Qualidade Δ máx.</span><strong>${shadowDelta(shadow.qualityMaxDelta)}</strong></div>
+        <div class="technical-row"><span>SFace cosine mín.</span><strong>${shadow.selectedEmbeddingMinCosine.toFixed(8)}</strong></div>
+        <div class="technical-row"><span>SFace embedding Δ máx.</span><strong>${shadowDelta(shadow.selectedEmbeddingMaxDelta)}</strong></div>
+        <div class="technical-row"><span>Embedding combinado cosine</span><strong>${shadow.combinedEmbeddingCosine.toFixed(8)}</strong></div>
+        <div class="technical-row"><span>Embedding combinado Δ máx.</span><strong>${shadowDelta(shadow.combinedEmbeddingMaxDelta)}</strong></div>
+        <div class="technical-row"><span>PAD nativo</span><strong>${escapeHtml(padValue)}</strong></div>
+        ${errors}
+    `;
+}
+function nativeShadowDiagnosticFallback(diagnostics) {
     const diagnostic = diagnostics.find((item) => item.startsWith("native shadow "));
     if (!diagnostic) {
         return "";
     }
     const value = diagnostic.slice("native shadow ".length);
     return `<div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+function shadowDelta(value) {
+    if (!Number.isFinite(value)) {
+        return "—";
+    }
+    if (value === 0) {
+        return "0";
+    }
+    return Math.abs(value) < 0.0001
+        ? value.toExponential(2)
+        : value.toFixed(6);
 }
 function isLocalDevelopmentHost() {
     return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);

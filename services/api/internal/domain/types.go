@@ -118,18 +118,35 @@ type EngineFaceEmbedding struct {
 	Embedding  []float64 `json:"embedding"`
 }
 
+type NativeShadowComparison struct {
+	Status                       string   `json:"status"`
+	PythonFrames                 int      `json:"pythonFrames"`
+	NativeFrames                 int      `json:"nativeFrames"`
+	BBoxMaxDeltaPx               float64  `json:"bboxMaxDeltaPx"`
+	ConfidenceMaxDelta           float64  `json:"confidenceMaxDelta"`
+	QualityMaxDelta              float64  `json:"qualityMaxDelta"`
+	PadComparedFrames            int      `json:"padComparedFrames"`
+	PassivePadMaxDelta           float64  `json:"passivePadMaxDelta"`
+	SelectedEmbeddingMinCosine   float64  `json:"selectedEmbeddingMinCosine"`
+	SelectedEmbeddingMaxDelta    float64  `json:"selectedEmbeddingMaxDelta"`
+	CombinedEmbeddingCosine      float64  `json:"combinedEmbeddingCosine"`
+	CombinedEmbeddingMaxDelta    float64  `json:"combinedEmbeddingMaxDelta"`
+	Errors                       []string `json:"errors,omitempty"`
+}
+
 type EngineResult struct {
-	LivenessScore  float64               `json:"livenessScore"`
-	PassivePAD     EngineSignal          `json:"passivePad"`
-	TemporalMotion EngineSignal          `json:"temporalMotion"`
-	Illumination   EngineSignal          `json:"illumination"`
-	GuidedCapture  EngineSignal          `json:"guidedCapture"`
-	Quality        EngineQuality         `json:"quality"`
-	Embedding      []float64             `json:"embedding"`
-	FaceEmbeddings []EngineFaceEmbedding `json:"faceEmbeddings,omitempty"`
-	EmbeddingModel string                `json:"embeddingModel"`
-	BestFrameIndex int                   `json:"bestFrameIndex"`
-	Diagnostics    []string              `json:"diagnostics"`
+	LivenessScore  float64                 `json:"livenessScore"`
+	PassivePAD     EngineSignal            `json:"passivePad"`
+	TemporalMotion EngineSignal            `json:"temporalMotion"`
+	Illumination   EngineSignal            `json:"illumination"`
+	GuidedCapture  EngineSignal            `json:"guidedCapture"`
+	Quality        EngineQuality           `json:"quality"`
+	Embedding      []float64               `json:"embedding"`
+	FaceEmbeddings []EngineFaceEmbedding   `json:"faceEmbeddings,omitempty"`
+	EmbeddingModel string                  `json:"embeddingModel"`
+	BestFrameIndex int                     `json:"bestFrameIndex"`
+	Diagnostics    []string                `json:"diagnostics"`
+	NativeShadow   *NativeShadowComparison `json:"nativeShadow,omitempty"`
 }
 
 type ReferenceResult struct {

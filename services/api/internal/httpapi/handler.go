@@ -70,8 +70,9 @@ type completeSessionResponse struct {
 	TemplateStored      bool                 `json:"templateStored,omitempty"`
 	TemplateProvisional bool                 `json:"templateProvisional,omitempty"`
 	Signals             signalResponse       `json:"signals"`
-	Quality             domain.EngineQuality `json:"quality"`
-	Diagnostics         []string             `json:"diagnostics"`
+	Quality             domain.EngineQuality            `json:"quality"`
+	Diagnostics         []string                        `json:"diagnostics"`
+	NativeShadow        *domain.NativeShadowComparison `json:"nativeShadow,omitempty"`
 }
 
 type signalResponse struct {
@@ -263,8 +264,9 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 			TemporalMotion: result.TemporalMotion,
 			Illumination:   result.Illumination,
 		},
-		Quality:     result.Quality,
-		Diagnostics: append([]string(nil), result.Diagnostics...),
+		Quality:      result.Quality,
+		Diagnostics:  append([]string(nil), result.Diagnostics...),
+		NativeShadow: result.NativeShadow,
 	}
 
 	passivePADAvailable := result.PassivePAD.Status == "available"

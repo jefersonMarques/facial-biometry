@@ -111,6 +111,22 @@ export interface QualityResult {
     processedFrames: number;
 }
 
+export interface NativeShadowComparison {
+    status: "ok" | "partial" | "drift" | string;
+    pythonFrames: number;
+    nativeFrames: number;
+    bboxMaxDeltaPx: number;
+    confidenceMaxDelta: number;
+    qualityMaxDelta: number;
+    padComparedFrames: number;
+    passivePadMaxDelta: number;
+    selectedEmbeddingMinCosine: number;
+    selectedEmbeddingMaxDelta: number;
+    combinedEmbeddingCosine: number;
+    combinedEmbeddingMaxDelta: number;
+    errors?: string[];
+}
+
 export interface CompletionResponse {
     sessionId: string;
     subjectId: string;
@@ -129,6 +145,7 @@ export interface CompletionResponse {
     };
     quality: QualityResult;
     diagnostics: string[];
+    nativeShadow?: NativeShadowComparison;
 }
 
 export interface IdentityCheckStatus {
@@ -176,5 +193,6 @@ export interface IdentityCompletionResponse {
     };
     quality: QualityResult;
     diagnostics: string[];
+    nativeShadow?: NativeShadowComparison;
     document: IdentityDocumentDetails;
 }

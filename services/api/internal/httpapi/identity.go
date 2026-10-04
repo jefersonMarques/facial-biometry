@@ -104,9 +104,10 @@ type identityCompleteResponse struct {
 	BestFrameIndex    int                     `json:"bestFrameIndex"`
 	MatchThreshold    float64                 `json:"matchThreshold"`
 	Signals           signalResponse          `json:"signals"`
-	Quality           domain.EngineQuality    `json:"quality"`
-	Diagnostics       []string                `json:"diagnostics"`
-	Document          identityDocumentDetails `json:"document"`
+	Quality           domain.EngineQuality            `json:"quality"`
+	Diagnostics       []string                        `json:"diagnostics"`
+	NativeShadow      *domain.NativeShadowComparison `json:"nativeShadow,omitempty"`
+	Document          identityDocumentDetails         `json:"document"`
 }
 
 func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request *http.Request) {
@@ -552,8 +553,9 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			Illumination:   result.Illumination,
 			GuidedCapture:  result.GuidedCapture,
 		},
-		Quality:     result.Quality,
-		Diagnostics: append([]string(nil), result.Diagnostics...),
+		Quality:      result.Quality,
+		Diagnostics:  append([]string(nil), result.Diagnostics...),
+		NativeShadow: result.NativeShadow,
 	}
 	response.Document = identityDocumentDetailsFromEvidence(updated.Document, updated.ExpectedCPF)
 	handler.writeJSON(writer, http.StatusOK, response)
