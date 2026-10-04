@@ -9,10 +9,17 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace {
+
+thread_local std::string g_last_error;
+
+void set_last_error(const std::string& value) {
+    g_last_error = value;
+}
 
 constexpr double kYuNetScoreThreshold = 0.82;
 constexpr double kYuNetNMSThreshold = 0.3;
@@ -271,6 +278,10 @@ void fp_bio_vision_destroy(FPBiometricVisionEngine* engine) {
     delete engine;
 }
 
+const char* fp_bio_vision_last_error(void) {
+    return g_last_error.c_str();
+}
+
 int fp_bio_vision_analyze_jpeg(
     FPBiometricVisionEngine* engine,
     const uint8_t* jpeg_data,
@@ -284,6 +295,7 @@ int fp_bio_vision_analyze_jpeg(
     }
 
     try {
+        set_last_error("");
         const cv::Mat image = decode_jpeg(jpeg_data, jpeg_size);
         if (image.empty()) {
             return -2;
@@ -301,7 +313,14 @@ int fp_bio_vision_analyze_jpeg(
         fill_face(raw, bbox, confidence, face);
         fill_quality(image, bbox, quality);
         return 0;
+    } catch (const cv::Exception& error) {
+        set_last_error(error.what());
+        return -3;
+    } catch (const std::exception& error) {
+        set_last_error(error.what());
+        return -3;
     } catch (...) {
+        set_last_error("unknown biometric vision error");
         return -3;
     }
 }
@@ -323,6 +342,7 @@ int fp_bio_vision_encode_jpeg(
     }
 
     try {
+        set_last_error("");
         const cv::Mat image = decode_jpeg(jpeg_data, jpeg_size);
         if (image.empty()) {
             return -2;
@@ -367,7 +387,14 @@ int fp_bio_vision_encode_jpeg(
         fill_face(raw, bbox, confidence, face);
         fill_quality(image, bbox, quality);
         return 0;
+    } catch (const cv::Exception& error) {
+        set_last_error(error.what());
+        return -3;
+    } catch (const std::exception& error) {
+        set_last_error(error.what());
+        return -3;
     } catch (...) {
+        set_last_error("unknown biometric vision error");
         return -3;
     }
 }
