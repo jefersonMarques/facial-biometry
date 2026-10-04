@@ -27,7 +27,7 @@ jobs:
         run: go test ./...
       - name: Validate development scripts
         run: |
-          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh
+          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh
           pwsh -NoProfile -Command '$files = @("scripts/run-dev.ps1", "scripts/create-identity-check.ps1", "scripts/build-liveness-wasm.ps1"); foreach ($file in $files) { $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$null, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 } }'
 
   python:
@@ -89,30 +89,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native OpenCV parity dependencies
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache OpenCV 4.14 native runtime
+        uses: actions/cache@v4
+        with:
+          path: build/opencv-4.14.0/install
+          key: opencv-4.14.0-minimal-v1-${{ runner.os }}-${{ hashFiles('scripts/build-opencv-parity.sh') }}
+      - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopencv-dev python3-opencv python3-numpy
+          sudo apt-get install -y ninja-build libjpeg-dev libpng-dev zlib1g-dev
+          python -m pip install numpy==2.4.6 opencv-python-headless==4.14.0.94
+      - name: Build pinned native OpenCV
+        run: bash scripts/build-opencv-parity.sh
       - name: Download pinned biometric models
-        run: /usr/bin/python3 models/download_models.py
-      - name: Download pinned OpenCV Zoo face fixture
-        run: /usr/bin/python3 scripts/download-biometric-parity-fixture.py
+        run: python models/download_models.py
+      - name: Download pinned face fixture
+        run: python scripts/download-biometric-parity-fixture.py
       - name: Configure OpenCV biometric secure core
         run: >
           cmake -S faceproof-biometric-core -B build/biometric-vision
           -DCMAKE_BUILD_TYPE=Release
           -DFACEPROOF_BIOMETRIC_WITH_OPENCV=ON
+          -DOpenCV_DIR=${{ github.workspace }}/build/opencv-4.14.0/install/lib/cmake/opencv4
       - name: Build OpenCV biometric secure core
         run: cmake --build build/biometric-vision --config Release
       - name: Compare Python and C++ vision pipeline
         env:
           PYTHONPATH: services/engine
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib
           FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
           FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
           FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
           FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
         run: >
-          /usr/bin/python3 -m unittest discover
+          python -m unittest discover
           -s services/engine/tests
           -p 'test_biometric_vision_parity.py'
           -v
