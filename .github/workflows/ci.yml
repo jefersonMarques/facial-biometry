@@ -89,6 +89,11 @@ jobs:
       - name: Install web SDK dependencies
         working-directory: apps/web-sdk
         run: npm install
+      - name: Verify pinned MediaPipe package
+        run: |
+          python scripts/vendor-mediapipe.py --verify-lock
+          python scripts/vendor-mediapipe.py --verify-package
+          ! grep -R -E "cdn\.jsdelivr\.net|storage\.googleapis\.com/mediapipe-models" apps/web-sdk/src apps/web-sdk/dist
       - name: Typecheck web SDK
         working-directory: apps/web-sdk
         run: npm run typecheck
