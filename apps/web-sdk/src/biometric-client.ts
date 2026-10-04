@@ -7,6 +7,7 @@ import type {
     IdentityCompletionResponse,
     IdentityDocumentResponse,
     IdentityGuideResult,
+    RuntimeFingerprint,
     SessionResponse,
 } from "./types.js";
 
@@ -78,6 +79,7 @@ export class BiometricClient {
         token: string,
         session: SessionResponse,
         guidedFrames: GuidedCapturedFrame[],
+        runtime: RuntimeFingerprint,
     ): Promise<IdentityCompletionResponse> {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
@@ -86,6 +88,7 @@ export class BiometricClient {
         form.append("sessionId", session.sessionId);
         form.append("sessionToken", session.sessionToken);
         form.append("manifest", JSON.stringify({
+            runtime,
             guidedFrames: guidedFrames.map((frame) => ({
                 phase: frame.phase,
                 clientQuality: frame.clientQuality,
