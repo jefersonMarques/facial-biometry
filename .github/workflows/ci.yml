@@ -121,13 +121,14 @@ jobs:
           PYTHONPATH: services/engine
           LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib
           FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
+          FACEPROOF_BIOMETRIC_REFERENCE_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_reference_cli
           FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
           FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
           FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
         run: >
           python -m unittest discover
           -s services/engine/tests
-          -p 'test_biometric_vision_parity.py'
+          -p 'test_biometric_*_parity.py'
           -v
 
   wasm:
