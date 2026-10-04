@@ -61,6 +61,15 @@ if(FACEPROOF_BIOMETRIC_WITH_OPENCV)
             PRIVATE
                 faceproof_biometric_vision
         )
+
+        add_executable(faceproof_biometric_reference_cli
+            tools/reference_cli.cpp
+        )
+        target_link_libraries(
+            faceproof_biometric_reference_cli
+            PRIVATE
+                faceproof_biometric_vision
+        )
     endif()
 endif()
 
