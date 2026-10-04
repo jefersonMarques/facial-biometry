@@ -14,6 +14,7 @@ import numpy as np
 @dataclass(frozen=True)
 class NativeShadowConfig:
     enabled: bool
+    vision_cli: str
     pad_cli: str
     reference_cli: str
     yunet_model: str
@@ -39,6 +40,7 @@ class NativeBiometricShadow:
         minifas_model: str,
     ) -> "NativeBiometricShadow":
         enabled = _env_bool("FACEPROOF_NATIVE_SHADOW_ENABLED", False)
+        vision_cli = os.getenv("FACEPROOF_BIOMETRIC_VISION_CLI", "").strip()
         pad_cli = os.getenv("FACEPROOF_BIOMETRIC_PAD_CLI", "").strip()
         reference_cli = os.getenv("FACEPROOF_BIOMETRIC_REFERENCE_CLI", "").strip()
         timeout_seconds = float(
@@ -48,6 +50,7 @@ class NativeBiometricShadow:
         return cls(
             NativeShadowConfig(
                 enabled=enabled,
+                vision_cli=vision_cli,
                 pad_cli=pad_cli,
                 reference_cli=reference_cli,
                 yunet_model=yunet_model,
@@ -60,19 +63,34 @@ class NativeBiometricShadow:
     def frame(self, image_bytes: bytes) -> dict[str, Any] | None:
         if not self.enabled:
             return None
-        if not self._config.pad_cli:
-            return {"error": "FACEPROOF_BIOMETRIC_PAD_CLI is not configured"}
-        if not Path(self._config.pad_cli).is_file():
-            return {"error": "native PAD CLI does not exist"}
 
-        command = [
-            self._config.pad_cli,
-            "-",
-            self._config.yunet_model,
-            self._config.sface_model,
-            self._config.minifas_model,
-        ]
-        return self._run_json(command, image_bytes)
+        if self._config.pad_cli and Path(self._config.pad_cli).is_file():
+            command = [
+                self._config.pad_cli,
+                "-",
+                self._config.yunet_model,
+                self._config.sface_model,
+                self._config.minifas_model,
+            ]
+            return self._run_json(command, image_bytes)
+
+        if self._config.vision_cli and Path(self._config.vision_cli).is_file():
+            command = [
+                self._config.vision_cli,
+                "-",
+                self._config.yunet_model,
+                self._config.sface_model,
+            ]
+            result = self._run_json(command, image_bytes)
+            result["padStatus"] = "not_compared"
+            return result
+
+        return {
+            "error": (
+                "native shadow requires FACEPROOF_BIOMETRIC_PAD_CLI "
+                "or FACEPROOF_BIOMETRIC_VISION_CLI"
+            )
+        }
 
     def reference(self, image_bytes: bytes) -> dict[str, Any] | None:
         if not self.enabled:
