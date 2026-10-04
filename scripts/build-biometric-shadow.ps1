@@ -58,26 +58,59 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 $OpenCVConfig = Find-OpenCVConfig
 
 $StaticLibraryDirectory = Join-Path $OpenCVInstall "x64\vc17\staticlib"
-$OpenCVModulesPath = Join-Path $StaticLibraryDirectory "OpenCVModules.cmake"
 $MissingADELibrary = -not (Test-Path (Join-Path $StaticLibraryDirectory "ade.lib"))
-$ExportsADETarget = (
-    (Test-Path $OpenCVModulesPath) -and
-    ((Get-Content -Raw $OpenCVModulesPath) -match "(?m)\bade\.lib\b")
-)
+$OpenCVModuleFiles = @()
+if (Test-Path $StaticLibraryDirectory) {
+    $OpenCVModuleFiles = @(
+        Get-ChildItem -Path $StaticLibraryDirectory -Filter "OpenCVModules*.cmake" -File -ErrorAction SilentlyContinue
+    )
+}
+$ExportsADETarget = $false
+foreach ($ModuleFile in $OpenCVModuleFiles) {
+    $ModuleContent = Get-Content -Raw $ModuleFile.FullName
+    if (
+        $ModuleContent -match "(?i)(^|[^A-Za-z0-9_])ade([^A-Za-z0-9_]|$)" -or
+        $ModuleContent -match "(?i)ade\.lib"
+    ) {
+        $ExportsADETarget = $true
+        break
+    }
+}
 
 if (-not $Force -and $OpenCVConfig -and $MissingADELibrary -and $ExportsADETarget) {
-    Write-Host "Repairing static OpenCV package: disabling unused ADE/G-API export..." -ForegroundColor Yellow
+    Write-Host "Repairing static OpenCV package: removing stale ADE export..." -ForegroundColor Yellow
 
     $OpenCVRepairArgs = @(
         "-S", $OpenCVSource,
         "-B", $OpenCVBuild,
+        "-G", "Visual Studio 17 2022",
+        "-A", "x64",
+        "-DCMAKE_INSTALL_PREFIX=$OpenCVInstall",
+        "-DBUILD_LIST=core,imgproc,imgcodecs,dnn,objdetect",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DBUILD_TESTS=OFF",
+        "-DBUILD_PERF_TESTS=OFF",
+        "-DBUILD_EXAMPLES=OFF",
+        "-DBUILD_opencv_apps=OFF",
+        "-DBUILD_opencv_python3=OFF",
+        "-DBUILD_JAVA=OFF",
+        "-DBUILD_opencv_java=OFF",
         "-DBUILD_opencv_gapi=OFF",
-        "-DWITH_ADE=OFF"
+        "-DWITH_ADE=OFF",
+        "-DWITH_FFMPEG=OFF",
+        "-DWITH_GSTREAMER=OFF",
+        "-DWITH_OPENCL=OFF",
+        "-DWITH_IPP=OFF",
+        "-DWITH_TIFF=OFF",
+        "-DWITH_OPENEXR=OFF",
+        "-DWITH_WEBP=OFF"
     )
     & cmake @OpenCVRepairArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Falha ao reconfigurar OpenCV sem ADE."
     }
+
+    Remove-Item -Recurse -Force $OpenCVInstall -ErrorAction SilentlyContinue
 
     & cmake --build $OpenCVBuild --config Release --target INSTALL --parallel 2
     if ($LASTEXITCODE -ne 0) {
