@@ -33,6 +33,7 @@ FPBiometricVisionEngine* fp_bio_vision_create(
 );
 
 void fp_bio_vision_destroy(FPBiometricVisionEngine* engine);
+const char* fp_bio_vision_last_error(void);
 
 int fp_bio_vision_analyze_jpeg(
     FPBiometricVisionEngine* engine,
