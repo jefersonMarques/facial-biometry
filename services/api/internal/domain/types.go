@@ -11,9 +11,11 @@ const (
 )
 
 type CaptureSession struct {
-	ID                   string
-	SubjectID            string
-	Kind                 SessionKind
+	ID                     string
+	SubjectID              string
+	Kind                   SessionKind
+	CaptureRunID           string
+	CaptureProtocolVersion string
 	IlluminationPattern  []float64
 	CaptureDurationMS    int
 	SampleIntervalMS     int
