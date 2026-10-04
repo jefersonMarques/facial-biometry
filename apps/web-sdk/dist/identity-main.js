@@ -2,6 +2,7 @@ import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
 import { LocalCaptureGate, } from "./local-capture-gate.js";
+import { getRuntimeFingerprint } from "./runtime-fingerprint.js";
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
 const DOCUMENT_PREVIEW_STORAGE_KEY = "faceproof.identity.document-preview";
 const GUIDE_SAMPLE_MS = 260;
@@ -252,6 +253,7 @@ async function runBiometry() {
     setProximityIndicator(0, "red");
     let completed = false;
     try {
+        const runtimeFingerprint = await getRuntimeFingerprint();
         await camera.start();
         cameraState.textContent = "Câmera ativa";
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
@@ -272,7 +274,7 @@ async function runBiometry() {
             setProximityIndicator(100, "green");
             try {
                 const capturedFrames = [...farFrames, ...nearFrames];
-                const result = await client.completeIdentityCheck(identityToken, session, capturedFrames);
+                const result = await client.completeIdentityCheck(identityToken, session, capturedFrames, runtimeFingerprint);
                 renderIdentityResult(result, capturedFrames);
                 completed = true;
             }
