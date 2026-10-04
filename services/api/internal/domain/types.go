@@ -23,6 +23,15 @@ type CaptureSession struct {
 	Completed            bool
 }
 
+type CaptureProtocolMetadata struct {
+	Version             string `json:"version"`
+	RunID               string `json:"runId"`
+	StartedAtUnixMS     int64  `json:"startedAtUnixMs"`
+	FarStartedAtUnixMS  int64  `json:"farStartedAtUnixMs"`
+	NearStartedAtUnixMS int64  `json:"nearStartedAtUnixMs"`
+	SubmittingAtUnixMS  int64  `json:"submittingAtUnixMs"`
+}
+
 type RuntimeFingerprint struct {
 	SDKVersion                 string `json:"sdkVersion"`
 	LivenessCoreVersion        string `json:"livenessCoreVersion"`
