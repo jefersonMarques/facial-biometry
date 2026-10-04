@@ -433,12 +433,20 @@ class BiometricAnalyzer:
                 python_combined_embedding=combined_embedding,
             )
             result["nativeShadow"] = native_comparison
+            pad_compared_frames = int(
+                native_comparison.get("padComparedFrames", 0)
+            )
+            pad_summary = (
+                str(native_comparison.get("passivePadMaxDelta", 0))
+                if pad_compared_frames > 0
+                else "n/a"
+            )
             diagnostics.append(
                 "native shadow "
                 f"{native_comparison.get('status', 'unknown')}: "
                 f"bboxΔ={native_comparison.get('bboxMaxDeltaPx', 0)}px "
                 f"qualityΔ={native_comparison.get('qualityMaxDelta', 0)} "
-                f"padΔ={native_comparison.get('passivePadMaxDelta', 0)} "
+                f"padΔ={pad_summary} "
                 f"cos={native_comparison.get('combinedEmbeddingCosine', 0)}"
             )
 
