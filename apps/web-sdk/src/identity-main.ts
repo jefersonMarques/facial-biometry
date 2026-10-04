@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
+import { CaptureLifecycle } from "./capture-lifecycle.js";
 import {
     LocalCaptureGate,
     type LocalCaptureGateResult,
@@ -117,6 +118,7 @@ const captureFlash = requiredElement<HTMLDivElement>("captureFlash");
 
 const camera = new CameraCapture(video);
 const localCaptureGate = new LocalCaptureGate();
+const captureLifecycle = new CaptureLifecycle();
 let identityToken = "";
 let busy = false;
 let autoBiometryScheduled = false;
@@ -341,8 +343,10 @@ async function runBiometry(): Promise<void> {
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
 
         while (!completed) {
+            captureLifecycle.begin();
             localCaptureGate.reset();
             currentBiometryPhase = "far";
+            captureLifecycle.transition("far");
             const farRelaxedQuality = await waitForFacePhase("far");
 
             const session = await client.createIdentitySession(identityToken);
@@ -351,6 +355,7 @@ async function runBiometry(): Promise<void> {
             await showCaptureSuccess("Primeira captura concluída");
 
             currentBiometryPhase = "near";
+            captureLifecycle.transition("near");
             const nearRelaxedQuality = await waitForFacePhase("near");
             const nearFrames = await capturePhase("near", nearRelaxedQuality);
             await showCaptureSuccess("Segunda captura concluída");
@@ -361,17 +366,21 @@ async function runBiometry(): Promise<void> {
 
             try {
                 const capturedFrames = [...farFrames, ...nearFrames];
+                captureLifecycle.transition("submitting");
                 const result = await client.completeIdentityCheck(
                     identityToken,
                     session,
                     capturedFrames,
                     runtimeFingerprint,
+                    captureLifecycle.protocolMetadata(),
                 );
+                captureLifecycle.transition("complete");
                 renderIdentityResult(result, capturedFrames);
                 completed = true;
             } catch (error) {
                 const message = errorMessage(error);
                 if (isRecaptureRequired(message)) {
+                    captureLifecycle.cancel();
                     setProximityIndicator(0, "red");
                     faceGuide.className = "face-guide phase-far";
                     guidePhaseText.textContent = "Captura 1 de 2";
@@ -383,6 +392,7 @@ async function runBiometry(): Promise<void> {
             }
         }
     } catch (error) {
+        captureLifecycle.cancel();
         const message = errorMessage(error);
         const infrastructureFailure = isInfrastructureBiometryError(message);
         biometricStatus.textContent = friendlyBiometryError(message);
