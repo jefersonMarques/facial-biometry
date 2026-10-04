@@ -6,10 +6,13 @@ import cv2
 import numpy as np
 
 
-def decode_data_url(value: str) -> np.ndarray:
+def decode_data_url_bytes(value: str) -> bytes:
     encoded = value.split(",", 1)[1] if "," in value else value
-    binary = base64.b64decode(encoded, validate=True)
-    return decode_image_bytes(binary)
+    return base64.b64decode(encoded, validate=True)
+
+
+def decode_data_url(value: str) -> np.ndarray:
+    return decode_image_bytes(decode_data_url_bytes(value))
 
 
 def decode_image_bytes(value: bytes | bytearray | memoryview) -> np.ndarray:
