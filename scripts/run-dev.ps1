@@ -18,6 +18,20 @@ if (-not (Test-Path $MediaPipePackage)) {
 }
 python scripts\vendor-mediapipe.py
 
+$LivenessRuntimeManifestPath = Join-Path $Root "apps\web-sdk\wasm\liveness-core\faceproof-liveness-core.manifest.json"
+if (-not (Test-Path $LivenessRuntimeManifestPath)) {
+    throw "Manifesto do FaceProof Liveness Core nao encontrado. Execute .\scripts\build-liveness-wasm.ps1 antes de iniciar."
+}
+$LivenessRuntimeManifest = Get-Content -Raw $LivenessRuntimeManifestPath | ConvertFrom-Json
+$LivenessWasmEntry = $LivenessRuntimeManifest.files | Where-Object { $_.path -eq "faceproof-liveness-core.wasm" } | Select-Object -First 1
+if (-not $LivenessWasmEntry -or -not $LivenessWasmEntry.sha256) {
+    throw "Manifesto do FaceProof Liveness Core nao contem o hash do WASM."
+}
+$env:FACEPROOF_RUNTIME_SDK_VERSION = "0.3.0"
+$env:FACEPROOF_RUNTIME_LIVENESS_CORE_VERSION = [string]$LivenessRuntimeManifest.version
+$env:FACEPROOF_RUNTIME_LIVENESS_WASM_SHA256 = ([string]$LivenessWasmEntry.sha256).ToLowerInvariant()
+$env:FACEPROOF_RUNTIME_MEDIAPIPE_VERSION = "1.0.1"
+
 if (-not (Test-Path ".venv")) {
     python -m venv .venv
 }
