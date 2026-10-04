@@ -26,7 +26,7 @@ type CaptureSession struct {
 type RuntimeFingerprint struct {
 	SDKVersion                 string `json:"sdkVersion"`
 	LivenessCoreVersion        string `json:"livenessCoreVersion"`
-	LivenessCoreWASM_SHA256    string `json:"livenessCoreWasmSha256"`
+	LivenessCoreWASMSHA256    string `json:"livenessCoreWasmSha256"`
 	MediaPipeVersion           string `json:"mediaPipeVersion"`
 	MediaPipeVisionSHA256      string `json:"mediaPipeVisionSha256"`
 	FaceLandmarkerSHA256       string `json:"faceLandmarkerSha256"`
