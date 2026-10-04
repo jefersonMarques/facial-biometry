@@ -41,10 +41,12 @@ type createSessionRequest struct {
 }
 
 type createSessionResponse struct {
-	SessionID            string    `json:"sessionId"`
-	SessionToken         string    `json:"sessionToken"`
-	Kind                 string    `json:"kind"`
-	ExpiresAt            time.Time `json:"expiresAt"`
+	SessionID              string    `json:"sessionId"`
+	SessionToken           string    `json:"sessionToken"`
+	Kind                   string    `json:"kind"`
+	CaptureRunID           string    `json:"captureRunId"`
+	CaptureProtocolVersion string    `json:"captureProtocolVersion"`
+	ExpiresAt              time.Time `json:"expiresAt"`
 	CaptureDurationMS    int       `json:"captureDurationMs"`
 	SampleIntervalMS     int       `json:"sampleIntervalMs"`
 	IlluminationSettleMS int       `json:"illuminationSettleMs"`
