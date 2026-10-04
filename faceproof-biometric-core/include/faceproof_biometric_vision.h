@@ -54,6 +54,20 @@ int fp_bio_vision_encode_jpeg(
     FPBiometricQuality* quality
 );
 
+int fp_bio_vision_reference_jpeg(
+    FPBiometricVisionEngine* engine,
+    const uint8_t* jpeg_data,
+    size_t jpeg_size,
+    float* combined_embedding,
+    size_t combined_capacity,
+    float* variant_embeddings,
+    size_t variant_capacity,
+    size_t* embedding_size,
+    size_t* variant_count,
+    FPBiometricFace* face,
+    FPBiometricQuality* quality
+);
+
 #ifdef __cplusplus
 }
 #endif
