@@ -14,6 +14,8 @@ export interface SessionResponse {
     sessionId: string;
     sessionToken: string;
     kind: SessionKind;
+    captureRunId: string;
+    captureProtocolVersion: "1";
     expiresAt: string;
     captureDurationMs: number;
     sampleIntervalMs: number;
