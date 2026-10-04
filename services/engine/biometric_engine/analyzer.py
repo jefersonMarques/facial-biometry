@@ -12,6 +12,8 @@ from .metrics import (
     clamp01,
     face_size_score,
     facial_illumination_value,
+    guided_capture_score,
+    identity_liveness_score,
     illumination_correlation,
     robust_mean,
     sharpness_score,
@@ -271,7 +273,7 @@ class BiometricAnalyzer:
         brightness = robust_mean([frame.brightness_quality for frame in frame_analyses])
         size_score = robust_mean([frame.face_size for frame in frame_analyses])
         temporal_score = temporal_motion_score(face_crops, normalized_centers)
-        guided_score = _guided_capture_score(far_scales, near_scales, center_scores, quality_scores)
+        guided_score = guided_capture_score(far_scales, near_scales, center_scores, quality_scores)
 
         if passive_values:
             passive_score = robust_mean(passive_values)
@@ -282,30 +284,13 @@ class BiometricAnalyzer:
             if self._passive_pad_error:
                 diagnostics.append(f"passive PAD unavailable: {self._passive_pad_error}")
 
-        quality_gate = clamp01((quality_score - 0.25) / 0.55)
-        presence_gate = clamp01((face_presence - 0.55) / 0.45)
-
-        if passive_status == "available":
-            liveness_score = (
-                0.55 * passive_score
-                + 0.20 * guided_score
-                + 0.10 * temporal_score
-                + 0.10 * quality_score
-                + 0.05 * face_presence
-            )
-        else:
-            liveness_score = (
-                0.36 * guided_score
-                + 0.24 * temporal_score
-                + 0.22 * quality_score
-                + 0.18 * face_presence
-            )
-            liveness_score = min(liveness_score, 0.72)
-
-        liveness_score = clamp01(
-            liveness_score
-            * (0.82 + 0.18 * quality_gate)
-            * (0.80 + 0.20 * presence_gate)
+        liveness_score = identity_liveness_score(
+            passive_score=passive_score,
+            passive_available=passive_status == "available",
+            guided_score=guided_score,
+            temporal_score=temporal_score,
+            quality_score=quality_score,
+            face_presence=face_presence,
         )
 
         near_candidates = [item for item in embedding_candidates if item[1] == "near"]
@@ -616,7 +601,7 @@ class BiometricAnalyzer:
             if quality >= 0.30:
                 candidates.append((quality, self._encoder.encode(image, detected)))
 
-        guided_score = _guided_capture_score(far_scales, near_scales, center_scores, quality_scores)
+        guided_score = guided_capture_score(far_scales, near_scales, center_scores, quality_scores)
         if len(far_scales) < 2 or len(near_scales) < 2:
             diagnostics.append("guided capture phase coverage is low")
         elif float(np.median(near_scales)) - float(np.median(far_scales)) < 0.08:
@@ -650,7 +635,7 @@ def _empty_quality() -> dict[str, Any]:
     }
 
 
-def _guided_capture_score(
+def guided_capture_score(
     far_scales: list[float],
     near_scales: list[float],
     center_scores: list[float],
