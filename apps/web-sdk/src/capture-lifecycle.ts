@@ -65,6 +65,13 @@ export class CaptureLifecycle {
         this.emit();
     }
 
+    public cancel(): void {
+        if (!this.runId || this.state === "complete" || this.state === "cancelled") {
+            return;
+        }
+        this.transition("cancelled");
+    }
+
     public protocolMetadata(): CaptureProtocolMetadata {
         if (
             !this.runId ||
