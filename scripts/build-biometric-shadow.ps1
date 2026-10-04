@@ -88,6 +88,7 @@ if (-not $Force -and $OpenCVConfig -and $MissingADELibrary -and $ExportsADETarge
         "-DCMAKE_INSTALL_PREFIX=$OpenCVInstall",
         "-DBUILD_LIST=core,imgproc,imgcodecs,dnn,objdetect",
         "-DBUILD_SHARED_LIBS=OFF",
+        "-DBUILD_WITH_STATIC_CRT=OFF",
         "-DBUILD_TESTS=OFF",
         "-DBUILD_PERF_TESTS=OFF",
         "-DBUILD_EXAMPLES=OFF",
@@ -120,6 +121,58 @@ if (-not $Force -and $OpenCVConfig -and $MissingADELibrary -and $ExportsADETarge
     $OpenCVConfig = Find-OpenCVConfig
 }
 
+$OpenCVCachePath = Join-Path $OpenCVBuild "CMakeCache.txt"
+$OpenCVUsesStaticCRT = $false
+if (Test-Path $OpenCVCachePath) {
+    $OpenCVUsesStaticCRT = (
+        (Get-Content -Raw $OpenCVCachePath) -match "(?m)^BUILD_WITH_STATIC_CRT:BOOL=ON$"
+    )
+}
+
+if (-not $Force -and $OpenCVConfig -and $OpenCVUsesStaticCRT) {
+    Write-Host "Repairing OpenCV runtime: switching static libraries from /MT to /MD..." -ForegroundColor Yellow
+
+    $OpenCVRuntimeRepairArgs = @(
+        "-S", $OpenCVSource,
+        "-B", $OpenCVBuild,
+        "-G", "Visual Studio 17 2022",
+        "-A", "x64",
+        "-DCMAKE_INSTALL_PREFIX=$OpenCVInstall",
+        "-DBUILD_LIST=core,imgproc,imgcodecs,dnn,objdetect",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DBUILD_WITH_STATIC_CRT=OFF",
+        "-DBUILD_TESTS=OFF",
+        "-DBUILD_PERF_TESTS=OFF",
+        "-DBUILD_EXAMPLES=OFF",
+        "-DBUILD_opencv_apps=OFF",
+        "-DBUILD_opencv_python3=OFF",
+        "-DBUILD_JAVA=OFF",
+        "-DBUILD_opencv_java=OFF",
+        "-DBUILD_opencv_gapi=OFF",
+        "-DWITH_ADE=OFF",
+        "-DWITH_FFMPEG=OFF",
+        "-DWITH_GSTREAMER=OFF",
+        "-DWITH_OPENCL=OFF",
+        "-DWITH_IPP=OFF",
+        "-DWITH_TIFF=OFF",
+        "-DWITH_OPENEXR=OFF",
+        "-DWITH_WEBP=OFF"
+    )
+    & cmake @OpenCVRuntimeRepairArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao reconfigurar OpenCV para CRT dinamico."
+    }
+
+    Remove-Item -Recurse -Force $OpenCVInstall -ErrorAction SilentlyContinue
+
+    & cmake --build $OpenCVBuild --config Release --target INSTALL --parallel 2
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao recompilar OpenCV com CRT dinamico."
+    }
+
+    $OpenCVConfig = Find-OpenCVConfig
+}
+
 if ($Force -or -not $OpenCVConfig) {
     if ($Force) {
         Remove-Item -Recurse -Force $OpenCVBuild -ErrorAction SilentlyContinue
@@ -145,6 +198,7 @@ if ($Force -or -not $OpenCVConfig) {
         "-DCMAKE_INSTALL_PREFIX=$OpenCVInstall",
         "-DBUILD_LIST=core,imgproc,imgcodecs,dnn,objdetect",
         "-DBUILD_SHARED_LIBS=OFF",
+        "-DBUILD_WITH_STATIC_CRT=OFF",
         "-DBUILD_TESTS=OFF",
         "-DBUILD_PERF_TESTS=OFF",
         "-DBUILD_EXAMPLES=OFF",
