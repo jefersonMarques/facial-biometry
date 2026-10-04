@@ -76,18 +76,20 @@ type identityCompleteRequest struct {
 	SessionToken string                       `json:"sessionToken"`
 	GuidedFrames []domain.GuidedCapturedFrame `json:"guidedFrames"`
 	Metadata     *domain.CaptureMetadata      `json:"metadata,omitempty"`
+	Runtime      domain.RuntimeFingerprint    `json:"runtime"`
 }
 
 type issuerIdentityCheckResponse struct {
-	ID                  string             `json:"id"`
-	Status              identity.Status    `json:"status"`
-	MinimumDocumentDate time.Time          `json:"minimumDocumentDate"`
-	CreatedAt           time.Time          `json:"createdAt"`
-	ExpiresAt           time.Time          `json:"expiresAt"`
-	Decision            string             `json:"decision,omitempty"`
+	ID                  string                     `json:"id"`
+	Status              identity.Status            `json:"status"`
+	MinimumDocumentDate time.Time                  `json:"minimumDocumentDate"`
+	CreatedAt           time.Time                  `json:"createdAt"`
+	ExpiresAt           time.Time                  `json:"expiresAt"`
+	Decision            string                     `json:"decision,omitempty"`
 	Document            *identity.DocumentEvidence `json:"document,omitempty"`
-	LivenessScore       float64            `json:"livenessScore,omitempty"`
-	FaceSimilarity      float64            `json:"faceSimilarity,omitempty"`
+	LivenessScore       float64                    `json:"livenessScore,omitempty"`
+	FaceSimilarity      float64                    `json:"faceSimilarity,omitempty"`
+	Runtime             *domain.RuntimeFingerprint `json:"runtime,omitempty"`
 }
 
 type identityCompleteResponse struct {
@@ -387,6 +389,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusBadRequest, "identity capture session mismatch")
 		return
 	}
+	if err := validateRuntimeFingerprint(payload.Runtime, handler.config); err != nil {
+		handler.writeError(writer, http.StatusUpgradeRequired, err.Error())
+		return
+	}
 
 	captureSession, err := handler.sessions.Get(payload.SessionID)
 	if err != nil {
@@ -503,6 +509,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		current.FaceSimilarity = similarity
 		current.CompletedAt = &completedAt
 		current.CaptureSessionID = ""
+		runtimeCopy := payload.Runtime
+		current.RuntimeFingerprint = &runtimeCopy
 		current.ReferenceEmbedding = nil
 		current.ReferenceEmbeddings = nil
 		current.ReferenceEmbeddingModel = ""
@@ -726,6 +734,7 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		Document:            check.Document,
 		LivenessScore:       check.LivenessScore,
 		FaceSimilarity:      check.FaceSimilarity,
+		Runtime:             check.RuntimeFingerprint,
 	})
 }
 
