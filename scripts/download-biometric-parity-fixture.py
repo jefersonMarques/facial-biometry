@@ -7,14 +7,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DESTINATION = ROOT / "build" / "biometric-parity" / "opencv-zoo-sface-demo.jpg"
+DESTINATION = ROOT / "build" / "biometric-parity" / "astronaut.png"
 URL = (
-    "https://media.githubusercontent.com/media/opencv/opencv_zoo/"
-    "47534e27c9851bb1128ccc0102f1145e27f23f98/"
-    "models/face_recognition_sface/example_outputs/demo.jpg"
+    "https://raw.githubusercontent.com/scikit-image/scikit-image/"
+    "533b7694d2004ae84e49e2cfd0bcfc5f8e562f22/"
+    "src/_skimage2/data/astronaut.png"
 )
-EXPECTED_SHA256 = "0f879881a598fea6fec74e047e6a1d00e36d81de63bf0ed392b628e6ab6c2fc4"
-EXPECTED_BYTES = 156282
+EXPECTED_SHA256 = "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5"
 
 
 def sha256(path: Path) -> str:
@@ -26,11 +25,7 @@ def sha256(path: Path) -> str:
 
 
 def verify(path: Path) -> bool:
-    return (
-        path.is_file()
-        and path.stat().st_size == EXPECTED_BYTES
-        and sha256(path) == EXPECTED_SHA256
-    )
+    return path.is_file() and sha256(path) == EXPECTED_SHA256
 
 
 def main() -> int:
@@ -40,14 +35,14 @@ def main() -> int:
         return 0
 
     DESTINATION.unlink(missing_ok=True)
-    temporary = DESTINATION.with_suffix(".jpg.part")
+    temporary = DESTINATION.with_suffix(".png.part")
     request = urllib.request.Request(URL, headers={"User-Agent": "FaceProof/0.1"})
     try:
         with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as output:
             shutil.copyfileobj(response, output)
         if not verify(temporary):
             raise RuntimeError(
-                f"fixture verification failed: size={temporary.stat().st_size if temporary.exists() else 0} "
+                "fixture verification failed: "
                 f"sha256={sha256(temporary) if temporary.exists() else 'missing'}"
             )
         temporary.replace(DESTINATION)
