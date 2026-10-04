@@ -39,3 +39,19 @@ func validateCaptureProtocol(protocol domain.CaptureProtocolMetadata) error {
 	}
 	return nil
 }
+
+func validateCaptureProtocolSession(
+	protocol domain.CaptureProtocolMetadata,
+	captureSession domain.CaptureSession,
+) error {
+	if captureSession.CaptureRunID == "" || captureSession.CaptureProtocolVersion == "" {
+		return errors.New("capture session protocol binding is missing")
+	}
+	if protocol.RunID != captureSession.CaptureRunID {
+		return errors.New("capture protocol runId does not belong to this session")
+	}
+	if protocol.Version != captureSession.CaptureProtocolVersion {
+		return errors.New("capture protocol version does not belong to this session")
+	}
+	return nil
+}
