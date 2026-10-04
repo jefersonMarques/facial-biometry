@@ -57,3 +57,23 @@ func TestValidateCaptureProtocolRejectsInvalidRunID(t *testing.T) {
 		t.Fatalf("expected invalid runId error, got %v", err)
 	}
 }
+
+func TestValidateCaptureProtocolSessionBindsServerRunID(t *testing.T) {
+	protocol := domain.CaptureProtocolMetadata{
+		Version: "1",
+		RunID:   "123e4567-e89b-42d3-a456-426614174000",
+	}
+	captureSession := domain.CaptureSession{
+		CaptureRunID:           protocol.RunID,
+		CaptureProtocolVersion: protocol.Version,
+	}
+
+	if err := validateCaptureProtocolSession(protocol, captureSession); err != nil {
+		t.Fatal(err)
+	}
+
+	protocol.RunID = "223e4567-e89b-42d3-a456-426614174000"
+	if err := validateCaptureProtocolSession(protocol, captureSession); err == nil {
+		t.Fatal("expected capture run/session mismatch")
+	}
+}
