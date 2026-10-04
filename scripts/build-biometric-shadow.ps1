@@ -56,6 +56,37 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 }
 
 $OpenCVConfig = Find-OpenCVConfig
+
+$StaticLibraryDirectory = Join-Path $OpenCVInstall "x64\vc17\staticlib"
+$OpenCVModulesPath = Join-Path $StaticLibraryDirectory "OpenCVModules.cmake"
+$MissingADELibrary = -not (Test-Path (Join-Path $StaticLibraryDirectory "ade.lib"))
+$ExportsADETarget = (
+    (Test-Path $OpenCVModulesPath) -and
+    ((Get-Content -Raw $OpenCVModulesPath) -match "(?m)\bade\.lib\b")
+)
+
+if (-not $Force -and $OpenCVConfig -and $MissingADELibrary -and $ExportsADETarget) {
+    Write-Host "Repairing static OpenCV package: disabling unused ADE/G-API export..." -ForegroundColor Yellow
+
+    $OpenCVRepairArgs = @(
+        "-S", $OpenCVSource,
+        "-B", $OpenCVBuild,
+        "-DBUILD_opencv_gapi=OFF",
+        "-DWITH_ADE=OFF"
+    )
+    & cmake @OpenCVRepairArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao reconfigurar OpenCV sem ADE."
+    }
+
+    & cmake --build $OpenCVBuild --config Release --target INSTALL --parallel 2
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao reinstalar OpenCV sem ADE."
+    }
+
+    $OpenCVConfig = Find-OpenCVConfig
+}
+
 if ($Force -or -not $OpenCVConfig) {
     if ($Force) {
         Remove-Item -Recurse -Force $OpenCVBuild -ErrorAction SilentlyContinue
@@ -88,6 +119,8 @@ if ($Force -or -not $OpenCVConfig) {
         "-DBUILD_opencv_python3=OFF",
         "-DBUILD_JAVA=OFF",
         "-DBUILD_opencv_java=OFF",
+        "-DBUILD_opencv_gapi=OFF",
+        "-DWITH_ADE=OFF",
         "-DWITH_FFMPEG=OFF",
         "-DWITH_GSTREAMER=OFF",
         "-DWITH_OPENCL=OFF",
