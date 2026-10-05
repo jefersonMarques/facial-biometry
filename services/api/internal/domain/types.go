@@ -118,6 +118,22 @@ type EngineFaceEmbedding struct {
 	Embedding  []float64 `json:"embedding"`
 }
 
+type GeometryTelemetry struct {
+	RunID             string  `json:"runId,omitempty"`
+	Status            string  `json:"status,omitempty"`
+	SampleCount       int     `json:"sampleCount,omitempty"`
+	FarSamples        int     `json:"farSamples,omitempty"`
+	NearSamples       int     `json:"nearSamples,omitempty"`
+	ScaleRatio        float64 `json:"scaleRatio,omitempty"`
+	TransitionScore   float64 `json:"transitionScore,omitempty"`
+	PerspectiveChange float64 `json:"perspectiveChange,omitempty"`
+	DepthChange       float64 `json:"depthChange,omitempty"`
+	PhaseStability    float64 `json:"phaseStability,omitempty"`
+	EvidenceScore     float64 `json:"evidenceScore,omitempty"`
+	WASMStatus        string  `json:"wasmStatus,omitempty"`
+	WASMMaxDelta      float64 `json:"wasmMaxDelta,omitempty"`
+}
+
 type NativeShadowComparison struct {
 	Status                       string   `json:"status"`
 	PythonFrames                 int      `json:"pythonFrames"`
