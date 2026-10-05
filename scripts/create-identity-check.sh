@@ -15,7 +15,7 @@ CAMPAIGN_ID="${4:-}"
 SCENARIO="${5:-unknown}"
 EXPECTED_DECISION="${6:-}"
 PUBLIC_BASE_URL="${7:-${FACEPROOF_PUBLIC_BASE_URL:-}}"
-API_URL="${FACEPROOF_API_URL:-http://localhost:8080}"
+API_URL="${FACEPROOF_API_URL:-http://localhost:8180}"
 
 if [ -z "${FACEPROOF_IDENTITY_ISSUER_KEY:-}" ]; then
     KEY_FILE="$ROOT/.dev/identity-issuer-key"
