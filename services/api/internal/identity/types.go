@@ -46,6 +46,9 @@ type Check struct {
 	ID                     string            `json:"id"`
 	ExpectedCPF            string            `json:"expectedCpf"`
 	MinimumDocumentDate    time.Time         `json:"minimumDocumentDate"`
+	CampaignID             string            `json:"campaignId,omitempty"`
+	Scenario               string            `json:"scenario,omitempty"`
+	ExpectedDecision       string            `json:"expectedDecision,omitempty"`
 	Status                 Status            `json:"status"`
 	CreatedAt              time.Time         `json:"createdAt"`
 	ExpiresAt              time.Time         `json:"expiresAt"`
