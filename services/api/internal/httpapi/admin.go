@@ -106,6 +106,14 @@ func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, req
 		return
 	}
 
+	publicBaseURL := strings.TrimSpace(payload.PublicBaseURL)
+	if publicBaseURL != "" {
+		if _, err := parsePublicBaseURL(publicBaseURL); err != nil {
+			handler.writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
 	response, err := handler.createIdentityCheckRecord(request.Context(), createIdentityCheckRequest{
 		CPF:                 payload.CPF,
 		MinimumDocumentDate: payload.MinimumDocumentDate,
@@ -119,8 +127,8 @@ func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, req
 		return
 	}
 
-	if strings.TrimSpace(payload.PublicBaseURL) != "" {
-		publicURL, err := publicVerificationURL(payload.PublicBaseURL, response.VerificationURL)
+	if publicBaseURL != "" {
+		publicURL, err := publicVerificationURL(publicBaseURL, response.VerificationURL)
 		if err != nil {
 			handler.writeError(writer, http.StatusBadRequest, err.Error())
 			return
@@ -132,13 +140,9 @@ func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, req
 }
 
 func publicVerificationURL(publicBaseURL, verificationURL string) (string, error) {
-	publicBaseURL = strings.TrimSpace(publicBaseURL)
-	parsed, err := url.Parse(publicBaseURL)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
-		return "", errors.New("publicBaseUrl must be an absolute http or https URL")
-	}
-	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", errors.New("publicBaseUrl must not contain credentials, query or fragment")
+	parsed, err := parsePublicBaseURL(publicBaseURL)
+	if err != nil {
+		return "", err
 	}
 
 	fragmentIndex := strings.IndexByte(verificationURL, '#')
@@ -155,6 +159,17 @@ func publicVerificationURL(publicBaseURL, verificationURL string) (string, error
 	parsed.RawPath = ""
 	parsed.Fragment = verificationURL[fragmentIndex+1:]
 	return parsed.String(), nil
+}
+
+func parsePublicBaseURL(value string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return nil, errors.New("publicBaseUrl must be an absolute http or https URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, errors.New("publicBaseUrl must not contain credentials, query or fragment")
+	}
+	return parsed, nil
 }
 
 func (handler *Handler) listAdminChecks(writer http.ResponseWriter, request *http.Request) {
