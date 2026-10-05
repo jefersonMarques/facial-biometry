@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,16 @@ import (
 type createAnalyticsCampaignRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+}
+
+type createAdminIdentityCheckRequest struct {
+	CPF                 string `json:"cpf"`
+	MinimumDocumentDate string `json:"minimumDocumentDate"`
+	ExpiresInMinutes    int    `json:"expiresInMinutes,omitempty"`
+	CampaignID          string `json:"campaignId,omitempty"`
+	Scenario            string `json:"scenario,omitempty"`
+	ExpectedDecision    string `json:"expectedDecision,omitempty"`
+	PublicBaseURL       string `json:"publicBaseUrl,omitempty"`
 }
 
 func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Request) bool {
@@ -34,6 +45,8 @@ func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Re
 		handler.getAdminSummary(writer, request)
 	case request.URL.Path == "/v1/admin/checks" && request.Method == http.MethodGet:
 		handler.listAdminChecks(writer, request)
+	case request.URL.Path == "/v1/admin/checks" && request.Method == http.MethodPost:
+		handler.createAdminIdentityCheck(writer, request)
 	case request.URL.Path == "/v1/admin/campaigns" && request.Method == http.MethodGet:
 		handler.listAdminCampaigns(writer, request)
 	case request.URL.Path == "/v1/admin/campaigns" && request.Method == http.MethodPost:
@@ -84,6 +97,64 @@ func (handler *Handler) getAdminSummary(writer http.ResponseWriter, request *htt
 		return
 	}
 	handler.writeJSON(writer, http.StatusOK, summary)
+}
+
+func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, request *http.Request) {
+	var payload createAdminIdentityCheckRequest
+	if err := decodeJSON(request, &payload, 1<<20); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	response, err := handler.createIdentityCheckRecord(request.Context(), createIdentityCheckRequest{
+		CPF:                 payload.CPF,
+		MinimumDocumentDate: payload.MinimumDocumentDate,
+		ExpiresInMinutes:    payload.ExpiresInMinutes,
+		CampaignID:          payload.CampaignID,
+		Scenario:            payload.Scenario,
+		ExpectedDecision:    payload.ExpectedDecision,
+	})
+	if err != nil {
+		writeIdentityCreateError(handler, writer, err)
+		return
+	}
+
+	if strings.TrimSpace(payload.PublicBaseURL) != "" {
+		publicURL, err := publicVerificationURL(payload.PublicBaseURL, response.VerificationURL)
+		if err != nil {
+			handler.writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		response.VerificationURL = publicURL
+	}
+
+	handler.writeJSON(writer, http.StatusCreated, response)
+}
+
+func publicVerificationURL(publicBaseURL, verificationURL string) (string, error) {
+	publicBaseURL = strings.TrimSpace(publicBaseURL)
+	parsed, err := url.Parse(publicBaseURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return "", errors.New("publicBaseUrl must be an absolute http or https URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("publicBaseUrl must not contain credentials, query or fragment")
+	}
+
+	fragmentIndex := strings.IndexByte(verificationURL, '#')
+	if fragmentIndex < 0 || fragmentIndex == len(verificationURL)-1 {
+		return "", errors.New("verification URL does not contain an identity token")
+	}
+
+	basePath := strings.TrimRight(parsed.Path, "/")
+	if basePath == "/verify.html" || strings.HasSuffix(basePath, "/verify.html") {
+		parsed.Path = basePath
+	} else {
+		parsed.Path = basePath + "/verify.html"
+	}
+	parsed.RawPath = ""
+	parsed.Fragment = verificationURL[fragmentIndex+1:]
+	return parsed.String(), nil
 }
 
 func (handler *Handler) listAdminChecks(writer http.ResponseWriter, request *http.Request) {
