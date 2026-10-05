@@ -90,7 +90,46 @@ func constantTimeEqual(left, right []byte) bool {
 	return difference == 0
 }
 
+func (handler *Handler) reconcileAdminAnalytics(request *http.Request) {
+	if handler.analytics == nil || handler.identityChecks == nil {
+		return
+	}
+
+	states, err := handler.analytics.ListOpenCheckStates(request.Context(), 100)
+	if err != nil {
+		handler.logAnalyticsError("list open checks for reconciliation", err)
+		return
+	}
+
+	for _, state := range states {
+		check, err := handler.identityChecks.LoadByID(state.CheckID)
+		if err != nil {
+			continue
+		}
+		if string(check.Status) == state.Status && check.CompletedAt == nil {
+			continue
+		}
+
+		operationContext, cancel := analyticsOperationContext(request.Context())
+		err = handler.analytics.RecordAuthoritativeState(
+			operationContext,
+			check.ID,
+			string(check.Status),
+			check.Decision,
+			check.CompletedAt,
+			check.LivenessScore,
+			check.FaceSimilarity,
+			check.BiometricSessions,
+		)
+		cancel()
+		if err != nil {
+			handler.logAnalyticsError("reconcile authoritative identity state", err)
+		}
+	}
+}
+
 func (handler *Handler) getAdminSummary(writer http.ResponseWriter, request *http.Request) {
+	handler.reconcileAdminAnalytics(request)
 	summary, err := handler.analytics.Summary(request.Context())
 	if err != nil {
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics summary")
@@ -173,6 +212,7 @@ func parsePublicBaseURL(value string) (*url.URL, error) {
 }
 
 func (handler *Handler) listAdminChecks(writer http.ResponseWriter, request *http.Request) {
+	handler.reconcileAdminAnalytics(request)
 	limit := 100
 	if value := strings.TrimSpace(request.URL.Query().Get("limit")); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -201,6 +241,7 @@ func (handler *Handler) getAdminCheck(
 	request *http.Request,
 	checkID string,
 ) {
+	handler.reconcileAdminAnalytics(request)
 	detail, err := handler.analytics.GetCheck(request.Context(), checkID)
 	if errors.Is(err, analytics.ErrNotFound) {
 		handler.writeError(writer, http.StatusNotFound, "analytics check not found")
