@@ -15,7 +15,6 @@ import (
 	"faceproof/services/api/internal/domain"
 	"faceproof/services/api/internal/identity"
 	"faceproof/services/api/internal/matching"
-	"faceproof/services/api/internal/security"
 )
 
 const (
@@ -140,93 +139,12 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		return
 	}
 
-	expectedCPF := cnh.NormalizeCPF(payload.CPF)
-	if !cnh.ValidCPF(expectedCPF) {
-		handler.writeError(writer, http.StatusBadRequest, "cpf is invalid")
-		return
-	}
-
-	scenario, ok := normalizeAnalyticsScenario(payload.Scenario)
-	if !ok {
-		handler.writeError(writer, http.StatusBadRequest, "scenario is invalid")
-		return
-	}
-	expectedDecision, ok := normalizeExpectedDecision(payload.ExpectedDecision, scenario)
-	if !ok {
-		handler.writeError(writer, http.StatusBadRequest, "expectedDecision is invalid")
-		return
-	}
-	campaignID := strings.TrimSpace(payload.CampaignID)
-	campaignExists, err := handler.analyticsCampaignExists(request.Context(), campaignID)
+	response, err := handler.createIdentityCheckRecord(request.Context(), payload)
 	if err != nil {
-		handler.writeError(writer, http.StatusServiceUnavailable, "analytics campaign lookup failed")
+		writeIdentityCreateError(handler, writer, err)
 		return
 	}
-	if !campaignExists {
-		handler.writeError(writer, http.StatusBadRequest, "campaignId is invalid or analytics is unavailable")
-		return
-	}
-
-	location := time.FixedZone("America/Sao_Paulo", -3*60*60)
-	minimumDate, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(payload.MinimumDocumentDate), location)
-	if err != nil {
-		handler.writeError(writer, http.StatusBadRequest, "minimumDocumentDate must use YYYY-MM-DD")
-		return
-	}
-	today := time.Now().In(location)
-	todayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, location)
-	if minimumDate.After(todayStart) {
-		handler.writeError(writer, http.StatusBadRequest, "minimumDocumentDate cannot be in the future")
-		return
-	}
-
-	linkTTL := handler.config.IdentityLinkTTL
-	if payload.ExpiresInMinutes != 0 {
-		if payload.ExpiresInMinutes < 5 || payload.ExpiresInMinutes > 24*60 {
-			handler.writeError(writer, http.StatusBadRequest, "expiresInMinutes must be between 5 and 1440")
-			return
-		}
-		linkTTL = time.Duration(payload.ExpiresInMinutes) * time.Minute
-	}
-
-	idValue, err := security.RandomID(12)
-	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to create identity check")
-		return
-	}
-	token, err := security.RandomID(32)
-	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to create identity check")
-		return
-	}
-
-	now := time.Now().UTC()
-	check := identity.Check{
-		ID:                  "chk_" + idValue,
-		ExpectedCPF:         expectedCPF,
-		MinimumDocumentDate: minimumDate.UTC(),
-		CampaignID:          campaignID,
-		Scenario:            scenario,
-		ExpectedDecision:    expectedDecision,
-		Status:              identity.StatusPendingDocument,
-		CreatedAt:           now,
-		ExpiresAt:           now.Add(linkTTL),
-	}
-	if err := handler.identityChecks.Create(token, check); err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to persist identity check")
-		return
-	}
-	handler.recordAnalyticsCheckCreated(request.Context(), check)
-
-	baseURL := strings.Split(strings.TrimSpace(handler.config.IdentityVerifyURL), "#")[0]
-	handler.writeJSON(writer, http.StatusCreated, createIdentityCheckResponse{
-		ID:               check.ID,
-		VerificationURL:  baseURL + "#identity=" + token,
-		ExpiresAt:        check.ExpiresAt,
-		CampaignID:       check.CampaignID,
-		Scenario:         check.Scenario,
-		ExpectedDecision: check.ExpectedDecision,
-	})
+	handler.writeJSON(writer, http.StatusCreated, response)
 }
 
 func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *http.Request) {
