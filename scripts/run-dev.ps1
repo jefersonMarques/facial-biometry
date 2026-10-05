@@ -72,6 +72,8 @@ if (-not $env:FACEPROOF_IDENTITY_ISSUER_KEY) {
 $env:FACEPROOF_TEMPLATE_DIR = Join-Path $Root "data\templates"
 $env:FACEPROOF_IDENTITY_DIR = Join-Path $Root "data\identity-checks"
 $env:FACEPROOF_IDENTITY_VERIFY_URL = "http://localhost:5173/verify.html"
+$env:FACEPROOF_API_ADDR = ":8180"
+$env:FACEPROOF_DEV_API_URL = "http://127.0.0.1:8180"
 $env:FACEPROOF_YUNET_MODEL = Join-Path $Root "models\yunet\face_detection_yunet_2023mar.onnx"
 $env:FACEPROOF_SFACE_MODEL = Join-Path $Root "models\sface\face_recognition_sface_2021dec.onnx"
 $env:FACEPROOF_MINIFASNET_MODEL = Join-Path $Root "models\minifasnet\MiniFASNetV2.onnx"
@@ -164,6 +166,7 @@ $Processes += Start-Process powershell -NoNewWindow -PassThru -ArgumentList @(
 )
 
 Write-Host ""
+Write-Host "FaceProof API: http://localhost:8180"
 Write-Host "FaceProof demo: http://localhost:5173"
 Write-Host "Identity verification: http://localhost:5173/verify.html"
 Write-Host "Identity issuer key: $IdentityIssuerKeyFile"
