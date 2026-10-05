@@ -13,7 +13,7 @@ import (
 
 func main() {
 	listenAddress := envString("FACEPROOF_WEB_ADDR", ":5173")
-	apiURL := envString("FACEPROOF_DEV_API_URL", "http://127.0.0.1:8080")
+	apiURL := envString("FACEPROOF_DEV_API_URL", "http://127.0.0.1:8180")
 	webDirectory := envString("FACEPROOF_WEB_DIR", "../../apps/web-sdk")
 
 	absoluteWebDirectory, err := filepath.Abs(webDirectory)
