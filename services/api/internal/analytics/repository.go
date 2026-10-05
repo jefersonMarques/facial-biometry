@@ -201,6 +201,12 @@ type CheckFilter struct {
 	Limit      int
 }
 
+type OpenCheckState struct {
+	CheckID string
+	Status  string
+}
+
+
 func Open(ctx context.Context, databaseURL string, subjectKey []byte) (*Repository, error) {
 	databaseURL = strings.TrimSpace(databaseURL)
 	if databaseURL == "" {
@@ -734,6 +740,78 @@ func (repository *Repository) Summary(ctx context.Context) (DashboardSummary, er
 	}
 
 	return summary, nil
+}
+
+func (repository *Repository) ListOpenCheckStates(
+	ctx context.Context,
+	limit int,
+) ([]OpenCheckState, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	rows, err := repository.db.QueryContext(
+		ctx,
+		`SELECT check_id, status
+		 FROM faceproof_checks
+		 WHERE status NOT IN ('approved','review','rejected','expired')
+		 ORDER BY created_at DESC
+		 LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var states []OpenCheckState
+	for rows.Next() {
+		var state OpenCheckState
+		if err := rows.Scan(&state.CheckID, &state.Status); err != nil {
+			return nil, err
+		}
+		states = append(states, state)
+	}
+	return states, rows.Err()
+}
+
+func (repository *Repository) RecordAuthoritativeState(
+	ctx context.Context,
+	checkID string,
+	status string,
+	decision string,
+	completedAt *time.Time,
+	livenessScore float64,
+	faceSimilarity float64,
+	biometricSessions int,
+) error {
+	_, err := repository.db.ExecContext(
+		ctx,
+		`UPDATE faceproof_checks
+		 SET status = $2,
+		     actual_decision = CASE WHEN $3 = '' THEN actual_decision ELSE $3 END,
+		     completed_at = COALESCE($4::timestamptz, completed_at),
+		     duration_ms = CASE
+		         WHEN $4::timestamptz IS NULL OR started_at IS NULL THEN duration_ms
+		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4::timestamptz - started_at)) * 1000)::BIGINT)
+		     END,
+		     liveness_score = CASE WHEN $5 = 0 THEN liveness_score ELSE $5 END,
+		     face_similarity = CASE WHEN $6 = 0 THEN face_similarity ELSE $6 END,
+		     biometric_sessions = GREATEST(biometric_sessions, $7),
+		     updated_at = NOW()
+		 WHERE check_id = $1`,
+		checkID,
+		status,
+		decision,
+		completedAt,
+		livenessScore,
+		faceSimilarity,
+		biometricSessions,
+	)
+	return err
 }
 
 func (repository *Repository) ListChecks(
