@@ -29,6 +29,38 @@ type createAdminIdentityCheckRequest struct {
 	PublicBaseURL       string `json:"publicBaseUrl,omitempty"`
 }
 
+type adminReport struct {
+	GeneratedAt time.Time          `json:"generatedAt"`
+	Summary     analytics.DashboardSummary `json:"summary"`
+	Campaigns   []analytics.Campaign       `json:"campaigns"`
+	Checks      []adminReportCheck          `json:"checks"`
+}
+
+type adminReportCheck struct {
+	Analytics     analytics.CheckDetail      `json:"analytics"`
+	Authoritative *adminAuthoritativeSnapshot `json:"authoritative,omitempty"`
+}
+
+type adminAuthoritativeSnapshot struct {
+	ID                    string     `json:"id"`
+	Status                string     `json:"status"`
+	Decision              string     `json:"decision,omitempty"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	ExpiresAt             time.Time  `json:"expiresAt"`
+	CompletedAt           *time.Time `json:"completedAt,omitempty"`
+	CampaignID            string     `json:"campaignId,omitempty"`
+	Scenario              string     `json:"scenario,omitempty"`
+	ExpectedDecision      string     `json:"expectedDecision,omitempty"`
+	DocumentAttempts      int        `json:"documentAttempts"`
+	BiometricSessions     int        `json:"biometricSessions"`
+	CaptureSessionsIssued int        `json:"captureSessionsIssued"`
+	LivenessScore         float64    `json:"livenessScore,omitempty"`
+	FaceSimilarity        float64    `json:"faceSimilarity,omitempty"`
+	LastErrorCode         string     `json:"lastErrorCode,omitempty"`
+	Runtime               any        `json:"runtime,omitempty"`
+	CaptureProtocol       any        `json:"captureProtocol,omitempty"`
+}
+
 func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Request) bool {
 	if request.URL.Path != "/v1/admin" && !strings.HasPrefix(request.URL.Path, "/v1/admin/") {
 		return false
@@ -49,6 +81,8 @@ func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Re
 		handler.listAdminChecks(writer, request)
 	case request.URL.Path == "/v1/admin/checks" && request.Method == http.MethodPost:
 		handler.createAdminIdentityCheck(writer, request)
+	case request.URL.Path == "/v1/admin/report" && request.Method == http.MethodGet:
+		handler.getAdminReport(writer, request)
 	case request.URL.Path == "/v1/admin/campaigns" && request.Method == http.MethodGet:
 		handler.listAdminCampaigns(writer, request)
 	case request.URL.Path == "/v1/admin/campaigns" && request.Method == http.MethodPost:
@@ -408,6 +442,78 @@ func (handler *Handler) getAdminCheck(
 	handler.applyAuthoritativeCheckItem(&item)
 	detail.CheckListItem = item
 	handler.writeJSON(writer, http.StatusOK, detail)
+}
+
+func (handler *Handler) getAdminReport(writer http.ResponseWriter, request *http.Request) {
+	handler.reconcileAdminAnalytics(request)
+
+	summary, err := handler.analytics.Summary(request.Context())
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics summary")
+		return
+	}
+	summary = handler.authoritativeSummary(request.Context(), summary)
+
+	campaigns, err := handler.analytics.ListCampaigns(request.Context())
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to load campaigns")
+		return
+	}
+
+	checkIDs, err := handler.analytics.ListCheckIDs(request.Context())
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to list analytics checks")
+		return
+	}
+
+	report := adminReport{
+		GeneratedAt: time.Now().UTC(),
+		Summary:     summary,
+		Campaigns:   campaigns,
+		Checks:      make([]adminReportCheck, 0, len(checkIDs)),
+	}
+
+	for _, checkID := range checkIDs {
+		detail, err := handler.analytics.GetCheck(request.Context(), checkID)
+		if err != nil {
+			handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics check detail")
+			return
+		}
+
+		item := detail.CheckListItem
+		handler.applyAuthoritativeCheckItem(&item)
+		detail.CheckListItem = item
+
+		reportCheck := adminReportCheck{
+			Analytics: detail,
+		}
+		if handler.identityChecks != nil {
+			if check, loadErr := handler.identityChecks.LoadByID(checkID); loadErr == nil {
+				reportCheck.Authoritative = &adminAuthoritativeSnapshot{
+					ID:                    check.ID,
+					Status:                string(check.Status),
+					Decision:              check.Decision,
+					CreatedAt:             check.CreatedAt,
+					ExpiresAt:             check.ExpiresAt,
+					CompletedAt:           check.CompletedAt,
+					CampaignID:            check.CampaignID,
+					Scenario:              check.Scenario,
+					ExpectedDecision:      check.ExpectedDecision,
+					DocumentAttempts:      check.DocumentAttempts,
+					BiometricSessions:     check.BiometricSessions,
+					CaptureSessionsIssued: check.CaptureSessionsIssued,
+					LivenessScore:         check.LivenessScore,
+					FaceSimilarity:        check.FaceSimilarity,
+					LastErrorCode:         check.LastErrorCode,
+					Runtime:               check.RuntimeFingerprint,
+					CaptureProtocol:       check.CaptureProtocol,
+				}
+			}
+		}
+		report.Checks = append(report.Checks, reportCheck)
+	}
+
+	handler.writeJSON(writer, http.StatusOK, report)
 }
 
 func (handler *Handler) listAdminCampaigns(writer http.ResponseWriter, request *http.Request) {
