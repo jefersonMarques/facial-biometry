@@ -280,7 +280,7 @@ async function runBiometry() {
             try {
                 const capturedFrames = [...farFrames, ...nearFrames];
                 captureLifecycle.transition("submitting");
-                const result = await client.completeIdentityCheck(identityToken, session, capturedFrames, runtimeFingerprint, captureLifecycle.protocolMetadata());
+                const result = await client.completeIdentityCheck(identityToken, session, capturedFrames, runtimeFingerprint, captureLifecycle.protocolMetadata(), loadGeometryTelemetry(session.captureRunId));
                 captureLifecycle.transition("complete");
                 renderIdentityResult(result, capturedFrames);
                 completed = true;
@@ -1118,6 +1118,22 @@ function consumeIdentityToken() {
         return fromFragment;
     }
     return sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
+}
+function loadGeometryTelemetry(expectedRunId) {
+    try {
+        const value = sessionStorage.getItem("faceproof.liveness-v2.telemetry");
+        if (!value) {
+            return undefined;
+        }
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== "object" || parsed.runId !== expectedRunId) {
+            return undefined;
+        }
+        return parsed;
+    }
+    catch {
+        return undefined;
+    }
 }
 function friendlyDocumentError(message) {
     if (message.includes("dependency") || message.includes("missing pdf") || message.includes("pdftoppm")) {
