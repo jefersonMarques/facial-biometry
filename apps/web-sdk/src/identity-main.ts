@@ -377,6 +377,7 @@ async function runBiometry(): Promise<void> {
                     capturedFrames,
                     runtimeFingerprint,
                     captureLifecycle.protocolMetadata(),
+                    loadGeometryTelemetry(session.captureRunId),
                 );
                 captureLifecycle.transition("complete");
                 renderIdentityResult(result, capturedFrames);
@@ -1344,6 +1345,22 @@ function consumeIdentityToken(): string {
         return fromFragment;
     }
     return sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
+}
+
+function loadGeometryTelemetry(expectedRunId: string): import("./types.js").GeometryTelemetry | undefined {
+    try {
+        const value = sessionStorage.getItem("faceproof.liveness-v2.telemetry");
+        if (!value) {
+            return undefined;
+        }
+        const parsed = JSON.parse(value) as import("./types.js").GeometryTelemetry;
+        if (!parsed || typeof parsed !== "object" || parsed.runId !== expectedRunId) {
+            return undefined;
+        }
+        return parsed;
+    } catch {
+        return undefined;
+    }
 }
 
 function friendlyDocumentError(message: string): string {
