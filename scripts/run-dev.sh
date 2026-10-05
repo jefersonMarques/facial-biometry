@@ -141,6 +141,26 @@ if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; t
     echo "INFO: bpgdec not found. CNH identity can still use the signed PDF portrait."
 fi
 
+required_ports=(8090 8080 5173)
+if [ "$ANALYTICS" = true ]; then
+    required_ports+=(5174)
+fi
+
+occupied_ports=()
+for port in "${required_ports[@]}"; do
+    if ss -ltnH "sport = :$port" 2>/dev/null | grep -q .; then
+        occupied_ports+=("$port")
+    fi
+done
+
+if [ "${#occupied_ports[@]}" -gt 0 ]; then
+    echo "FaceProof cannot start because these ports are already in use: ${occupied_ports[*]}" >&2
+    echo "A previous development stack is probably still running." >&2
+    echo "Stop the previous ./scripts/run-dev.sh process and try again." >&2
+    echo "Diagnostic: ss -ltnp | grep -E ':(8090|8080|5173|5174)\\b'" >&2
+    exit 1
+fi
+
 cleanup() {
     kill "${ENGINE_PID:-}" "${API_PID:-}" "${WEB_PID:-}" "${ADMIN_PID:-}" 2>/dev/null || true
 }
