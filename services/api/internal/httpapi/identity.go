@@ -470,6 +470,12 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	}
 
 	similarity, frameSimilarities := matching.RobustCosineSimilarity(referenceEmbeddings, liveEmbeddings)
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "biometric_match_computed", map[string]any{
+		"similarity":       similarity,
+		"referenceFrames":  len(referenceEmbeddings),
+		"liveFrames":       len(liveEmbeddings),
+		"frameComparisons": len(frameSimilarities),
+	})
 
 	if identityMatchNeedsRecapture(result, similarity, handler.config.MatchThreshold) {
 		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
@@ -526,6 +532,11 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "identity_state_persisted", map[string]any{
+		"status":         updated.Status,
+		"decision":       updated.Decision,
+		"faceSimilarity": similarity,
+	})
 	handler.recordAnalyticsCompletion(
 		request.Context(),
 		updated,
