@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 6 ]; then
-    echo "Usage: $0 <CPF> <YYYY-MM-DD> [expires-in-minutes] [campaign-id] [scenario] [expected-decision]"
+if [ "$#" -lt 2 ] || [ "$#" -gt 7 ]; then
+    echo "Usage: $0 <CPF> <YYYY-MM-DD> [expires-in-minutes] [campaign-id] [scenario] [expected-decision] [public-base-url]"
     echo "Scenarios: unknown, genuine_live, impostor_live, printed_photo, screen_photo, replay_video"
     exit 2
 fi
@@ -14,6 +14,7 @@ EXPIRES_MINUTES="${3:-60}"
 CAMPAIGN_ID="${4:-}"
 SCENARIO="${5:-unknown}"
 EXPECTED_DECISION="${6:-}"
+PUBLIC_BASE_URL="${7:-${FACEPROOF_PUBLIC_BASE_URL:-}}"
 API_URL="${FACEPROOF_API_URL:-http://localhost:8080}"
 
 if [ -z "${FACEPROOF_IDENTITY_ISSUER_KEY:-}" ]; then
@@ -44,6 +45,27 @@ print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 
-curl --fail-with-body --silent --show-error     -X POST "$API_URL/v1/identity/checks"     -H "Authorization: Bearer $FACEPROOF_IDENTITY_ISSUER_KEY"     -H "Content-Type: application/json"     -d "$PAYLOAD"
+RESPONSE="$(curl --fail-with-body --silent --show-error \
+    -X POST "$API_URL/v1/identity/checks" \
+    -H "Authorization: Bearer $FACEPROOF_IDENTITY_ISSUER_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$PAYLOAD")"
 
-echo
+if [ -n "$PUBLIC_BASE_URL" ]; then
+    RESPONSE="$(python3 - "$PUBLIC_BASE_URL" "$RESPONSE" <<'PY'
+import json
+import sys
+from urllib.parse import urlsplit
+
+public_base_url, response_value = sys.argv[1:]
+payload = json.loads(response_value)
+verification_url = payload.get("verificationUrl", "")
+fragment = urlsplit(verification_url).fragment
+base = public_base_url.rstrip("/")
+payload["verificationUrl"] = f"{base}/verify.html" + (f"#{fragment}" if fragment else "")
+print(json.dumps(payload, indent=2, ensure_ascii=False))
+PY
+)"
+fi
+
+printf '%s\n' "$RESPONSE"
