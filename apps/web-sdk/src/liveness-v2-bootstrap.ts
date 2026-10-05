@@ -119,13 +119,14 @@ if (video && biometryPanel) {
     const renderSummary = (summary: GeometryLivenessSummary): void => {
         lastSummary = summary;
         renderDiagnostics();
-        persistSummary(summary);
+        const wasm = probe.getWasmShadowDiagnostics();
+        persistTelemetry(summary, wasm, runtime.lifecycleRunId);
         renderFinalDiagnostics(
             resultPanel,
             finalPanel,
             summary,
             runtime,
-            probe.getWasmShadowDiagnostics(),
+            wasm,
             latestServerGuide,
             localGuideHistory,
         );
@@ -554,12 +555,48 @@ function renderFinalDiagnostics(
     resultPanel.append(details);
 }
 
-function persistSummary(summary: GeometryLivenessSummary): void {
+function persistTelemetry(
+    summary: GeometryLivenessSummary,
+    wasm: WasmShadowDiagnostics,
+    runId: string,
+): void {
     try {
         sessionStorage.setItem("faceproof.liveness-v2.last-summary", JSON.stringify(summary));
+
+        const wasmMaxDelta = geometryWasmMaxDelta(summary, wasm);
+        sessionStorage.setItem("faceproof.liveness-v2.telemetry", JSON.stringify({
+            runId,
+            ...summary,
+            wasmStatus: wasm.state,
+            ...(wasmMaxDelta === null ? {} : { wasmMaxDelta }),
+        }));
     } catch {
-        // Diagnóstico experimental; falhas de armazenamento não interferem no fluxo principal.
+        // Telemetria experimental; falhas de armazenamento não interferem no fluxo principal.
     }
+}
+
+function geometryWasmMaxDelta(
+    typescriptSummary: GeometryLivenessSummary,
+    wasm: WasmShadowDiagnostics,
+): number | null {
+    const candidate = wasm.summary;
+    if (
+        !candidate ||
+        candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples
+    ) {
+        return null;
+    }
+
+    return Math.max(
+        Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
+        Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
+        Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange),
+        Math.abs(candidate.depthChange - typescriptSummary.depthChange),
+        Math.abs(candidate.phaseStability - typescriptSummary.phaseStability),
+        Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore),
+    );
 }
 
 function errorMessage(error: unknown): string {
