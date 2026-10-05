@@ -692,6 +692,10 @@ func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error
 		if check.DocumentAttempts >= maxIdentityDocumentAttempts {
 			check.Status = identity.StatusRejected
 			check.Decision = "rejected"
+			if check.CompletedAt == nil {
+				completedAt := time.Now().UTC()
+				check.CompletedAt = &completedAt
+			}
 		} else {
 			check.Status = identity.StatusPendingDocument
 		}
@@ -820,6 +824,7 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 			handler.writeError(writer, http.StatusInternalServerError, "failed to expire identity check")
 			return
 		}
+		handler.recordAnalyticsStatus(request.Context(), check, "identity_expired")
 	}
 
 	handler.writeJSON(writer, http.StatusOK, issuerIdentityCheckResponse{
