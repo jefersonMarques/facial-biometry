@@ -514,7 +514,10 @@ func (repository *Repository) RecordBiometrySession(
 	}
 	_, err := repository.db.ExecContext(
 		ctx,
-		`UPDATE faceproof_checks SET status = 'biometry_pending', updated_at = NOW()
+		`UPDATE faceproof_checks
+		 SET status = 'biometry_pending',
+		     biometric_sessions = biometric_sessions + 1,
+		     updated_at = NOW()
 		 WHERE check_id = $1`,
 		checkID,
 	)
