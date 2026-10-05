@@ -278,8 +278,8 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 			Illumination:   result.Illumination,
 		},
 		Quality:      result.Quality,
-		Diagnostics:  append([]string(nil), result.Diagnostics...),
-		NativeShadow: result.NativeShadow,
+		Diagnostics:  handler.publicDiagnostics(request, result.Diagnostics),
+		NativeShadow: handler.publicNativeShadow(request, result.NativeShadow),
 	}
 
 	passivePADAvailable := result.PassivePAD.Status == "available"
