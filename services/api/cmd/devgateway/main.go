@@ -31,9 +31,10 @@ func main() {
 	apiProxy := httputil.NewSingleHostReverseProxy(target)
 	originalDirector := apiProxy.Director
 	apiProxy.Director = func(request *http.Request) {
+		originalHost := request.Host
 		originalDirector(request)
 		request.Host = target.Host
-		request.Header.Set("X-Forwarded-Host", request.Host)
+		request.Header.Set("X-Forwarded-Host", originalHost)
 	}
 	apiProxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, proxyErr error) {
 		log.Printf("API proxy error for %s: %v", request.URL.Path, proxyErr)
