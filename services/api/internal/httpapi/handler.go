@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"faceproof/services/api/internal/analytics"
 	"faceproof/services/api/internal/config"
 	"faceproof/services/api/internal/document/cnh"
 	"faceproof/services/api/internal/domain"
@@ -34,6 +35,7 @@ type Handler struct {
 	risk           *risk.Engine
 	identityChecks *identity.Repository
 	cnhDocuments   *cnh.Service
+	analytics      *analytics.Repository
 }
 
 type createSessionRequest struct {
@@ -90,7 +92,13 @@ func NewHandler(
 	templates *templaterepository.Repository,
 	identityChecks *identity.Repository,
 	cnhDocuments *cnh.Service,
+	analyticsRepositories ...*analytics.Repository,
 ) *Handler {
+	var analyticsRepository *analytics.Repository
+	if len(analyticsRepositories) > 0 {
+		analyticsRepository = analyticsRepositories[0]
+	}
+
 	return &Handler{
 		config:         configuration,
 		sessions:       sessions,
@@ -99,6 +107,7 @@ func NewHandler(
 		templates:      templates,
 		identityChecks: identityChecks,
 		cnhDocuments:   cnhDocuments,
+		analytics:      analyticsRepository,
 		risk: risk.NewEngine(
 			configuration.LivenessThreshold,
 			configuration.ReviewLivenessThreshold,
