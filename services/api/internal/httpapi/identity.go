@@ -35,12 +35,18 @@ type createIdentityCheckRequest struct {
 	CPF                 string `json:"cpf"`
 	MinimumDocumentDate string `json:"minimumDocumentDate"`
 	ExpiresInMinutes    int    `json:"expiresInMinutes,omitempty"`
+	CampaignID          string `json:"campaignId,omitempty"`
+	Scenario            string `json:"scenario,omitempty"`
+	ExpectedDecision    string `json:"expectedDecision,omitempty"`
 }
 
 type createIdentityCheckResponse struct {
-	ID              string    `json:"id"`
-	VerificationURL string    `json:"verificationUrl"`
-	ExpiresAt       time.Time `json:"expiresAt"`
+	ID               string    `json:"id"`
+	VerificationURL  string    `json:"verificationUrl"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+	CampaignID       string    `json:"campaignId,omitempty"`
+	Scenario         string    `json:"scenario,omitempty"`
+	ExpectedDecision string    `json:"expectedDecision,omitempty"`
 }
 
 type identityStatusResponse struct {
@@ -78,6 +84,7 @@ type identityCompleteRequest struct {
 	Metadata        *domain.CaptureMetadata        `json:"metadata,omitempty"`
 	Runtime         domain.RuntimeFingerprint      `json:"runtime"`
 	CaptureProtocol domain.CaptureProtocolMetadata `json:"captureProtocol"`
+	Geometry        *domain.GeometryTelemetry       `json:"geometry,omitempty"`
 }
 
 type issuerIdentityCheckResponse struct {
@@ -90,6 +97,9 @@ type issuerIdentityCheckResponse struct {
 	Document            *identity.DocumentEvidence `json:"document,omitempty"`
 	LivenessScore       float64                    `json:"livenessScore,omitempty"`
 	FaceSimilarity      float64                    `json:"faceSimilarity,omitempty"`
+	CampaignID          string                     `json:"campaignId,omitempty"`
+	Scenario            string                     `json:"scenario,omitempty"`
+	ExpectedDecision    string                     `json:"expectedDecision,omitempty"`
 	Runtime             *domain.RuntimeFingerprint      `json:"runtime,omitempty"`
 	CaptureProtocol     *domain.CaptureProtocolMetadata `json:"captureProtocol,omitempty"`
 }
@@ -136,6 +146,27 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		return
 	}
 
+	scenario, ok := normalizeAnalyticsScenario(payload.Scenario)
+	if !ok {
+		handler.writeError(writer, http.StatusBadRequest, "scenario is invalid")
+		return
+	}
+	expectedDecision, ok := normalizeExpectedDecision(payload.ExpectedDecision, scenario)
+	if !ok {
+		handler.writeError(writer, http.StatusBadRequest, "expectedDecision is invalid")
+		return
+	}
+	campaignID := strings.TrimSpace(payload.CampaignID)
+	campaignExists, err := handler.analyticsCampaignExists(request.Context(), campaignID)
+	if err != nil {
+		handler.writeError(writer, http.StatusServiceUnavailable, "analytics campaign lookup failed")
+		return
+	}
+	if !campaignExists {
+		handler.writeError(writer, http.StatusBadRequest, "campaignId is invalid or analytics is unavailable")
+		return
+	}
+
 	location := time.FixedZone("America/Sao_Paulo", -3*60*60)
 	minimumDate, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(payload.MinimumDocumentDate), location)
 	if err != nil {
@@ -174,6 +205,9 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		ID:                  "chk_" + idValue,
 		ExpectedCPF:         expectedCPF,
 		MinimumDocumentDate: minimumDate.UTC(),
+		CampaignID:          campaignID,
+		Scenario:            scenario,
+		ExpectedDecision:    expectedDecision,
 		Status:              identity.StatusPendingDocument,
 		CreatedAt:           now,
 		ExpiresAt:           now.Add(linkTTL),
@@ -182,12 +216,16 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		handler.writeError(writer, http.StatusInternalServerError, "failed to persist identity check")
 		return
 	}
+	handler.recordAnalyticsCheckCreated(request.Context(), check)
 
 	baseURL := strings.Split(strings.TrimSpace(handler.config.IdentityVerifyURL), "#")[0]
 	handler.writeJSON(writer, http.StatusCreated, createIdentityCheckResponse{
-		ID:              check.ID,
-		VerificationURL: baseURL + "#identity=" + token,
-		ExpiresAt:       check.ExpiresAt,
+		ID:               check.ID,
+		VerificationURL:  baseURL + "#identity=" + token,
+		ExpiresAt:        check.ExpiresAt,
+		CampaignID:       check.CampaignID,
+		Scenario:         check.Scenario,
+		ExpectedDecision: check.ExpectedDecision,
 	})
 }
 
@@ -196,6 +234,7 @@ func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *ht
 	if !ok {
 		return
 	}
+	handler.recordAnalyticsLinkOpened(request.Context(), check.ID)
 	handler.writeJSON(writer, http.StatusOK, identityStatusResponse{
 		ID:               check.ID,
 		Status:           check.Status,
@@ -238,10 +277,17 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		handler.writeIdentityStateError(writer, err)
 		return
 	}
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "document_upload_started", map[string]any{
+		"attempt": check.DocumentAttempts,
+		"bytes":   len(pdf),
+	})
 
 	document, documentErr := handler.cnhDocuments.Process(request.Context(), pdf, check.ExpectedCPF, check.MinimumDocumentDate)
 	if documentErr != nil {
 		handler.resetIdentityDocumentAttempt(token, documentErr)
+		if failedCheck, loadErr := handler.identityChecks.Load(token); loadErr == nil {
+			handler.recordAnalyticsDocumentFailure(request.Context(), failedCheck, documentErr)
+		}
 		switch {
 		case errors.Is(documentErr, cnh.ErrDependencyUnavailable):
 			handler.writeError(writer, http.StatusServiceUnavailable, documentErr.Error())
@@ -264,12 +310,16 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 	referenceImage := "data:" + document.PhotoMIME + ";base64," + base64.StdEncoding.EncodeToString(document.Photo)
 	reference, err := handler.engine.ExtractReference(request.Context(), referenceImage)
 	if err != nil {
-		handler.resetIdentityDocumentAttempt(token, errors.New("reference_face_failed"))
+		failure := errors.New("reference_face_failed")
+		handler.resetIdentityDocumentAttempt(token, failure)
+		if failedCheck, loadErr := handler.identityChecks.Load(token); loadErr == nil {
+			handler.recordAnalyticsDocumentFailure(request.Context(), failedCheck, failure)
+		}
 		handler.writeError(writer, http.StatusBadGateway, "could not analyze the CNH reference photo")
 		return
 	}
 
-	_, err = handler.identityChecks.Update(token, func(current *identity.Check) error {
+	updatedDocumentCheck, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
 		if current.Status != identity.StatusProcessingDocument {
 			return errIdentityInvalidState
 		}
@@ -310,6 +360,7 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	handler.recordAnalyticsDocumentAccepted(request.Context(), updatedDocumentCheck)
 
 	response := identityDocumentResponse{
 		Status: identity.StatusBiometryPending,
