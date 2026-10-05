@@ -76,7 +76,7 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		APIAddress:              envString("FACEPROOF_API_ADDR", ":8080"),
+		APIAddress:              envString("FACEPROOF_API_ADDR", ":8180"),
 		EngineURL:               envString("FACEPROOF_ENGINE_URL", "http://127.0.0.1:8090"),
 		AllowedOrigin:           envString("FACEPROOF_ALLOWED_ORIGIN", "http://localhost:5173"),
 		SessionSecret:           sessionSecret,
