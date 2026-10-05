@@ -59,32 +59,32 @@ type DocumentSnapshot struct {
 type GeometrySnapshot struct {
 	RunID             string  `json:"runId,omitempty"`
 	Status            string  `json:"status,omitempty"`
-	SampleCount       int     `json:"sampleCount,omitempty"`
-	FarSamples        int     `json:"farSamples,omitempty"`
-	NearSamples       int     `json:"nearSamples,omitempty"`
-	ScaleRatio        float64 `json:"scaleRatio,omitempty"`
-	TransitionScore   float64 `json:"transitionScore,omitempty"`
-	PerspectiveChange float64 `json:"perspectiveChange,omitempty"`
-	DepthChange       float64 `json:"depthChange,omitempty"`
-	PhaseStability    float64 `json:"phaseStability,omitempty"`
-	EvidenceScore     float64 `json:"evidenceScore,omitempty"`
+	SampleCount       int     `json:"sampleCount"`
+	FarSamples        int     `json:"farSamples"`
+	NearSamples       int     `json:"nearSamples"`
+	ScaleRatio        float64 `json:"scaleRatio"`
+	TransitionScore   float64 `json:"transitionScore"`
+	PerspectiveChange float64 `json:"perspectiveChange"`
+	DepthChange       float64 `json:"depthChange"`
+	PhaseStability    float64 `json:"phaseStability"`
+	EvidenceScore     float64 `json:"evidenceScore"`
 	WASMStatus        string  `json:"wasmStatus,omitempty"`
-	WASMMaxDelta      float64 `json:"wasmMaxDelta,omitempty"`
+	WASMMaxDelta      float64 `json:"wasmMaxDelta"`
 }
 
 type NativeShadowSnapshot struct {
 	Status                     string  `json:"status,omitempty"`
-	PythonFrames               int     `json:"pythonFrames,omitempty"`
-	NativeFrames               int     `json:"nativeFrames,omitempty"`
-	BBoxMaxDeltaPx             float64 `json:"bboxMaxDeltaPx,omitempty"`
-	ConfidenceMaxDelta         float64 `json:"confidenceMaxDelta,omitempty"`
-	QualityMaxDelta            float64 `json:"qualityMaxDelta,omitempty"`
-	PadComparedFrames          int     `json:"padComparedFrames,omitempty"`
-	PassivePadMaxDelta         float64 `json:"passivePadMaxDelta,omitempty"`
-	SelectedEmbeddingMinCosine float64 `json:"selectedEmbeddingMinCosine,omitempty"`
-	SelectedEmbeddingMaxDelta  float64 `json:"selectedEmbeddingMaxDelta,omitempty"`
-	CombinedEmbeddingCosine    float64 `json:"combinedEmbeddingCosine,omitempty"`
-	CombinedEmbeddingMaxDelta  float64 `json:"combinedEmbeddingMaxDelta,omitempty"`
+	PythonFrames               int     `json:"pythonFrames"`
+	NativeFrames               int     `json:"nativeFrames"`
+	BBoxMaxDeltaPx             float64 `json:"bboxMaxDeltaPx"`
+	ConfidenceMaxDelta         float64 `json:"confidenceMaxDelta"`
+	QualityMaxDelta            float64 `json:"qualityMaxDelta"`
+	PadComparedFrames          int     `json:"padComparedFrames"`
+	PassivePadMaxDelta         float64 `json:"passivePadMaxDelta"`
+	SelectedEmbeddingMinCosine float64 `json:"selectedEmbeddingMinCosine"`
+	SelectedEmbeddingMaxDelta  float64 `json:"selectedEmbeddingMaxDelta"`
+	CombinedEmbeddingCosine    float64 `json:"combinedEmbeddingCosine"`
+	CombinedEmbeddingMaxDelta  float64 `json:"combinedEmbeddingMaxDelta"`
 }
 
 type CompletionSnapshot struct {
