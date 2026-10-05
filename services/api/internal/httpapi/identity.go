@@ -388,7 +388,7 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 	}
 
 	var sessionResponse createSessionResponse
-	_, err := handler.identityChecks.Update(token, func(check *identity.Check) error {
+	updatedCheck, err := handler.identityChecks.Update(token, func(check *identity.Check) error {
 		if time.Now().After(check.ExpiresAt) {
 			return errIdentityExpired
 		}
@@ -416,6 +416,7 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		handler.writeIdentityStateError(writer, err)
 		return
 	}
+	handler.recordAnalyticsBiometrySession(request.Context(), updatedCheck.ID, sessionResponse.SessionID)
 
 	handler.writeJSON(writer, http.StatusCreated, sessionResponse)
 }
@@ -495,9 +496,19 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			}
 			return nil
 		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "engine_failed", map[string]any{
+			"sessionId": payload.SessionID,
+		})
 		handler.writeError(writer, http.StatusBadGateway, "biometric engine failed")
 		return
 	}
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "engine_completed", map[string]any{
+		"sessionId":     payload.SessionID,
+		"livenessScore": result.LivenessScore,
+		"passivePad":    result.PassivePAD.Score,
+		"quality":       result.Quality.Score,
+		"nativeShadow":  nativeStatus(result.NativeShadow),
+	})
 
 	if identityCaptureNeedsRecapture(result) {
 		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
@@ -506,6 +517,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 				current.LastErrorCode = "recapture_required"
 			}
 			return nil
+		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "recapture_required", map[string]any{
+			"reason":    "capture_quality",
+			"sessionId": payload.SessionID,
 		})
 		handler.writeError(writer, http.StatusUnprocessableEntity, "capture quality insufficient; recapture required")
 		return
@@ -545,6 +560,11 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 				current.LastErrorCode = "match_recapture_required"
 			}
 			return nil
+		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "recapture_required", map[string]any{
+			"reason":     "facial_match",
+			"sessionId":  payload.SessionID,
+			"similarity": similarity,
 		})
 		handler.writeError(writer, http.StatusUnprocessableEntity, "facial match inconclusive; recapture required")
 		return
@@ -588,6 +608,14 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	handler.recordAnalyticsCompletion(
+		request.Context(),
+		updated,
+		result,
+		similarity,
+		frameSimilarities,
+		payload.Geometry,
+	)
 
 	response := identityCompleteResponse{
 		ID:             updated.ID,
@@ -638,6 +666,7 @@ func (handler *Handler) loadPublicIdentityCheck(writer http.ResponseWriter, requ
 			handler.writeError(writer, http.StatusInternalServerError, "failed to expire identity check")
 			return identity.Check{}, "", false
 		}
+		handler.recordAnalyticsStatus(request.Context(), check, "identity_expired")
 	}
 	return check, token, true
 }
@@ -803,6 +832,9 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		Document:            check.Document,
 		LivenessScore:       check.LivenessScore,
 		FaceSimilarity:      check.FaceSimilarity,
+		CampaignID:          check.CampaignID,
+		Scenario:            check.Scenario,
+		ExpectedDecision:    check.ExpectedDecision,
 		Runtime:             check.RuntimeFingerprint,
 		CaptureProtocol:     check.CaptureProtocol,
 	})
