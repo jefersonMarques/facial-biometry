@@ -532,6 +532,7 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	handler.recordAnalyticsAuthoritativeState(request.Context(), updated)
 	handler.recordAnalyticsEvent(request.Context(), check.ID, "identity_state_persisted", map[string]any{
 		"status":         updated.Status,
 		"decision":       updated.Decision,
