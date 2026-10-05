@@ -8,7 +8,7 @@ param(
 
     [int]$ExpiresInMinutes = 60,
 
-    [string]$ApiUrl = "http://localhost:8080",
+    [string]$ApiUrl = "http://localhost:8180",
 
     [string]$PublicBaseUrl = ""
 )
