@@ -18,6 +18,7 @@ const (
 type identityCompleteManifest struct {
 	Runtime         domain.RuntimeFingerprint       `json:"runtime"`
 	CaptureProtocol domain.CaptureProtocolMetadata `json:"captureProtocol"`
+	Geometry        *domain.GeometryTelemetry       `json:"geometry,omitempty"`
 	GuidedFrames    []identityCompleteManifestFrame `json:"guidedFrames"`
 }
 
@@ -108,5 +109,6 @@ func decodeIdentityCompleteMultipart(
 		GuidedFrames: frames,
 		Runtime:         manifest.Runtime,
 		CaptureProtocol: manifest.CaptureProtocol,
+		Geometry:        manifest.Geometry,
 	}, nil
 }
