@@ -431,7 +431,7 @@ func (repository *Repository) recordEvent(
 		 DO NOTHING`,
 		checkID,
 		eventType,
-		payloadJSON,
+		jsonParameter(payloadJSON),
 		dedupeKey,
 	)
 	return err
@@ -470,7 +470,7 @@ func (repository *Repository) RecordDocumentAccepted(
 		checkID,
 		status,
 		attempts,
-		documentJSON,
+		jsonParameter(documentJSON),
 	)
 	return err
 }
@@ -622,18 +622,18 @@ func (repository *Repository) RecordCompletion(
 		record.LivenessThreshold,
 		record.ReviewLivenessThreshold,
 		record.RequirePassivePAD,
-		frameSimilarities,
+		jsonParameter(frameSimilarities),
 		record.PassivePADScore,
 		record.TemporalMotionScore,
 		record.IlluminationScore,
 		record.GuidedCaptureScore,
 		record.QualityScore,
 		record.EmbeddingModel,
-		geometry,
-		nativeShadow,
-		runtimeJSON,
-		captureProtocolJSON,
-		diagnostics,
+		jsonParameter(geometry),
+		jsonParameter(nativeShadow),
+		jsonParameter(runtimeJSON),
+		jsonParameter(captureProtocolJSON),
+		jsonParameter(diagnostics),
 	)
 	return err
 }
@@ -998,6 +998,13 @@ func marshalNullableJSON(value any) ([]byte, error) {
 		return nil, nil
 	}
 	return json.Marshal(value)
+}
+
+func jsonParameter(value []byte) any {
+	if len(value) == 0 {
+		return nil
+	}
+	return string(value)
 }
 
 func rawJSON(value []byte) json.RawMessage {
