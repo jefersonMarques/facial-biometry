@@ -1,4 +1,5 @@
 const storageKey = "faceproof.admin.key";
+const publicBaseStorageKey = "faceproof.admin.public-base-url";
 
 const scenarioLabels = {
     unknown: "Sem classificação",
@@ -27,6 +28,19 @@ const dashboard = document.getElementById("dashboard");
 const refreshButton = document.getElementById("refreshButton");
 const logoutButton = document.getElementById("logoutButton");
 const connectionState = document.getElementById("connectionState");
+const checkForm = document.getElementById("checkForm");
+const checkCpf = document.getElementById("checkCpf");
+const checkMinimumDate = document.getElementById("checkMinimumDate");
+const checkExpires = document.getElementById("checkExpires");
+const checkCampaign = document.getElementById("checkCampaign");
+const checkScenario = document.getElementById("checkScenario");
+const checkPublicBaseUrl = document.getElementById("checkPublicBaseUrl");
+const generateCheckButton = document.getElementById("generateCheckButton");
+const generatedCheck = document.getElementById("generatedCheck");
+const generatedCheckMeta = document.getElementById("generatedCheckMeta");
+const generatedCheckUrl = document.getElementById("generatedCheckUrl");
+const copyGeneratedCheck = document.getElementById("copyGeneratedCheck");
+const generatedCheckFeedback = document.getElementById("generatedCheckFeedback");
 const summaryCards = document.getElementById("summaryCards");
 const scenarioRows = document.getElementById("scenarioRows");
 const campaignForm = document.getElementById("campaignForm");
@@ -47,6 +61,8 @@ const closeDetail = document.getElementById("closeDetail");
 let adminKey = sessionStorage.getItem(storageKey) ?? "";
 let campaigns = [];
 
+checkPublicBaseUrl.value = localStorage.getItem(publicBaseStorageKey) ?? "";
+
 loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const value = adminKeyInput.value.trim();
@@ -66,6 +82,69 @@ logoutButton.addEventListener("click", () => {
     loginPanel.hidden = false;
     logoutButton.hidden = true;
     setConnection(false);
+});
+
+checkForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const cpf = checkCpf.value.replace(/\D/g, "");
+    const publicBaseUrl = checkPublicBaseUrl.value.trim();
+    if (publicBaseUrl) {
+        localStorage.setItem(publicBaseStorageKey, publicBaseUrl);
+    } else {
+        localStorage.removeItem(publicBaseStorageKey);
+    }
+
+    generateCheckButton.disabled = true;
+    generatedCheckFeedback.textContent = "";
+    try {
+        const response = await api("/v1/admin/checks", {
+            method: "POST",
+            body: JSON.stringify({
+                cpf,
+                minimumDocumentDate: checkMinimumDate.value,
+                expiresInMinutes: Number(checkExpires.value),
+                campaignId: checkCampaign.value,
+                scenario: checkScenario.value,
+                publicBaseUrl,
+            }),
+        });
+
+        generatedCheck.hidden = false;
+        generatedCheckUrl.value = response.verificationUrl;
+        generatedCheckMeta.textContent =
+            `${response.id} · ${scenarioLabel(response.scenario)} · esperado: ${response.expectedDecision || "—"} · expira ${dateTime(response.expiresAt)}`;
+        generatedCheckFeedback.textContent = "Link registrado e pronto para envio.";
+        checkCpf.value = "";
+
+        const summary = await api("/v1/admin/summary");
+        renderSummary(summary);
+        await loadChecks();
+    } catch (error) {
+        generatedCheck.hidden = false;
+        generatedCheckUrl.value = "";
+        generatedCheckMeta.textContent = "Não foi possível gerar o link.";
+        generatedCheckFeedback.textContent = errorMessage(error);
+    } finally {
+        generateCheckButton.disabled = false;
+    }
+});
+
+copyGeneratedCheck.addEventListener("click", async () => {
+    const value = generatedCheckUrl.value.trim();
+    if (!value) {
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(value);
+        generatedCheckFeedback.textContent = "Link copiado.";
+    } catch {
+        generatedCheckUrl.focus();
+        generatedCheckUrl.select();
+        document.execCommand("copy");
+        generatedCheckFeedback.textContent = "Link copiado.";
+    }
 });
 
 filtersForm.addEventListener("submit", (event) => {
@@ -164,6 +243,7 @@ async function loadCampaigns() {
     campaigns = response.items ?? [];
     renderCampaigns(campaigns);
     renderCampaignFilter(campaigns);
+    renderCheckCampaigns(campaigns);
 }
 
 async function loadChecks() {
@@ -234,6 +314,15 @@ function renderCampaigns(items) {
             </div>
         `).join("")
         : '<div class="empty-state">Crie uma campanha para agrupar os próximos testes.</div>';
+}
+
+function renderCheckCampaigns(items) {
+    const current = checkCampaign.value;
+    checkCampaign.innerHTML = '<option value="">Sem campanha</option>' +
+        items.map((item) => `<option value="${escapeAttribute(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+    if (items.some((item) => item.id === current)) {
+        checkCampaign.value = current;
+    }
 }
 
 function renderCampaignFilter(items) {
