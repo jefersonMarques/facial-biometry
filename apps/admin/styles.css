@@ -137,6 +137,70 @@ h3 {
     gap: 10px;
 }
 
+.generator-card {
+    background:
+        linear-gradient(135deg, rgba(37, 99, 235, .10), transparent 45%),
+        rgba(13, 24, 40, .88);
+}
+
+.generator-form {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(135px, 1fr));
+    gap: 12px;
+    align-items: end;
+    margin-top: 18px;
+}
+
+.generator-form label {
+    display: grid;
+    gap: 7px;
+}
+
+.generator-form label > span {
+    color: #a8b5c6;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.generator-form label small {
+    color: #71839a;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.generator-public-url {
+    grid-column: span 2;
+}
+
+.generator-submit {
+    min-height: 42px;
+}
+
+.generated-check {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid rgba(96, 165, 250, .22);
+    border-radius: 12px;
+    background: rgba(37, 99, 235, .07);
+}
+
+.generated-check strong {
+    display: block;
+    font-size: 14px;
+}
+
+.generated-link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.generated-link-row input {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+}
+
 .grid-two {
     display: grid;
     grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
@@ -409,6 +473,14 @@ dialog::backdrop {
 }
 
 @media (max-width: 1100px) {
+    .generator-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .generator-public-url {
+        grid-column: span 2;
+    }
+
     .summary-grid {
         grid-template-columns: repeat(3, minmax(140px, 1fr));
     }
@@ -423,6 +495,15 @@ dialog::backdrop {
 }
 
 @media (max-width: 720px) {
+    .generator-form,
+    .generated-link-row {
+        grid-template-columns: 1fr;
+    }
+
+    .generator-public-url {
+        grid-column: auto;
+    }
+
     .shell {
         width: min(100% - 20px, 1500px);
         padding-top: 18px;
