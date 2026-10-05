@@ -633,8 +633,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			GuidedCapture:  result.GuidedCapture,
 		},
 		Quality:      result.Quality,
-		Diagnostics:  append([]string(nil), result.Diagnostics...),
-		NativeShadow: result.NativeShadow,
+		Diagnostics:  handler.publicDiagnostics(request, result.Diagnostics),
+		NativeShadow: handler.publicNativeShadow(request, result.NativeShadow),
 	}
 	response.Document = identityDocumentDetailsFromEvidence(updated.Document, updated.ExpectedCPF)
 	handler.writeJSON(writer, http.StatusOK, response)
