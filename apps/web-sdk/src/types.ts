@@ -111,6 +111,22 @@ export interface QualityResult {
     processedFrames: number;
 }
 
+export interface GeometryTelemetry {
+    runId: string;
+    status: "insufficient" | "experimental" | string;
+    sampleCount: number;
+    farSamples: number;
+    nearSamples: number;
+    scaleRatio: number;
+    transitionScore: number;
+    perspectiveChange: number;
+    depthChange: number;
+    phaseStability: number;
+    evidenceScore: number;
+    wasmStatus: string;
+    wasmMaxDelta?: number;
+}
+
 export interface NativeShadowComparison {
     status: "ok" | "partial" | "drift" | string;
     pythonFrames: number;
