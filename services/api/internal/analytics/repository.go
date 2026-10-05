@@ -521,6 +521,33 @@ func (repository *Repository) RecordBiometrySession(
 	return err
 }
 
+func (repository *Repository) RecordStatus(
+	ctx context.Context,
+	checkID string,
+	status string,
+	decision string,
+	completedAt *time.Time,
+) error {
+	_, err := repository.db.ExecContext(
+		ctx,
+		`UPDATE faceproof_checks
+		 SET status = $2,
+		     actual_decision = CASE WHEN $3 = '' THEN actual_decision ELSE $3 END,
+		     completed_at = COALESCE($4, completed_at),
+		     duration_ms = CASE
+		         WHEN $4 IS NULL OR started_at IS NULL THEN duration_ms
+		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4 - started_at)) * 1000)::BIGINT)
+		     END,
+		     updated_at = NOW()
+		 WHERE check_id = $1`,
+		checkID,
+		status,
+		decision,
+		completedAt,
+	)
+	return err
+}
+
 func (repository *Repository) RecordCompletion(
 	ctx context.Context,
 	record CompletionSnapshot,
