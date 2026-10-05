@@ -533,10 +533,10 @@ func (repository *Repository) RecordStatus(
 		`UPDATE faceproof_checks
 		 SET status = $2,
 		     actual_decision = CASE WHEN $3 = '' THEN actual_decision ELSE $3 END,
-		     completed_at = COALESCE($4, completed_at),
+		     completed_at = COALESCE($4::timestamptz, completed_at),
 		     duration_ms = CASE
-		         WHEN $4 IS NULL OR started_at IS NULL THEN duration_ms
-		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4 - started_at)) * 1000)::BIGINT)
+		         WHEN $4::timestamptz IS NULL OR started_at IS NULL THEN duration_ms
+		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4::timestamptz - started_at)) * 1000)::BIGINT)
 		     END,
 		     updated_at = NOW()
 		 WHERE check_id = $1`,
