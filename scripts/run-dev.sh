@@ -163,7 +163,7 @@ WEB_PID=$!
 if [ "$ANALYTICS" = true ]; then
     (
         cd services/api
-        FACEPROOF_WEB_ADDR=":5174" FACEPROOF_WEB_DIR="$ROOT/apps/admin" go run ./cmd/devgateway
+        FACEPROOF_WEB_ADDR="127.0.0.1:5174" FACEPROOF_WEB_DIR="$ROOT/apps/admin" go run ./cmd/devgateway
     ) &
     ADMIN_PID=$!
 fi
