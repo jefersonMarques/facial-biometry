@@ -83,6 +83,7 @@ logoutButton.addEventListener("click", () => {
     dashboard.hidden = true;
     loginPanel.hidden = false;
     logoutButton.hidden = true;
+    reportButton.hidden = true;
     setConnection(false);
 });
 
@@ -207,6 +208,7 @@ async function connect() {
         loginPanel.hidden = true;
         dashboard.hidden = false;
         logoutButton.hidden = false;
+        reportButton.hidden = false;
         setConnection(true);
     } catch (error) {
         setConnection(false);
