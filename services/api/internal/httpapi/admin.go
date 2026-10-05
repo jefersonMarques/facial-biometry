@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -128,6 +129,145 @@ func (handler *Handler) reconcileAdminAnalytics(request *http.Request) {
 	}
 }
 
+func (handler *Handler) applyAuthoritativeCheckItem(
+	item *analytics.CheckListItem,
+) {
+	if handler.identityChecks == nil || item == nil {
+		return
+	}
+	check, err := handler.identityChecks.LoadByID(item.CheckID)
+	if err != nil {
+		return
+	}
+	item.Status = string(check.Status)
+	item.Decision = check.Decision
+	item.CompletedAt = check.CompletedAt
+	if check.FaceSimilarity != 0 {
+		value := check.FaceSimilarity
+		item.FaceSimilarity = &value
+	}
+	if check.LivenessScore != 0 {
+		value := check.LivenessScore
+		item.LivenessScore = &value
+	}
+}
+
+func (handler *Handler) authoritativeSummary(
+	ctx context.Context,
+	base analytics.DashboardSummary,
+) analytics.DashboardSummary {
+	if handler.analytics == nil || handler.identityChecks == nil {
+		return base
+	}
+
+	rows, err := handler.analytics.ListSummaryCheckRows(ctx)
+	if err != nil {
+		handler.logAnalyticsError("load summary rows", err)
+		return base
+	}
+
+	base.Total = int64(len(rows))
+	base.Approved = 0
+	base.Review = 0
+	base.Rejected = 0
+	base.Expired = 0
+	base.Pending = 0
+	base.Completed = 0
+	base.AvgFaceSimilarity = 0
+	base.AvgLiveness = 0
+
+	scenarios := map[string]*analytics.ScenarioSummary{}
+	var faceSum, livenessSum float64
+	var faceCount, livenessCount int64
+
+	for index := range rows {
+		row := &rows[index]
+		if check, loadErr := handler.identityChecks.LoadByID(row.CheckID); loadErr == nil {
+			row.Status = string(check.Status)
+			row.Decision = check.Decision
+			row.CompletedAt = check.CompletedAt
+			if check.FaceSimilarity != 0 {
+				value := check.FaceSimilarity
+				row.FaceSimilarity = &value
+			}
+			if check.LivenessScore != 0 {
+				value := check.LivenessScore
+				row.LivenessScore = &value
+			}
+		}
+
+		switch row.Status {
+		case "approved":
+			base.Approved++
+		case "review":
+			base.Review++
+		case "rejected":
+			base.Rejected++
+		case "expired":
+			base.Expired++
+		default:
+			base.Pending++
+		}
+		if row.CompletedAt != nil {
+			base.Completed++
+		}
+		if row.FaceSimilarity != nil {
+			faceSum += *row.FaceSimilarity
+			faceCount++
+		}
+		if row.LivenessScore != nil {
+			livenessSum += *row.LivenessScore
+			livenessCount++
+		}
+
+		scenario := scenarios[row.Scenario]
+		if scenario == nil {
+			scenario = &analytics.ScenarioSummary{Scenario: row.Scenario}
+			scenarios[row.Scenario] = scenario
+		}
+		scenario.Total++
+		switch row.Decision {
+		case "approved":
+			scenario.Approved++
+		case "review":
+			scenario.Review++
+		case "rejected":
+			scenario.Rejected++
+		}
+		if row.ExpectedDecision != "" && row.Decision != "" {
+			scenario.ExpectedEvaluated++
+			if row.ExpectedDecision == row.Decision {
+				scenario.ExpectedCorrect++
+			}
+		}
+	}
+
+	if base.Total > 0 {
+		base.CompletionRate = float64(base.Completed) / float64(base.Total)
+	} else {
+		base.CompletionRate = 0
+	}
+	if faceCount > 0 {
+		base.AvgFaceSimilarity = faceSum / float64(faceCount)
+	}
+	if livenessCount > 0 {
+		base.AvgLiveness = livenessSum / float64(livenessCount)
+	}
+
+	base.Scenarios = base.Scenarios[:0]
+	for _, scenario := range scenarios {
+		base.Scenarios = append(base.Scenarios, *scenario)
+	}
+	sort.Slice(base.Scenarios, func(i, j int) bool {
+		if base.Scenarios[i].Total == base.Scenarios[j].Total {
+			return base.Scenarios[i].Scenario < base.Scenarios[j].Scenario
+		}
+		return base.Scenarios[i].Total > base.Scenarios[j].Total
+	})
+
+	return base
+}
+
 func (handler *Handler) getAdminSummary(writer http.ResponseWriter, request *http.Request) {
 	handler.reconcileAdminAnalytics(request)
 	summary, err := handler.analytics.Summary(request.Context())
@@ -135,6 +275,7 @@ func (handler *Handler) getAdminSummary(writer http.ResponseWriter, request *htt
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics summary")
 		return
 	}
+	summary = handler.authoritativeSummary(request.Context(), summary)
 	handler.writeJSON(writer, http.StatusOK, summary)
 }
 
@@ -224,7 +365,7 @@ func (handler *Handler) listAdminChecks(writer http.ResponseWriter, request *htt
 	}
 
 	items, err := handler.analytics.ListChecks(request.Context(), analytics.CheckFilter{
-		Status:     strings.TrimSpace(request.URL.Query().Get("status")),
+		Status:     "",
 		Scenario:   strings.TrimSpace(request.URL.Query().Get("scenario")),
 		CampaignID: strings.TrimSpace(request.URL.Query().Get("campaignId")),
 		Limit:      limit,
@@ -233,7 +374,18 @@ func (handler *Handler) listAdminChecks(writer http.ResponseWriter, request *htt
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics checks")
 		return
 	}
-	handler.writeJSON(writer, http.StatusOK, map[string]any{"items": items})
+
+	statusFilter := strings.TrimSpace(request.URL.Query().Get("status"))
+	filtered := items[:0]
+	for index := range items {
+		handler.applyAuthoritativeCheckItem(&items[index])
+		if statusFilter != "" && items[index].Status != statusFilter {
+			continue
+		}
+		filtered = append(filtered, items[index])
+	}
+
+	handler.writeJSON(writer, http.StatusOK, map[string]any{"items": filtered})
 }
 
 func (handler *Handler) getAdminCheck(
@@ -251,6 +403,9 @@ func (handler *Handler) getAdminCheck(
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics check")
 		return
 	}
+	item := detail.CheckListItem
+	handler.applyAuthoritativeCheckItem(&item)
+	detail.CheckListItem = item
 	handler.writeJSON(writer, http.StatusOK, detail)
 }
 
