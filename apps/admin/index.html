@@ -36,6 +36,72 @@
             </section>
 
             <div id="dashboard" hidden>
+                <section class="section card generator-card">
+                    <div class="card-heading card-heading-responsive">
+                        <div>
+                            <span class="eyebrow">NOVA VERIFICAÇÃO</span>
+                            <h2>Gerar link</h2>
+                            <p class="muted">Crie um link já classificado para a campanha e o cenário de teste.</p>
+                        </div>
+                    </div>
+
+                    <form id="checkForm" class="generator-form">
+                        <label>
+                            <span>CPF</span>
+                            <input id="checkCpf" inputmode="numeric" autocomplete="off" placeholder="00000000000" maxlength="14" required>
+                        </label>
+                        <label>
+                            <span>Data mínima do documento</span>
+                            <input id="checkMinimumDate" type="date" value="2025-01-01" required>
+                        </label>
+                        <label>
+                            <span>Validade do link</span>
+                            <select id="checkExpires">
+                                <option value="30">30 minutos</option>
+                                <option value="60" selected>60 minutos</option>
+                                <option value="120">2 horas</option>
+                                <option value="360">6 horas</option>
+                                <option value="1440">24 horas</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Campanha</span>
+                            <select id="checkCampaign">
+                                <option value="">Sem campanha</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Cenário</span>
+                            <select id="checkScenario">
+                                <option value="genuine_live" selected>Genuine live</option>
+                                <option value="impostor_live">Impostor live</option>
+                                <option value="printed_photo">Foto impressa</option>
+                                <option value="screen_photo">Foto em tela</option>
+                                <option value="replay_video">Replay de vídeo</option>
+                                <option value="unknown">Sem classificação</option>
+                            </select>
+                        </label>
+                        <label class="generator-public-url">
+                            <span>URL pública opcional</span>
+                            <input id="checkPublicBaseUrl" type="url" autocomplete="off" placeholder="https://xxxx.trycloudflare.com">
+                            <small>Se vazio, o link usa localhost. A URL fica salva somente neste navegador.</small>
+                        </label>
+                        <button id="generateCheckButton" class="button button-primary generator-submit" type="submit">Gerar link</button>
+                    </form>
+
+                    <div id="generatedCheck" class="generated-check" hidden>
+                        <div>
+                            <span class="eyebrow">LINK GERADO</span>
+                            <strong id="generatedCheckMeta"></strong>
+                        </div>
+                        <div class="generated-link-row">
+                            <input id="generatedCheckUrl" readonly>
+                            <button id="copyGeneratedCheck" class="button button-secondary" type="button">Copiar link</button>
+                        </div>
+                        <div id="generatedCheckFeedback" class="muted"></div>
+                    </div>
+                </section>
+
                 <section class="section">
                     <div class="section-heading">
                         <div>
