@@ -42,6 +42,11 @@
 
                 <div class="camera-card identity-camera">
                     <video id="camera" playsinline muted></video>
+                    <div id="processingOverlay" class="processing-overlay" hidden aria-live="polite">
+                        <div class="processing-spinner" aria-hidden="true"></div>
+                        <strong>Analisando seu rosto...</strong>
+                        <span>Captura concluída. Estamos validando prova de vida, qualidade e correspondência facial.</span>
+                    </div>
                     <div id="faceGuide" class="face-guide phase-far"></div>
                     <div id="captureFlash" class="capture-flash" aria-hidden="true"></div>
                     <div class="guide-phase"><span id="guidePhaseText">Captura 1 de 2</span></div>
