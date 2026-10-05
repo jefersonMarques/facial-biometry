@@ -49,10 +49,12 @@ func main() {
 		)
 		cancelAnalytics()
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("FaceProof analytics unavailable; continuing without analytics: %v", err)
+			analyticsRepository = nil
+		} else {
+			defer analyticsRepository.Close()
+			log.Printf("FaceProof analytics enabled")
 		}
-		defer analyticsRepository.Close()
-		log.Printf("FaceProof analytics enabled")
 	}
 
 	prependToolDirectories(configuration.PDFSigPath, configuration.PDFInfoPath, configuration.BPGDecoderPath)
