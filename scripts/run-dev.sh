@@ -106,6 +106,10 @@ if [ "$NATIVE_SHADOW" = true ]; then
 fi
 
 if [ "$ANALYTICS" = true ]; then
+    ANALYTICS_DATABASE_URL_FILE="$ROOT/.dev/analytics-database-url"
+    if [ -z "${FACEPROOF_ANALYTICS_DATABASE_URL:-}" ] && [ -f "$ANALYTICS_DATABASE_URL_FILE" ]; then
+        export FACEPROOF_ANALYTICS_DATABASE_URL="$(cat "$ANALYTICS_DATABASE_URL_FILE")"
+    fi
     source "$ROOT/scripts/start-analytics-postgres.sh"
 fi
 
