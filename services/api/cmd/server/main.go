@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"faceproof/services/api/internal/analytics"
 	"faceproof/services/api/internal/config"
 	"faceproof/services/api/internal/document/cnh"
 	"faceproof/services/api/internal/document/pdfanalysis"
@@ -35,6 +37,22 @@ func main() {
 	identityChecks, err := identity.NewRepository(configuration.IdentityDirectory, configuration.IdentityStoreKey)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	var analyticsRepository *analytics.Repository
+	if configuration.AnalyticsDatabaseURL != "" {
+		analyticsContext, cancelAnalytics := context.WithTimeout(context.Background(), 8*time.Second)
+		analyticsRepository, err = analytics.Open(
+			analyticsContext,
+			configuration.AnalyticsDatabaseURL,
+			configuration.AnalyticsSubjectKey,
+		)
+		cancelAnalytics()
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer analyticsRepository.Close()
+		log.Printf("FaceProof analytics enabled")
 	}
 
 	prependToolDirectories(configuration.PDFSigPath, configuration.PDFInfoPath, configuration.BPGDecoderPath)
@@ -72,6 +90,7 @@ func main() {
 		templates,
 		identityChecks,
 		cnh.NewService(vioService, previewService),
+		analyticsRepository,
 	)
 
 	server := &http.Server{
