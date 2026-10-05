@@ -116,6 +116,7 @@ const expiresText = requiredElement<HTMLSpanElement>("expiresText");
 const faceGuide = requiredElement<HTMLDivElement>("faceGuide");
 const guidePhaseText = requiredElement<HTMLSpanElement>("guidePhaseText");
 const captureFlash = requiredElement<HTMLDivElement>("captureFlash");
+const processingOverlay = requiredElement<HTMLDivElement>("processingOverlay");
 
 const camera = new CameraCapture(video);
 const localCaptureGate = new LocalCaptureGate();
@@ -331,6 +332,7 @@ async function runBiometry(): Promise<void> {
     startButton.hidden = true;
     startButton.disabled = true;
     startButton.textContent = "Estou pronto";
+    processingOverlay.hidden = true;
     biometricStatus.textContent = "Iniciando câmera...";
     cameraState.textContent = "Iniciando câmera...";
     setProximityIndicator(0, "red");
@@ -364,8 +366,10 @@ async function runBiometry(): Promise<void> {
             const nearFrames = await capturePhase("near", nearRelaxedQuality);
             await showCaptureSuccess("Segunda captura concluída");
 
-            biometricStatus.textContent = "Analisando sua identidade...";
-            guidePhaseText.textContent = "Verificando";
+            biometricStatus.textContent = "Analisando seu rosto...";
+            cameraState.textContent = "Captura concluída";
+            guidePhaseText.textContent = "Analisando";
+            processingOverlay.hidden = false;
             setProximityIndicator(100, "green");
 
             try {
@@ -386,6 +390,7 @@ async function runBiometry(): Promise<void> {
                 const message = errorMessage(error);
                 if (isRecaptureRequired(message)) {
                     captureLifecycle.cancel();
+                    processingOverlay.hidden = true;
                     setProximityIndicator(0, "red");
                     faceGuide.className = "face-guide phase-far";
                     guidePhaseText.textContent = "Captura 1 de 2";
@@ -398,6 +403,7 @@ async function runBiometry(): Promise<void> {
         }
     } catch (error) {
         captureLifecycle.cancel();
+        processingOverlay.hidden = true;
         const message = errorMessage(error);
         const infrastructureFailure = isInfrastructureBiometryError(message);
         biometricStatus.textContent = friendlyBiometryError(message);
@@ -994,6 +1000,7 @@ async function waitForManualReady(): Promise<void> {
 
 function renderStatus(status: IdentityCheckStatus): void {
     expiresText.textContent = formatExpiration(status.expiresAt);
+    processingOverlay.hidden = true;
 
     switch (status.status) {
     case "pending_document":
@@ -1031,6 +1038,7 @@ function renderIdentityResult(
     result: IdentityCompletionResponse,
     capturedFrames: GuidedCapturedFrame[],
 ): void {
+    processingOverlay.hidden = true;
     documentPanel.hidden = true;
     biometryPanel.hidden = true;
     finalPanel.hidden = false;
