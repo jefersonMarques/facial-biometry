@@ -39,6 +39,9 @@ type Config struct {
 	IdentityVerifyURL       string
 	IdentityLinkTTL         time.Duration
 	IdentityMaxPDFBytes     int64
+	AdminKey                []byte
+	AnalyticsDatabaseURL    string
+	AnalyticsSubjectKey     []byte
 	PDFSigPath              string
 	PDFInfoPath             string
 	BPGDecoderPath          string
@@ -59,6 +62,10 @@ func Load() (Config, error) {
 	identityIssuerKey := []byte(strings.TrimSpace(os.Getenv("FACEPROOF_IDENTITY_ISSUER_KEY")))
 	if len(identityIssuerKey) > 0 && len(identityIssuerKey) < 32 {
 		return Config{}, errors.New("FACEPROOF_IDENTITY_ISSUER_KEY must contain at least 32 characters when configured")
+	}
+	adminKey := []byte(strings.TrimSpace(os.Getenv("FACEPROOF_ADMIN_KEY")))
+	if len(adminKey) > 0 && len(adminKey) < 32 {
+		return Config{}, errors.New("FACEPROOF_ADMIN_KEY must contain at least 32 characters when configured")
 	}
 
 	sessionTTLSeconds := envInt("FACEPROOF_SESSION_TTL_SECONDS", 120)
@@ -94,6 +101,9 @@ func Load() (Config, error) {
 		IdentityVerifyURL:       envString("FACEPROOF_IDENTITY_VERIFY_URL", "http://localhost:5173/verify.html"),
 		IdentityLinkTTL:         time.Duration(identityTTLMinutes) * time.Minute,
 		IdentityMaxPDFBytes:     int64(identityMaxPDFMB) << 20,
+		AdminKey:                adminKey,
+		AnalyticsDatabaseURL:    strings.TrimSpace(os.Getenv("FACEPROOF_ANALYTICS_DATABASE_URL")),
+		AnalyticsSubjectKey:     deriveAnalyticsSubjectKey(templateKey),
 		PDFSigPath:              strings.TrimSpace(os.Getenv("FACEPROOF_PDFSIG_PATH")),
 		PDFInfoPath:             strings.TrimSpace(os.Getenv("FACEPROOF_PDFINFO_PATH")),
 		BPGDecoderPath:          strings.TrimSpace(os.Getenv("FACEPROOF_BPGDEC_PATH")),
@@ -101,8 +111,16 @@ func Load() (Config, error) {
 }
 
 func deriveIdentityStoreKey(master []byte) []byte {
+	return deriveScopedKey(master, "faceproof/identity-store/v1")
+}
+
+func deriveAnalyticsSubjectKey(master []byte) []byte {
+	return deriveScopedKey(master, "faceproof/analytics-subject/v1")
+}
+
+func deriveScopedKey(master []byte, scope string) []byte {
 	mac := hmac.New(sha256.New, master)
-	_, _ = mac.Write([]byte("faceproof/identity-store/v1"))
+	_, _ = mac.Write([]byte(scope))
 	return mac.Sum(nil)
 }
 
