@@ -11,7 +11,10 @@ import (
 	"faceproof/services/api/internal/identity"
 )
 
-const defaultAnalyticsScenario = "unknown"
+const (
+	defaultAnalyticsScenario = "unknown"
+	analyticsOperationTimeout = time.Second
+)
 
 var allowedAnalyticsScenarios = map[string]bool{
 	"unknown":       true,
@@ -27,6 +30,14 @@ var allowedExpectedDecisions = map[string]bool{
 	"approved": true,
 	"review":   true,
 	"rejected": true,
+}
+
+func analyticsOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	base := context.Background()
+	if parent != nil {
+		base = context.WithoutCancel(parent)
+	}
+	return context.WithTimeout(base, analyticsOperationTimeout)
 }
 
 func normalizeAnalyticsScenario(value string) (string, bool) {
@@ -58,14 +69,18 @@ func (handler *Handler) analyticsCampaignExists(ctx context.Context, campaignID 
 	if handler.analytics == nil {
 		return false, nil
 	}
-	return handler.analytics.CampaignExists(ctx, campaignID)
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	return handler.analytics.CampaignExists(operationContext, campaignID)
 }
 
 func (handler *Handler) recordAnalyticsCheckCreated(ctx context.Context, check identity.Check) {
 	if handler.analytics == nil {
 		return
 	}
-	if err := handler.analytics.RecordCheckCreated(ctx, analytics.CheckCreated{
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	if err := handler.analytics.RecordCheckCreated(operationContext, analytics.CheckCreated{
 		CheckID:          check.ID,
 		SubjectCPF:       check.ExpectedCPF,
 		CampaignID:       check.CampaignID,
@@ -89,11 +104,15 @@ func (handler *Handler) recordAnalyticsLinkOpened(ctx context.Context, checkID s
 	if handler.analytics == nil {
 		return
 	}
-	if err := handler.analytics.MarkStarted(ctx, checkID); err != nil {
+	startContext, cancelStart := analyticsOperationContext(ctx)
+	if err := handler.analytics.MarkStarted(startContext, checkID); err != nil {
 		handler.logAnalyticsError("mark check started", err)
 	}
+	cancelStart()
+	eventContext, cancelEvent := analyticsOperationContext(ctx)
+	defer cancelEvent()
 	if err := handler.analytics.RecordEventOnce(
-		ctx,
+		eventContext,
 		checkID,
 		"link_opened",
 		"link_opened",
@@ -112,7 +131,9 @@ func (handler *Handler) recordAnalyticsEvent(
 	if handler.analytics == nil {
 		return
 	}
-	if err := handler.analytics.RecordEvent(ctx, checkID, eventType, payload); err != nil {
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	if err := handler.analytics.RecordEvent(operationContext, checkID, eventType, payload); err != nil {
 		handler.logAnalyticsError("record "+eventType, err)
 	}
 }
@@ -122,8 +143,10 @@ func (handler *Handler) recordAnalyticsDocumentAccepted(ctx context.Context, che
 		return
 	}
 	document := check.Document
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
 	if err := handler.analytics.RecordDocumentAccepted(
-		ctx,
+		operationContext,
 		check.ID,
 		string(check.Status),
 		check.DocumentAttempts,
@@ -160,8 +183,10 @@ func (handler *Handler) recordAnalyticsDocumentFailure(
 	if handler.analytics == nil {
 		return
 	}
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
 	if err := handler.analytics.RecordDocumentFailure(
-		ctx,
+		operationContext,
 		check.ID,
 		string(check.Status),
 		check.DocumentAttempts,
@@ -182,7 +207,9 @@ func (handler *Handler) recordAnalyticsBiometrySession(
 	if handler.analytics == nil {
 		return
 	}
-	if err := handler.analytics.RecordBiometrySession(ctx, checkID, sessionID); err != nil {
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	if err := handler.analytics.RecordBiometrySession(operationContext, checkID, sessionID); err != nil {
 		handler.logAnalyticsError("record biometric session", err)
 	}
 }
@@ -195,8 +222,10 @@ func (handler *Handler) recordAnalyticsStatus(
 	if handler.analytics == nil {
 		return
 	}
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
 	if err := handler.analytics.RecordStatus(
-		ctx,
+		operationContext,
 		check.ID,
 		string(check.Status),
 		check.Decision,
@@ -262,7 +291,9 @@ func (handler *Handler) recordAnalyticsCompletion(
 		}
 	}
 
-	if err := handler.analytics.RecordCompletion(ctx, analytics.CompletionSnapshot{
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	if err := handler.analytics.RecordCompletion(operationContext, analytics.CompletionSnapshot{
 		CheckID:                 check.ID,
 		Status:                  string(check.Status),
 		Decision:                check.Decision,
