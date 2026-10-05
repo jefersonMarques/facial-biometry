@@ -214,6 +214,29 @@ func (handler *Handler) recordAnalyticsBiometrySession(
 	}
 }
 
+func (handler *Handler) recordAnalyticsAuthoritativeState(
+	ctx context.Context,
+	check identity.Check,
+) {
+	if handler.analytics == nil {
+		return
+	}
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	if err := handler.analytics.RecordAuthoritativeState(
+		operationContext,
+		check.ID,
+		string(check.Status),
+		check.Decision,
+		check.CompletedAt,
+		check.LivenessScore,
+		check.FaceSimilarity,
+		check.BiometricSessions,
+	); err != nil {
+		handler.logAnalyticsError("record authoritative identity state", err)
+	}
+}
+
 func (handler *Handler) recordAnalyticsStatus(
 	ctx context.Context,
 	check identity.Check,
