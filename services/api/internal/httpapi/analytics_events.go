@@ -169,6 +169,9 @@ func (handler *Handler) recordAnalyticsDocumentFailure(
 	); err != nil {
 		handler.logAnalyticsError("record document rejection", err)
 	}
+	if check.Status == identity.StatusRejected {
+		handler.recordAnalyticsStatus(ctx, check, "")
+	}
 }
 
 func (handler *Handler) recordAnalyticsBiometrySession(
