@@ -872,6 +872,29 @@ func (repository *Repository) RecordAuthoritativeState(
 	return err
 }
 
+func (repository *Repository) ListCheckIDs(ctx context.Context) ([]string, error) {
+	rows, err := repository.db.QueryContext(
+		ctx,
+		`SELECT check_id
+		 FROM faceproof_checks
+		 ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (repository *Repository) ListChecks(
 	ctx context.Context,
 	filter CheckFilter,
