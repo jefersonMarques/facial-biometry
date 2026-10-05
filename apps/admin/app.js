@@ -25,6 +25,7 @@ const loginForm = document.getElementById("loginForm");
 const adminKeyInput = document.getElementById("adminKey");
 const loginError = document.getElementById("loginError");
 const dashboard = document.getElementById("dashboard");
+const reportButton = document.getElementById("reportButton");
 const refreshButton = document.getElementById("refreshButton");
 const logoutButton = document.getElementById("logoutButton");
 const connectionState = document.getElementById("connectionState");
@@ -74,6 +75,7 @@ loginForm.addEventListener("submit", async (event) => {
     await connect();
 });
 
+reportButton.addEventListener("click", () => void downloadAnalysisReport());
 refreshButton.addEventListener("click", () => void loadDashboard());
 logoutButton.addEventListener("click", () => {
     adminKey = "";
@@ -215,6 +217,65 @@ async function connect() {
     }
 }
 
+async function downloadAnalysisReport() {
+    reportButton.disabled = true;
+    const originalLabel = reportButton.textContent;
+    reportButton.textContent = "Gerando...";
+
+    try {
+        const report = await api("/v1/admin/report");
+        const summary = report.summary ?? {};
+        const markdown = [
+            "# FaceProof · Relatório técnico de validação",
+            "",
+            "Gerado em: " + dateTime(report.generatedAt),
+            "",
+            "> Relatório interno para análise técnica. Não contém CPF, nome ou imagens biométricas.",
+            "",
+            "## Resumo",
+            "",
+            "- Verificações: " + integer(summary.total),
+            "- Concluídas: " + integer(summary.completed),
+            "- Aprovadas: " + integer(summary.approved),
+            "- Review: " + integer(summary.review),
+            "- Rejeitadas: " + integer(summary.rejected),
+            "- Pendentes: " + integer(summary.pending),
+            "- Taxa de conclusão: " + percentage(summary.completionRate),
+            "- Face média: " + score(summary.avgFaceSimilarity),
+            "- Liveness médio: " + percentage(summary.avgLiveness),
+            "- PAD médio: " + percentage(summary.avgPassivePad),
+            "- Qualidade média: " + percentage(summary.avgQuality),
+            "- Secure Core OK: " + integer(summary.nativeOk),
+            "- Secure Core PARTIAL: " + integer(summary.nativePartial),
+            "- Secure Core DRIFT: " + integer(summary.nativeDrift),
+            "",
+            "## Dados estruturados completos",
+            "",
+            "O bloco abaixo preserva todos os dados técnicos disponíveis no painel: campanhas, estado autoritativo, analytics, scores, thresholds, geometria, Secure Core, runtime, documento sem PII e timeline.",
+            "",
+            "```json",
+            JSON.stringify(report, null, 2),
+            "```",
+            "",
+        ].join("\n");
+
+        const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const timestamp = new Date(report.generatedAt || Date.now()).toISOString().replaceAll(":", "-");
+        link.href = objectUrl;
+        link.download = "faceproof-relatorio-" + timestamp + ".md";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+        window.alert("Não foi possível gerar o relatório: " + errorMessage(error));
+    } finally {
+        reportButton.disabled = false;
+        reportButton.textContent = originalLabel;
+    }
+}
 async function loadDashboard() {
     if (!adminKey) {
         return;
