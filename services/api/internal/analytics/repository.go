@@ -143,6 +143,17 @@ type ScenarioSummary struct {
 	ExpectedCorrect   int64  `json:"expectedCorrect"`
 }
 
+type SummaryCheckRow struct {
+	CheckID          string
+	Scenario         string
+	ExpectedDecision string
+	Status           string
+	Decision         string
+	CompletedAt      *time.Time
+	FaceSimilarity   *float64
+	LivenessScore    *float64
+}
+
 type CheckListItem struct {
 	CheckID          string     `json:"checkId"`
 	CampaignID       string     `json:"campaignId,omitempty"`
@@ -740,6 +751,53 @@ func (repository *Repository) Summary(ctx context.Context) (DashboardSummary, er
 	}
 
 	return summary, nil
+}
+
+func (repository *Repository) ListSummaryCheckRows(
+	ctx context.Context,
+) ([]SummaryCheckRow, error) {
+	rows, err := repository.db.QueryContext(
+		ctx,
+		`SELECT
+		    check_id,
+		    scenario,
+		    expected_decision,
+		    status,
+		    actual_decision,
+		    completed_at,
+		    face_similarity,
+		    liveness_score
+		 FROM faceproof_checks
+		 ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []SummaryCheckRow
+	for rows.Next() {
+		var item SummaryCheckRow
+		var completedAt sql.NullTime
+		var face, liveness sql.NullFloat64
+		if err := rows.Scan(
+			&item.CheckID,
+			&item.Scenario,
+			&item.ExpectedDecision,
+			&item.Status,
+			&item.Decision,
+			&completedAt,
+			&face,
+			&liveness,
+		); err != nil {
+			return nil, err
+		}
+		item.CompletedAt = nullTimePtr(completedAt)
+		item.FaceSimilarity = nullFloatPtr(face)
+		item.LivenessScore = nullFloatPtr(liveness)
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (repository *Repository) ListOpenCheckStates(
