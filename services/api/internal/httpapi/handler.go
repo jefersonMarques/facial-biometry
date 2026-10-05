@@ -129,6 +129,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	if handler.handleAdmin(writer, request) {
+		return
+	}
+
 	if request.URL.Path == "/v1/identity/checks" && request.Method == http.MethodPost {
 		handler.createIdentityCheck(writer, request)
 		return
