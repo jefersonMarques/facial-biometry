@@ -103,7 +103,7 @@ Services:
 ```text
 Web:              http://localhost:5173
 Identity page:    http://localhost:5173/verify.html
-Biometric API:    http://localhost:8080
+Biometric API:    http://localhost:8180
 Biometric engine: http://localhost:8090
 ```
 
@@ -162,7 +162,7 @@ Important biometric settings:
 The development server on port `5173` is a same-origin gateway:
 
 - static web files are served directly;
-- `/v1/*` is reverse-proxied to the FaceProof API on `127.0.0.1:8080`.
+- `/v1/*` is reverse-proxied to the FaceProof API on `127.0.0.1:8180`.
 
 This means one tunnel is enough for browser + API:
 
