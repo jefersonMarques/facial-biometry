@@ -75,6 +75,8 @@ export FACEPROOF_IDENTITY_ISSUER_KEY="${FACEPROOF_IDENTITY_ISSUER_KEY:-$(cat "$R
 export FACEPROOF_ADMIN_KEY="${FACEPROOF_ADMIN_KEY:-$(cat "$ROOT/.dev/admin-key")}"
 export FACEPROOF_IDENTITY_DIR="${FACEPROOF_IDENTITY_DIR:-$ROOT/data/identity-checks}"
 export FACEPROOF_IDENTITY_VERIFY_URL="${FACEPROOF_IDENTITY_VERIFY_URL:-http://localhost:5173/verify.html}"
+export FACEPROOF_API_ADDR="${FACEPROOF_API_ADDR:-:8180}"
+export FACEPROOF_DEV_API_URL="${FACEPROOF_DEV_API_URL:-http://127.0.0.1:8180}"
 export FACEPROOF_YUNET_MODEL="${FACEPROOF_YUNET_MODEL:-$ROOT/models/yunet/face_detection_yunet_2023mar.onnx}"
 export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_recognition_sface_2021dec.onnx}"
 export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
@@ -141,7 +143,7 @@ if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; t
     echo "INFO: bpgdec not found. CNH identity can still use the signed PDF portrait."
 fi
 
-required_ports=(8090 8080 5173)
+required_ports=(8090 8180 5173)
 if [ "$ANALYTICS" = true ]; then
     required_ports+=(5174)
 fi
@@ -157,7 +159,7 @@ if [ "${#occupied_ports[@]}" -gt 0 ]; then
     echo "FaceProof cannot start because these ports are already in use: ${occupied_ports[*]}" >&2
     echo "A previous development stack is probably still running." >&2
     echo "Stop the previous ./scripts/run-dev.sh process and try again." >&2
-    echo "Diagnostic: ss -ltnp | grep -E ':(8090|8080|5173|5174)\\b'" >&2
+    echo "Diagnostic: ss -ltnp | grep -E ':(8090|8180|5173|5174)\\b'" >&2
     exit 1
 fi
 
@@ -192,6 +194,7 @@ if [ "$ANALYTICS" = true ]; then
     ADMIN_PID=$!
 fi
 
+echo "FaceProof API: http://localhost:8180"
 echo "FaceProof demo: http://localhost:5173"
 echo "Identity verification: http://localhost:5173/verify.html"
 echo "Identity issuer key: $ROOT/.dev/identity-issuer-key"
