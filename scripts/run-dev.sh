@@ -5,14 +5,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 NATIVE_SHADOW=false
+ANALYTICS=false
 for argument in "$@"; do
     case "$argument" in
         --native-shadow)
             NATIVE_SHADOW=true
             ;;
+        --analytics)
+            ANALYTICS=true
+            ;;
         *)
             echo "Unknown argument: $argument" >&2
-            echo "Usage: scripts/run-dev.sh [--native-shadow]" >&2
+            echo "Usage: scripts/run-dev.sh [--native-shadow] [--analytics]" >&2
             exit 2
             ;;
     esac
@@ -59,11 +63,16 @@ if [ ! -f "$ROOT/.dev/identity-issuer-key" ]; then
     python3 -c 'import secrets; print(secrets.token_urlsafe(48))' > "$ROOT/.dev/identity-issuer-key"
     chmod 600 "$ROOT/.dev/identity-issuer-key"
 fi
+if [ ! -f "$ROOT/.dev/admin-key" ]; then
+    python3 -c 'import secrets; print(secrets.token_urlsafe(48))' > "$ROOT/.dev/admin-key"
+    chmod 600 "$ROOT/.dev/admin-key"
+fi
 
 export FACEPROOF_SESSION_SECRET="${FACEPROOF_SESSION_SECRET:-$(cat "$ROOT/.dev/session-secret")}"
 export FACEPROOF_TEMPLATE_KEY="${FACEPROOF_TEMPLATE_KEY:-$(cat "$ROOT/.dev/template-key")}"
 export FACEPROOF_TEMPLATE_DIR="${FACEPROOF_TEMPLATE_DIR:-$ROOT/data/templates}"
 export FACEPROOF_IDENTITY_ISSUER_KEY="${FACEPROOF_IDENTITY_ISSUER_KEY:-$(cat "$ROOT/.dev/identity-issuer-key")}"
+export FACEPROOF_ADMIN_KEY="${FACEPROOF_ADMIN_KEY:-$(cat "$ROOT/.dev/admin-key")}"
 export FACEPROOF_IDENTITY_DIR="${FACEPROOF_IDENTITY_DIR:-$ROOT/data/identity-checks}"
 export FACEPROOF_IDENTITY_VERIFY_URL="${FACEPROOF_IDENTITY_VERIFY_URL:-http://localhost:5173/verify.html}"
 export FACEPROOF_YUNET_MODEL="${FACEPROOF_YUNET_MODEL:-$ROOT/models/yunet/face_detection_yunet_2023mar.onnx}"
@@ -96,6 +105,10 @@ if [ "$NATIVE_SHADOW" = true ]; then
     echo "Native biometric shadow: ENABLED (vision + PAD)"
 fi
 
+if [ "$ANALYTICS" = true ]; then
+    source "$ROOT/scripts/start-analytics-postgres.sh"
+fi
+
 export FACEPROOF_ALLOW_REVIEW_ENROLLMENT="${FACEPROOF_ALLOW_REVIEW_ENROLLMENT:-true}"
 export FACEPROOF_DEBUG="${FACEPROOF_DEBUG:-true}"
 
@@ -125,7 +138,7 @@ if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; t
 fi
 
 cleanup() {
-    kill "${ENGINE_PID:-}" "${API_PID:-}" "${WEB_PID:-}" 2>/dev/null || true
+    kill "${ENGINE_PID:-}" "${API_PID:-}" "${WEB_PID:-}" "${ADMIN_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -147,9 +160,21 @@ API_PID=$!
 ) &
 WEB_PID=$!
 
+if [ "$ANALYTICS" = true ]; then
+    (
+        cd services/api
+        FACEPROOF_WEB_ADDR=":5174" FACEPROOF_WEB_DIR="$ROOT/apps/admin" go run ./cmd/devgateway
+    ) &
+    ADMIN_PID=$!
+fi
+
 echo "FaceProof demo: http://localhost:5173"
 echo "Identity verification: http://localhost:5173/verify.html"
 echo "Identity issuer key: $ROOT/.dev/identity-issuer-key"
+if [ "$ANALYTICS" = true ]; then
+    echo "Analytics panel: http://localhost:5174"
+    echo "Admin key: $ROOT/.dev/admin-key"
+fi
 echo "Development mode: review enrollments are stored as provisional templates."
 if [ "$NATIVE_SHADOW" = true ]; then
     echo "Native biometric shadow: active; Python remains authoritative."
