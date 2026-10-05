@@ -13,7 +13,7 @@ if [ -n "${FACEPROOF_ANALYTICS_DATABASE_URL:-}" ]; then
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker not found. Install Docker or set FACEPROOF_ANALYTICS_DATABASE_URL." >&2
+    echo "Docker not found. Run ./scripts/setup-analytics-postgres-native.sh or set FACEPROOF_ANALYTICS_DATABASE_URL." >&2
     return 1 2>/dev/null || exit 1
 fi
 
