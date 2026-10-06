@@ -258,6 +258,39 @@ textarea {
     cursor: default;
 }
 
+.button-compact {
+    padding: 7px 10px;
+    font-size: 12px;
+}
+
+.edit-dialog {
+    width: min(560px, calc(100% - 28px));
+}
+
+.edit-check-body {
+    display: grid;
+    gap: 14px;
+    padding: 20px 22px 24px;
+}
+
+.edit-check-body label {
+    display: grid;
+    gap: 7px;
+}
+
+.edit-check-body label > span {
+    color: #a8b5c6;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.edit-check-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
 .icon-button {
     width: 38px;
     height: 38px;
