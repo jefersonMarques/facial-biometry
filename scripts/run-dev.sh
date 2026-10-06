@@ -88,7 +88,7 @@ export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/mi
 if [ "$NATIVE_CORE" = true ]; then
     NATIVE_CORE_MANIFEST="$ROOT/.dev/biometric-core.json"
     if [ ! -f "$NATIVE_CORE_MANIFEST" ]; then
-        echo "FaceProof Secure Core not prepared. Run scripts/build-biometric-core.sh first." >&2
+        echo "FaceProof Secure Core not prepared. Run: bash scripts/build-biometric-core.sh" >&2
         exit 1
     fi
 
