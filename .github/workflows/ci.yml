@@ -27,7 +27,7 @@ jobs:
         run: go test ./...
       - name: Validate Linux development scripts
         run: |
-          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh scripts/build-biometric-shadow.sh scripts/start-analytics-postgres.sh scripts/setup-analytics-postgres-native.sh
+          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh scripts/build-biometric-shadow.sh scripts/build-biometric-core.sh scripts/start-analytics-postgres.sh scripts/setup-analytics-postgres-native.sh
 
   python:
     runs-on: ubuntu-latest
@@ -119,6 +119,204 @@ jobs:
           -DOpenCV_DIR=${{ github.workspace }}/build/opencv-4.14.0/install/lib/cmake/opencv4
       - name: Build OpenCV biometric secure core
         run: cmake --build build/biometric-vision --config Release
+      - name: Verify production Secure Core shared library
+        run: |
+          test -s build/biometric-vision/libfaceproof_core.so
+          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_create      - name: Compare Python and C++ vision pipeline
+        env:
+          PYTHONPATH: services/engine
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib:${{ github.workspace }}/build/onnxruntime-1.30.0/lib
+          FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
+          FACEPROOF_BIOMETRIC_REFERENCE_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_reference_cli
+          FACEPROOF_BIOMETRIC_PAD_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_pad_cli
+          FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
+          FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
+          FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
+          FACEPROOF_MINIFAS_MODEL: ${{ github.workspace }}/models/minifasnet/MiniFASNetV2.onnx
+        run: >
+          python -m unittest discover
+          -s services/engine/tests
+          -p 'test_biometric_*_parity.py'
+          -v
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: "6.0.10"
+          actions-cache-folder: emsdk-cache
+      - name: Build and publish WASM liveness core
+        run: bash scripts/build-liveness-wasm.sh
+      - name: Verify WASM artifacts
+        run: |
+          test -s build/liveness-wasm/faceproof-liveness-core.js
+          test -s build/liveness-wasm/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.js
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json
+          grep -q "HEAPF64" build/liveness-wasm/faceproof-liveness-core.js
+          python -c 'import json; d=json.load(open("apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json")); assert d["version"]=="0.1.0"; assert any(x["path"]=="faceproof-liveness-core.wasm" and len(x["sha256"])==64 for x in d["files"])'
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web SDK dependencies
+        working-directory: apps/web-sdk
+        run: npm install
+      - name: Verify pinned MediaPipe package
+        run: |
+          python scripts/vendor-mediapipe.py --verify-lock
+          python scripts/vendor-mediapipe.py --verify-package
+          ! grep -R -E "cdn\.jsdelivr\.net|storage\.googleapis\.com/mediapipe-models" apps/web-sdk/src apps/web-sdk/dist
+      - name: Typecheck web SDK
+        working-directory: apps/web-sdk
+        run: npm run typecheck
+      - name: Build web SDK
+        working-directory: apps/web-sdk
+        run: npm run build
+      - name: Test web capture core
+        working-directory: apps/web-sdk
+        run: node --test tests/liveness-v2.test.mjs tests/local-capture-gate.test.mjs tests/capture-lifecycle.test.mjs
+      - name: Verify committed web bundle
+        run: git diff --exit-code -- apps/web-sdk/dist
+
+          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_analyze_identity      - name: Compare Python and C++ vision pipeline
+        env:
+          PYTHONPATH: services/engine
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib:${{ github.workspace }}/build/onnxruntime-1.30.0/lib
+          FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
+          FACEPROOF_BIOMETRIC_REFERENCE_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_reference_cli
+          FACEPROOF_BIOMETRIC_PAD_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_pad_cli
+          FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
+          FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
+          FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
+          FACEPROOF_MINIFAS_MODEL: ${{ github.workspace }}/models/minifasnet/MiniFASNetV2.onnx
+        run: >
+          python -m unittest discover
+          -s services/engine/tests
+          -p 'test_biometric_*_parity.py'
+          -v
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: "6.0.10"
+          actions-cache-folder: emsdk-cache
+      - name: Build and publish WASM liveness core
+        run: bash scripts/build-liveness-wasm.sh
+      - name: Verify WASM artifacts
+        run: |
+          test -s build/liveness-wasm/faceproof-liveness-core.js
+          test -s build/liveness-wasm/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.js
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json
+          grep -q "HEAPF64" build/liveness-wasm/faceproof-liveness-core.js
+          python -c 'import json; d=json.load(open("apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json")); assert d["version"]=="0.1.0"; assert any(x["path"]=="faceproof-liveness-core.wasm" and len(x["sha256"])==64 for x in d["files"])'
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web SDK dependencies
+        working-directory: apps/web-sdk
+        run: npm install
+      - name: Verify pinned MediaPipe package
+        run: |
+          python scripts/vendor-mediapipe.py --verify-lock
+          python scripts/vendor-mediapipe.py --verify-package
+          ! grep -R -E "cdn\.jsdelivr\.net|storage\.googleapis\.com/mediapipe-models" apps/web-sdk/src apps/web-sdk/dist
+      - name: Typecheck web SDK
+        working-directory: apps/web-sdk
+        run: npm run typecheck
+      - name: Build web SDK
+        working-directory: apps/web-sdk
+        run: npm run build
+      - name: Test web capture core
+        working-directory: apps/web-sdk
+        run: node --test tests/liveness-v2.test.mjs tests/local-capture-gate.test.mjs tests/capture-lifecycle.test.mjs
+      - name: Verify committed web bundle
+        run: git diff --exit-code -- apps/web-sdk/dist
+
+          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_reference_jpeg      - name: Compare Python and C++ vision pipeline
+        env:
+          PYTHONPATH: services/engine
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib:${{ github.workspace }}/build/onnxruntime-1.30.0/lib
+          FACEPROOF_BIOMETRIC_VISION_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_vision_cli
+          FACEPROOF_BIOMETRIC_REFERENCE_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_reference_cli
+          FACEPROOF_BIOMETRIC_PAD_CLI: ${{ github.workspace }}/build/biometric-vision/faceproof_biometric_pad_cli
+          FACEPROOF_BIOMETRIC_PARITY_IMAGE: ${{ github.workspace }}/build/biometric-parity/astronaut.png
+          FACEPROOF_YUNET_MODEL: ${{ github.workspace }}/models/yunet/face_detection_yunet_2023mar.onnx
+          FACEPROOF_SFACE_MODEL: ${{ github.workspace }}/models/sface/face_recognition_sface_2021dec.onnx
+          FACEPROOF_MINIFAS_MODEL: ${{ github.workspace }}/models/minifasnet/MiniFASNetV2.onnx
+        run: >
+          python -m unittest discover
+          -s services/engine/tests
+          -p 'test_biometric_*_parity.py'
+          -v
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: "6.0.10"
+          actions-cache-folder: emsdk-cache
+      - name: Build and publish WASM liveness core
+        run: bash scripts/build-liveness-wasm.sh
+      - name: Verify WASM artifacts
+        run: |
+          test -s build/liveness-wasm/faceproof-liveness-core.js
+          test -s build/liveness-wasm/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.js
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.wasm
+          test -s apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json
+          grep -q "HEAPF64" build/liveness-wasm/faceproof-liveness-core.js
+          python -c 'import json; d=json.load(open("apps/web-sdk/wasm/liveness-core/faceproof-liveness-core.manifest.json")); assert d["version"]=="0.1.0"; assert any(x["path"]=="faceproof-liveness-core.wasm" and len(x["sha256"])==64 for x in d["files"])'
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web SDK dependencies
+        working-directory: apps/web-sdk
+        run: npm install
+      - name: Verify pinned MediaPipe package
+        run: |
+          python scripts/vendor-mediapipe.py --verify-lock
+          python scripts/vendor-mediapipe.py --verify-package
+          ! grep -R -E "cdn\.jsdelivr\.net|storage\.googleapis\.com/mediapipe-models" apps/web-sdk/src apps/web-sdk/dist
+      - name: Typecheck web SDK
+        working-directory: apps/web-sdk
+        run: npm run typecheck
+      - name: Build web SDK
+        working-directory: apps/web-sdk
+        run: npm run build
+      - name: Test web capture core
+        working-directory: apps/web-sdk
+        run: node --test tests/liveness-v2.test.mjs tests/local-capture-gate.test.mjs tests/capture-lifecycle.test.mjs
+      - name: Verify committed web bundle
+        run: git diff --exit-code -- apps/web-sdk/dist
+
       - name: Compare Python and C++ vision pipeline
         env:
           PYTHONPATH: services/engine
