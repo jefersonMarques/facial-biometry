@@ -21,8 +21,9 @@ var allowedAnalyticsScenarios = map[string]bool{
 	"genuine_live":  true,
 	"impostor_live": true,
 	"printed_photo": true,
-	"screen_photo":  true,
-	"replay_video":  true,
+	"screen_photo":      true,
+	"replay_video":      true,
+	"remote_live_video": true,
 }
 
 var allowedExpectedDecisions = map[string]bool{
@@ -54,7 +55,7 @@ func normalizeExpectedDecision(value, scenario string) (string, bool) {
 		switch scenario {
 		case "genuine_live":
 			value = "approved"
-		case "impostor_live", "printed_photo", "screen_photo", "replay_video":
+		case "impostor_live", "printed_photo", "screen_photo", "replay_video", "remote_live_video":
 			value = "rejected"
 		}
 	}
