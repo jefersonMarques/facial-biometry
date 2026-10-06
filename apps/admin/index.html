@@ -79,6 +79,7 @@
                                 <option value="printed_photo">Foto impressa</option>
                                 <option value="screen_photo">Foto em tela</option>
                                 <option value="replay_video">Replay de vídeo</option>
+                                <option value="remote_live_video">Vídeo remoto ao vivo</option>
                                 <option value="unknown">Sem classificação</option>
                             </select>
                         </label>
@@ -169,6 +170,7 @@
                                 <option value="printed_photo">Foto impressa</option>
                                 <option value="screen_photo">Foto em tela</option>
                                 <option value="replay_video">Replay de vídeo</option>
+                                <option value="remote_live_video">Vídeo remoto ao vivo</option>
                             </select>
                             <select id="statusFilter">
                                 <option value="">Todos os status</option>
@@ -198,6 +200,7 @@
                                     <th>Liveness</th>
                                     <th>Quality</th>
                                     <th>C++</th>
+                                    <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="checkRows"></tbody>
@@ -207,6 +210,52 @@
             </div>
         </main>
     </div>
+
+    <dialog id="editCheckDialog" class="edit-dialog">
+        <form id="editCheckForm">
+            <div class="dialog-header">
+                <div>
+                    <span class="eyebrow">CORRIGIR EXECUÇÃO</span>
+                    <h2 id="editCheckTitle">Editar verificação</h2>
+                </div>
+                <button id="closeEditCheck" type="button" class="icon-button" aria-label="Fechar">×</button>
+            </div>
+            <div class="edit-check-body">
+                <label>
+                    <span>Cenário</span>
+                    <select id="editCheckScenario" required>
+                        <option value="unknown">Sem classificação</option>
+                        <option value="genuine_live">Genuine live</option>
+                        <option value="impostor_live">Impostor live</option>
+                        <option value="printed_photo">Foto impressa</option>
+                        <option value="screen_photo">Foto em tela</option>
+                        <option value="replay_video">Replay de vídeo</option>
+                        <option value="remote_live_video">Vídeo remoto ao vivo</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Campanha</span>
+                    <select id="editCheckCampaign">
+                        <option value="">Sem campanha</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Resultado esperado</span>
+                    <select id="editCheckExpectedDecision">
+                        <option value="">Automático pelo cenário</option>
+                        <option value="approved">Aprovado</option>
+                        <option value="review">Review</option>
+                        <option value="rejected">Rejeitado</option>
+                    </select>
+                </label>
+                <p class="muted">A correção altera somente a classificação administrativa do teste. O resultado biométrico original não é modificado.</p>
+                <div class="edit-check-actions">
+                    <button id="cancelEditCheck" type="button" class="button button-secondary">Cancelar</button>
+                    <button id="saveEditCheck" type="submit" class="button button-primary">Salvar correção</button>
+                </div>
+            </div>
+        </form>
+    </dialog>
 
     <dialog id="detailDialog">
         <div class="dialog-header">
