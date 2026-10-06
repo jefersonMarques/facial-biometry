@@ -23,16 +23,16 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - Scripts PowerShell de desenvolvimento removidos.
    - Produção alvo: Linux x86_64.
 
-3. ⏳ **C++ como autoridade biométrica**
+3. ✅ **C++ como autoridade biométrica**
    - ✅ Go pode encaminhar reference, guide e identity analyze ao Secure Core nativo.
    - ✅ Modo explícito `--native-core` criado.
    - ✅ API falha no startup se o Secure Core configurado não puder ser carregado.
    - ✅ Analytics/UI distinguem C++ authority como `AUTH`.
    - ✅ Startup Linux validado com `--native-core`: API configurada para FaceProof Secure Core C++ authority.
-   - ⏳ Validar uma captura real completa com C++ como autoridade.
+   - ✅ Captura real validada com C++ como autoridade.
    - Python permanece temporariamente como fallback/referência até o item 6.
 
-4. ⏳ **Secure Core como biblioteca nativa persistente**
+4. ✅ **Secure Core como biblioteca nativa persistente**
    - ✅ `libfaceproof_core.so` criada e compilando no CI Linux.
    - ✅ Build local Linux validado em WSL com OpenCV 4.14.0, ONNX Runtime 1.30.0, ABI 1 e Secure Core 0.2.0.
    - ✅ ABI C v1 pequena e versionada.
@@ -42,7 +42,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Manifesto local contém versão, ABI e SHA-256 da biblioteca.
    - ✅ Go usa `dlopen`/`dlsym`; nenhum spawn de CLI por captura.
    - ✅ Integração Go → `.so` validada no startup real: ABI/modelos carregados sem fallback.
-   - ⏳ Validar execução biométrica completa Go → `.so`.
+   - ✅ Execução biométrica real validada pelo caminho Go → `.so`.
 
 5. ⏳ **Unificar pipeline biométrico no Secure Core**
    - ✅ Orquestração multi-frame portada para C++.
@@ -50,9 +50,14 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Seleção dos 3 melhores frames próximos e embedding combinado no C++.
    - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
-6. ⬜ **Retirar Python do runtime**
-   - Sem `engine_server.py`, venv, NumPy, OpenCV Python ou ONNX Runtime Python no runtime normal.
-   - Python somente em testes, validação e R&D.
+6. ⏳ **Retirar Python do runtime**
+   - ✅ Secure Core C++ é o runtime padrão do `run-dev.sh`.
+   - ✅ `--python-engine` virou fallback explícito de desenvolvimento/R&D.
+   - ✅ Em modo nativo, não são criados/atualizados venv nem instalados NumPy/OpenCV Python/ONNX Runtime Python.
+   - ✅ Em modo nativo, `engine_server.py` não é iniciado e a porta 8090 não é reservada.
+   - ✅ Endpoints biométricos legados dependentes do Python ficam desabilitados no modo de produção.
+   - ⏳ Validar startup e uma biometria completa sem processo Python.
+   - Python permanece apenas em testes, validação e R&D.
 
 7. ⬜ **FaceProof Model Pack**
    - Manifesto versionado.
