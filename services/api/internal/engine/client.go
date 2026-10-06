@@ -17,8 +17,9 @@ import (
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL        string
+	httpClient     *http.Client
+	nativeIdentity *NativeClient
 }
 
 func NewClient(baseURL string) *Client {
@@ -28,7 +29,34 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
+func (client *Client) EnableNativeIdentity(configuration NativeConfig) error {
+	nativeClient, err := NewNativeClient(configuration)
+	if err != nil {
+		return err
+	}
+	if client.nativeIdentity != nil {
+		_ = client.nativeIdentity.Close()
+	}
+	client.nativeIdentity = nativeClient
+	return nil
+}
+
+func (client *Client) NativeIdentityEnabled() bool {
+	return client != nil && client.nativeIdentity != nil
+}
+
+func (client *Client) Close() error {
+	if client == nil || client.nativeIdentity == nil {
+		return nil
+	}
+	return client.nativeIdentity.Close()
+}
+
 func (client *Client) AnalyzeIdentity(ctx context.Context, request domain.EngineIdentityRequest) (domain.EngineResult, error) {
+	if client.nativeIdentity != nil {
+		return client.nativeIdentity.AnalyzeIdentity(ctx, request)
+	}
+
 	var result domain.EngineResult
 
 	hasBinary := false
@@ -66,6 +94,10 @@ func (client *Client) Analyze(ctx context.Context, request domain.EngineRequest)
 }
 
 func (client *Client) Guide(ctx context.Context, imageBase64 string) (domain.EngineGuideResult, error) {
+	if client.nativeIdentity != nil {
+		return client.nativeIdentity.Guide(ctx, imageBase64)
+	}
+
 	var result domain.EngineGuideResult
 	if err := client.postJSON(ctx, "/guide", map[string]string{"imageBase64": imageBase64}, &result); err != nil {
 		return domain.EngineGuideResult{}, err
@@ -74,6 +106,10 @@ func (client *Client) Guide(ctx context.Context, imageBase64 string) (domain.Eng
 }
 
 func (client *Client) ExtractReference(ctx context.Context, imageBase64 string) (domain.ReferenceResult, error) {
+	if client.nativeIdentity != nil {
+		return client.nativeIdentity.ExtractReference(ctx, imageBase64)
+	}
+
 	var result domain.ReferenceResult
 	if err := client.postJSON(ctx, "/reference", map[string]string{"imageBase64": imageBase64}, &result); err != nil {
 		return domain.ReferenceResult{}, err
