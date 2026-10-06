@@ -201,7 +201,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"unsafe"
@@ -209,7 +208,13 @@ import (
 	"faceproof/services/api/internal/domain"
 )
 
-const secureCoreABIVersion = 1
+const (
+	secureCoreABIVersion          = 1
+	secureCoreEmbeddingCapacity   = 512
+	secureCoreMaxSelectedFrames   = 3
+	secureCorePhaseFar            = 0
+	secureCorePhaseNear           = 1
+)
 
 type NativeClient struct {
 	api       *C.FPDynCore
@@ -369,7 +374,7 @@ func (client *NativeClient) AnalyzeIdentity(
 
 	embeddingSize := int(nativeResult.embedding_size)
 	if embeddingSize <= 0 ||
-		embeddingSize > int(C.FP_SECURE_CORE_EMBEDDING_CAPACITY) {
+		embeddingSize > secureCoreEmbeddingCapacity {
 		return domain.EngineResult{}, errors.New("Secure Core returned invalid embedding size")
 	}
 
@@ -380,7 +385,7 @@ func (client *NativeClient) AnalyzeIdentity(
 
 	selectedCount := int(nativeResult.selected_embedding_count)
 	if selectedCount < 0 ||
-		selectedCount > int(C.FP_SECURE_CORE_MAX_SELECTED_FRAMES) {
+		selectedCount > secureCoreMaxSelectedFrames {
 		return domain.EngineResult{}, errors.New(
 			"Secure Core returned invalid selected embedding count",
 		)
@@ -391,7 +396,7 @@ func (client *NativeClient) AnalyzeIdentity(
 		selected := nativeResult.selected_embeddings[index]
 		size := int(selected.embedding_size)
 		if size <= 0 ||
-			size > int(C.FP_SECURE_CORE_EMBEDDING_CAPACITY) {
+			size > secureCoreEmbeddingCapacity {
 			return domain.EngineResult{}, errors.New(
 				"Secure Core returned invalid selected embedding size",
 			)
@@ -497,9 +502,9 @@ func (client *NativeClient) ExtractReference(
 	embeddingSize := int(nativeResult.embedding_size)
 	variantCount := int(nativeResult.variant_count)
 	if embeddingSize <= 0 ||
-		embeddingSize > int(C.FP_SECURE_CORE_EMBEDDING_CAPACITY) ||
+		embeddingSize > secureCoreEmbeddingCapacity ||
 		variantCount <= 0 ||
-		variantCount > int(C.FP_SECURE_CORE_MAX_SELECTED_FRAMES) {
+		variantCount > secureCoreMaxSelectedFrames {
 		return domain.ReferenceResult{}, errors.New(
 			"Secure Core returned invalid reference embedding dimensions",
 		)
@@ -612,9 +617,9 @@ func (client *NativeClient) nativeError(operation string, code int) error {
 func nativePhase(value string) (int, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "far":
-		return int(C.FP_SECURE_PHASE_FAR), nil
+		return secureCorePhaseFar, nil
 	case "near":
-		return int(C.FP_SECURE_PHASE_NEAR), nil
+		return secureCorePhaseNear, nil
 	default:
 		return 0, fmt.Errorf("invalid guided frame phase %q", value)
 	}
@@ -622,9 +627,9 @@ func nativePhase(value string) (int, error) {
 
 func phaseName(value int) string {
 	switch value {
-	case int(C.FP_SECURE_PHASE_FAR):
+	case secureCorePhaseFar:
 		return "far"
-	case int(C.FP_SECURE_PHASE_NEAR):
+	case secureCorePhaseNear:
 		return "near"
 	default:
 		return "unknown"
@@ -685,8 +690,4 @@ func nativeDiagnostics(
 		diagnostics = append(diagnostics, "temporal motion signal is weak")
 	}
 	return diagnostics
-}
-
-func finite(value float64) bool {
-	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
