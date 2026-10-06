@@ -18,9 +18,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - WASM SHA-256: `b14f9269139f0c24248d44eaec2b0c47ea2e2888653593b06558fbbb6d24b935`
    - Baseline de validação em 06/10/2026: 9 verificações concluídas, 9 Secure Core `ok`, 0 `partial`, 0 `drift`.
 
-2. ⏳ **Linux como única plataforma de servidor**
-   - Remover Windows do CI.
-   - Remover scripts PowerShell de desenvolvimento.
+2. ✅ **Linux como única plataforma de servidor**
+   - Windows removido do CI.
+   - Scripts PowerShell de desenvolvimento removidos.
    - Produção alvo: Linux x86_64.
 
 3. ⏳ **C++ como autoridade biométrica**
