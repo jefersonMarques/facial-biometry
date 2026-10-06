@@ -189,9 +189,13 @@ After Cloudflare prints the public `https://....trycloudflare.com` URL, create a
 
 ```bash
 ./scripts/create-identity-check.sh \
-  --cpf "CPF_DA_CNH" \
-  --minimum-document-date "2026-01-01" \
-  --public-base-url "https://YOUR-SUBDOMAIN.trycloudflare.com"
+  "CPF_DA_CNH" \
+  "2026-01-01" \
+  60 \
+  "" \
+  genuine_live \
+  approved \
+  "https://YOUR-SUBDOMAIN.trycloudflare.com"
 ```
 
 Do not tunnel only a plain static file server. The public origin must reach the FaceProof gateway so that `/v1/*` returns the API JSON responses.
