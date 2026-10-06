@@ -28,6 +28,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Modo explícito `--native-core` criado.
    - ✅ API falha no startup se o Secure Core configurado não puder ser carregado.
    - ✅ Analytics/UI distinguem C++ authority como `AUTH`.
+   - ✅ Startup Linux validado com `--native-core`: API configurada para FaceProof Secure Core C++ authority.
    - ⏳ Validar uma captura real completa com C++ como autoridade.
    - Python permanece temporariamente como fallback/referência até o item 6.
 
@@ -40,7 +41,8 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Build Linux dedicado em `scripts/build-biometric-core.sh`.
    - ✅ Manifesto local contém versão, ABI e SHA-256 da biblioteca.
    - ✅ Go usa `dlopen`/`dlsym`; nenhum spawn de CLI por captura.
-   - ⏳ Validar integração Go → .so no runtime real.
+   - ✅ Integração Go → `.so` validada no startup real: ABI/modelos carregados sem fallback.
+   - ⏳ Validar execução biométrica completa Go → `.so`.
 
 5. ⏳ **Unificar pipeline biométrico no Secure Core**
    - ✅ Orquestração multi-frame portada para C++.
