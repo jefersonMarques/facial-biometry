@@ -24,18 +24,28 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - Produção alvo: Linux x86_64.
 
 3. ⏳ **C++ como autoridade biométrica**
-   - Python deixa de decidir o fluxo de identidade.
-   - O resultado usado pelo Go deve vir do Secure Core C++.
-   - Python permanece temporariamente como referência/shadow.
+   - ✅ Go pode encaminhar reference, guide e identity analyze ao Secure Core nativo.
+   - ✅ Modo explícito `--native-core` criado.
+   - ✅ API falha no startup se o Secure Core configurado não puder ser carregado.
+   - ✅ Analytics/UI distinguem C++ authority como `AUTH`.
+   - ⏳ Validar uma captura real completa com C++ como autoridade.
+   - Python permanece temporariamente como fallback/referência até o item 6.
 
 4. ⏳ **Secure Core como biblioteca nativa persistente**
-   - Produzir `libfaceproof_core.so`.
-   - ABI C pequena, versionada e estável.
-   - Contexto carrega YuNet, SFace e MiniFASNet uma única vez.
-   - Go deve consumir a biblioteca sem spawn de CLI por captura.
+   - ✅ `libfaceproof_core.so` criada e compilando no CI Linux.
+   - ✅ ABI C v1 pequena e versionada.
+   - ✅ Secure Core v0.2.0.
+   - ✅ Contexto persistente carrega YuNet, SFace e MiniFASNet uma única vez.
+   - ✅ Build Linux dedicado em `scripts/build-biometric-core.sh`.
+   - ✅ Manifesto local contém versão, ABI e SHA-256 da biblioteca.
+   - ✅ Go usa `dlopen`/`dlsym`; nenhum spawn de CLI por captura.
+   - ⏳ Validar integração Go → .so no runtime real.
 
-5. ⬜ **Unificar pipeline biométrico no Secure Core**
-   - YuNet → quality → PAD → SFace → embeddings → fusion → scoring.
+5. ⏳ **Unificar pipeline biométrico no Secure Core**
+   - ✅ Orquestração multi-frame portada para C++.
+   - ✅ YuNet → quality → PAD → SFace → embeddings → fusion → scoring no Secure Core.
+   - ✅ Seleção dos 3 melhores frames próximos e embedding combinado no C++.
+   - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
 6. ⬜ **Retirar Python do runtime**
    - Sem `engine_server.py`, venv, NumPy, OpenCV Python ou ONNX Runtime Python no runtime normal.
