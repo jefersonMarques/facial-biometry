@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"faceproof/services/api/internal/analytics"
+	"faceproof/services/api/internal/identity"
 	"faceproof/services/api/internal/security"
 )
 
@@ -27,6 +28,12 @@ type createAdminIdentityCheckRequest struct {
 	Scenario            string `json:"scenario,omitempty"`
 	ExpectedDecision    string `json:"expectedDecision,omitempty"`
 	PublicBaseURL       string `json:"publicBaseUrl,omitempty"`
+}
+
+type updateAdminIdentityCheckRequest struct {
+	CampaignID       string `json:"campaignId,omitempty"`
+	Scenario         string `json:"scenario"`
+	ExpectedDecision string `json:"expectedDecision,omitempty"`
 }
 
 type adminReport struct {
@@ -92,9 +99,17 @@ func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Re
 		if len(segments) == 4 &&
 			segments[0] == "v1" &&
 			segments[1] == "admin" &&
-			segments[2] == "checks" &&
-			request.Method == http.MethodGet {
-			handler.getAdminCheck(writer, request, segments[3])
+			segments[2] == "checks" {
+			switch request.Method {
+			case http.MethodGet:
+				handler.getAdminCheck(writer, request, segments[3])
+				break
+			case http.MethodPatch:
+				handler.updateAdminCheck(writer, request, segments[3])
+				break
+			default:
+				handler.writeError(writer, http.StatusMethodNotAllowed, "admin method not allowed")
+			}
 			break
 		}
 		handler.writeError(writer, http.StatusNotFound, "admin route not found")
@@ -130,6 +145,12 @@ func (handler *Handler) reconcileAdminAnalytics(request *http.Request) {
 	if handler.analytics == nil || handler.identityChecks == nil {
 		return
 	}
+
+	metricsContext, cancelMetrics := analyticsOperationContext(request.Context())
+	if err := handler.analytics.BackfillEngineMetrics(metricsContext); err != nil {
+		handler.logAnalyticsError("backfill engine metrics", err)
+	}
+	cancelMetrics()
 
 	states, err := handler.analytics.ListOpenCheckStates(request.Context(), 100)
 	if err != nil {
@@ -436,6 +457,103 @@ func (handler *Handler) getAdminCheck(
 	}
 	if err != nil {
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load analytics check")
+		return
+	}
+	item := detail.CheckListItem
+	handler.applyAuthoritativeCheckItem(&item)
+	detail.CheckListItem = item
+	handler.writeJSON(writer, http.StatusOK, detail)
+}
+
+func (handler *Handler) updateAdminCheck(
+	writer http.ResponseWriter,
+	request *http.Request,
+	checkID string,
+) {
+	if handler.identityChecks == nil {
+		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
+		return
+	}
+
+	var payload updateAdminIdentityCheckRequest
+	if err := decodeJSON(request, &payload, 1<<20); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	scenario, ok := normalizeAnalyticsScenario(payload.Scenario)
+	if !ok {
+		handler.writeError(writer, http.StatusBadRequest, "invalid scenario")
+		return
+	}
+	expectedDecision, ok := normalizeExpectedDecision(payload.ExpectedDecision, scenario)
+	if !ok {
+		handler.writeError(writer, http.StatusBadRequest, "invalid expected decision")
+		return
+	}
+	campaignID := strings.TrimSpace(payload.CampaignID)
+	exists, err := handler.analyticsCampaignExists(request.Context(), campaignID)
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to validate campaign")
+		return
+	}
+	if !exists {
+		handler.writeError(writer, http.StatusBadRequest, "campaign does not exist")
+		return
+	}
+
+	before, err := handler.identityChecks.LoadByID(checkID)
+	if errors.Is(err, identity.ErrNotFound) {
+		handler.writeError(writer, http.StatusNotFound, "identity check not found")
+		return
+	}
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to load identity check")
+		return
+	}
+
+	updated, err := handler.identityChecks.UpdateByID(checkID, func(check *identity.Check) error {
+		check.CampaignID = campaignID
+		check.Scenario = scenario
+		check.ExpectedDecision = expectedDecision
+		return nil
+	})
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to update identity check")
+		return
+	}
+
+	operationContext, cancel := analyticsOperationContext(request.Context())
+	err = handler.analytics.UpdateCheckClassification(
+		operationContext,
+		checkID,
+		campaignID,
+		scenario,
+		expectedDecision,
+	)
+	cancel()
+	if err != nil {
+		handler.logAnalyticsError("update check classification", err)
+		handler.writeError(writer, http.StatusInternalServerError, "failed to update analytics classification")
+		return
+	}
+
+	handler.recordAnalyticsEvent(request.Context(), checkID, "admin_classification_updated", map[string]any{
+		"before": map[string]any{
+			"campaignId":       before.CampaignID,
+			"scenario":         before.Scenario,
+			"expectedDecision": before.ExpectedDecision,
+		},
+		"after": map[string]any{
+			"campaignId":       updated.CampaignID,
+			"scenario":         updated.Scenario,
+			"expectedDecision": updated.ExpectedDecision,
+		},
+	})
+
+	detail, err := handler.analytics.GetCheck(request.Context(), checkID)
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "failed to reload updated check")
 		return
 	}
 	item := detail.CheckListItem
