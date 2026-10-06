@@ -84,6 +84,21 @@ func main() {
 	}
 
 	engineClient := engine.NewClient(configuration.EngineURL)
+	if configuration.SecureCoreLibrary != "" {
+		if err := engineClient.EnableNativeIdentity(engine.NativeConfig{
+			LibraryPath:    configuration.SecureCoreLibrary,
+			YUNetModelPath: configuration.YUNetModelPath,
+			SFaceModelPath: configuration.SFaceModelPath,
+			MiniFASNetPath: configuration.MiniFASNetModelPath,
+		}); err != nil {
+			log.Fatalf("FaceProof Secure Core could not start: %v", err)
+		}
+		defer engineClient.Close()
+		log.Printf("FaceProof Secure Core C++ authority enabled")
+	} else {
+		log.Printf("FaceProof identity engine: Python authority (development fallback)")
+	}
+
 	handler := httpapi.NewHandler(
 		configuration,
 		session.NewStore(),
