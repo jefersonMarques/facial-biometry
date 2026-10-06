@@ -836,6 +836,72 @@ func (repository *Repository) ListOpenCheckStates(
 	return states, rows.Err()
 }
 
+func (repository *Repository) BackfillEngineMetrics(ctx context.Context) error {
+	_, err := repository.db.ExecContext(
+		ctx,
+		`WITH latest_engine AS (
+		    SELECT DISTINCT ON (check_id)
+		        check_id,
+		        NULLIF(payload->>'passivePad', '')::DOUBLE PRECISION AS passive_pad_score,
+		        NULLIF(payload->>'quality', '')::DOUBLE PRECISION AS quality_score,
+		        NULLIF(payload->>'nativeShadow', '') AS native_status
+		    FROM faceproof_events
+		    WHERE event_type = 'engine_completed'
+		    ORDER BY check_id, occurred_at DESC, id DESC
+		)
+		UPDATE faceproof_checks c
+		SET passive_pad_score = COALESCE(c.passive_pad_score, e.passive_pad_score),
+		    quality_score = COALESCE(c.quality_score, e.quality_score),
+		    native_shadow = CASE
+		        WHEN c.native_shadow IS NULL AND e.native_status IS NOT NULL
+		            THEN jsonb_build_object('status', e.native_status)
+		        ELSE c.native_shadow
+		    END,
+		    updated_at = NOW()
+		FROM latest_engine e
+		WHERE c.check_id = e.check_id
+		  AND (
+		      c.passive_pad_score IS NULL
+		      OR c.quality_score IS NULL
+		      OR (c.native_shadow IS NULL AND e.native_status IS NOT NULL)
+		  )`,
+	)
+	return err
+}
+
+func (repository *Repository) UpdateCheckClassification(
+	ctx context.Context,
+	checkID string,
+	campaignID string,
+	scenario string,
+	expectedDecision string,
+) error {
+	result, err := repository.db.ExecContext(
+		ctx,
+		`UPDATE faceproof_checks
+		 SET campaign_id = NULLIF($2, ''),
+		     scenario = $3,
+		     expected_decision = $4,
+		     updated_at = NOW()
+		 WHERE check_id = $1`,
+		checkID,
+		strings.TrimSpace(campaignID),
+		scenario,
+		expectedDecision,
+	)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (repository *Repository) RecordAuthoritativeState(
 	ctx context.Context,
 	checkID string,
