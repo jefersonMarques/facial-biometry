@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 7 ]; then
     echo "Usage: $0 <CPF> <YYYY-MM-DD> [expires-in-minutes] [campaign-id] [scenario] [expected-decision] [public-base-url]"
-    echo "Scenarios: unknown, genuine_live, impostor_live, printed_photo, screen_photo, replay_video"
+    echo "Scenarios: unknown, genuine_live, impostor_live, printed_photo, screen_photo, replay_video, remote_live_video"
     exit 2
 fi
 
