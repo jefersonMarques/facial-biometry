@@ -5,22 +5,30 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 NATIVE_SHADOW=false
-NATIVE_CORE=false
+NATIVE_CORE=true
+PYTHON_ENGINE=false
 ANALYTICS=false
 for argument in "$@"; do
     case "$argument" in
         --native-shadow)
             NATIVE_SHADOW=true
+            NATIVE_CORE=false
+            PYTHON_ENGINE=true
             ;;
         --native-core)
             NATIVE_CORE=true
+            PYTHON_ENGINE=false
+            ;;
+        --python-engine)
+            NATIVE_CORE=false
+            PYTHON_ENGINE=true
             ;;
         --analytics)
             ANALYTICS=true
             ;;
         *)
             echo "Unknown argument: $argument" >&2
-            echo "Usage: scripts/run-dev.sh [--native-core] [--native-shadow] [--analytics]" >&2
+            echo "Usage: scripts/run-dev.sh [--native-core|--python-engine|--native-shadow] [--analytics]" >&2
             exit 2
             ;;
     esac
@@ -46,11 +54,13 @@ export FACEPROOF_RUNTIME_LIVENESS_CORE_VERSION="$(python3 -c 'import json,sys; p
 export FACEPROOF_RUNTIME_LIVENESS_WASM_SHA256="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print(next(x["sha256"] for x in d["files"] if x["path"]=="faceproof-liveness-core.wasm"))' "$LIVENESS_RUNTIME_MANIFEST")"
 export FACEPROOF_RUNTIME_MEDIAPIPE_VERSION="1.0.1"
 
-if [ ! -d .venv ]; then
-    python3 -m venv .venv
-fi
+if [ "$PYTHON_ENGINE" = true ]; then
+    if [ ! -d .venv ]; then
+        python3 -m venv .venv
+    fi
 
-"$ROOT/.venv/bin/python" -m pip install -r services/engine/requirements.txt
+    "$ROOT/.venv/bin/python" -m pip install -r services/engine/requirements.txt
+fi
 
 mkdir -p "$ROOT/.dev" "$ROOT/data/identity-checks"
 chmod 700 "$ROOT/.dev" "$ROOT/data/identity-checks"
@@ -169,7 +179,10 @@ if ! command -v bpgdec >/dev/null 2>&1 && [ -z "${FACEPROOF_BPGDEC_PATH:-}" ]; t
     echo "INFO: bpgdec not found. CNH identity can still use the signed PDF portrait."
 fi
 
-required_ports=(8090 8180 5173)
+required_ports=(8180 5173)
+if [ "$PYTHON_ENGINE" = true ]; then
+    required_ports+=(8090)
+fi
 if [ "$ANALYTICS" = true ]; then
     required_ports+=(5174)
 fi
@@ -194,11 +207,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-(
-    cd services/engine
-    "$ROOT/.venv/bin/python" engine_server.py
-) &
-ENGINE_PID=$!
+if [ "$PYTHON_ENGINE" = true ]; then
+    (
+        cd services/engine
+        "$ROOT/.venv/bin/python" engine_server.py
+    ) &
+    ENGINE_PID=$!
+fi
 
 (
     cd services/api
@@ -230,9 +245,10 @@ if [ "$ANALYTICS" = true ]; then
 fi
 echo "Development mode: review enrollments are stored as provisional templates."
 if [ "$NATIVE_CORE" = true ]; then
-    echo "Identity authority: FaceProof Secure Core C++"
+    echo "Runtime authority: FaceProof Secure Core C++"
+    echo "Python biometric runtime: DISABLED"
 else
-    echo "Identity authority: Python development fallback"
+    echo "Runtime authority: Python development/R&D engine"
 fi
 if [ "$NATIVE_SHADOW" = true ]; then
     echo "Native biometric shadow: active; Python remains authoritative."
