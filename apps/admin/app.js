@@ -8,6 +8,7 @@ const scenarioLabels = {
     printed_photo: "Foto impressa",
     screen_photo: "Foto em tela",
     replay_video: "Replay de vídeo",
+    remote_live_video: "Vídeo remoto ao vivo",
 };
 
 const statusLabels = {
@@ -58,9 +59,19 @@ const detailDialog = document.getElementById("detailDialog");
 const detailTitle = document.getElementById("detailTitle");
 const detailBody = document.getElementById("detailBody");
 const closeDetail = document.getElementById("closeDetail");
+const editCheckDialog = document.getElementById("editCheckDialog");
+const editCheckForm = document.getElementById("editCheckForm");
+const editCheckTitle = document.getElementById("editCheckTitle");
+const editCheckScenario = document.getElementById("editCheckScenario");
+const editCheckCampaign = document.getElementById("editCheckCampaign");
+const editCheckExpectedDecision = document.getElementById("editCheckExpectedDecision");
+const closeEditCheck = document.getElementById("closeEditCheck");
+const cancelEditCheck = document.getElementById("cancelEditCheck");
+const saveEditCheck = document.getElementById("saveEditCheck");
 
 let adminKey = sessionStorage.getItem(storageKey) ?? "";
 let campaigns = [];
+let editingCheckId = "";
 
 checkPublicBaseUrl.value = localStorage.getItem(publicBaseStorageKey) ?? "";
 
@@ -183,11 +194,38 @@ campaignForm.addEventListener("submit", async (event) => {
 });
 
 checkRows.addEventListener("click", (event) => {
+    const editButton = event.target.closest("[data-edit-check]");
+    if (editButton) {
+        event.stopPropagation();
+        void openEditCheck(editButton.dataset.editCheck);
+        return;
+    }
+
     const row = event.target.closest("tr[data-check-id]");
     if (!row) {
         return;
     }
     void openDetail(row.dataset.checkId);
+});
+
+editCheckScenario.addEventListener("change", () => {
+    editCheckExpectedDecision.value = expectedDecisionForScenario(editCheckScenario.value);
+});
+
+editCheckForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveCheckClassification();
+});
+
+closeEditCheck.addEventListener("click", () => editCheckDialog.close());
+cancelEditCheck.addEventListener("click", () => editCheckDialog.close());
+editCheckDialog.addEventListener("close", () => {
+    editingCheckId = "";
+});
+editCheckDialog.addEventListener("click", (event) => {
+    if (event.target === editCheckDialog) {
+        editCheckDialog.close();
+    }
 });
 
 closeDetail.addEventListener("click", () => detailDialog.close());
@@ -413,11 +451,73 @@ function renderChecks(items) {
                 <td>${nullablePercent(item.livenessScore)}</td>
                 <td>${nullablePercent(item.qualityScore)}</td>
                 <td>${nativeBadge(item.nativeStatus)}</td>
+                <td>
+                    <button
+                        type="button"
+                        class="button button-secondary button-compact"
+                        data-edit-check="${escapeAttribute(item.checkId)}"
+                    >Editar</button>
+                </td>
             </tr>
         `).join("")
-        : '<tr><td colspan="9" class="empty-state">Nenhuma verificação para estes filtros.</td></tr>';
+        : '<tr><td colspan="10" class="empty-state">Nenhuma verificação para estes filtros.</td></tr>';
 }
 
+async function openEditCheck(checkId) {
+    try {
+        const detail = await api(`/v1/admin/checks/${encodeURIComponent(checkId)}`);
+        editingCheckId = checkId;
+        editCheckTitle.textContent = shortID(checkId);
+        editCheckScenario.value = detail.scenario || "unknown";
+        editCheckExpectedDecision.value = detail.expectedDecision || expectedDecisionForScenario(editCheckScenario.value);
+
+        editCheckCampaign.innerHTML = '<option value="">Sem campanha</option>' +
+            campaigns.map((item) =>
+                `<option value="${escapeAttribute(item.id)}">${escapeHtml(item.name)}</option>`
+            ).join("");
+        editCheckCampaign.value = detail.campaignId || "";
+
+        editCheckDialog.showModal();
+    } catch (error) {
+        window.alert(errorMessage(error));
+    }
+}
+
+async function saveCheckClassification() {
+    if (!editingCheckId) {
+        return;
+    }
+
+    saveEditCheck.disabled = true;
+    const originalLabel = saveEditCheck.textContent;
+    saveEditCheck.textContent = "Salvando...";
+
+    try {
+        await api(`/v1/admin/checks/${encodeURIComponent(editingCheckId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+                scenario: editCheckScenario.value,
+                campaignId: editCheckCampaign.value,
+                expectedDecision: editCheckExpectedDecision.value,
+            }),
+        });
+        editCheckDialog.close();
+        await loadDashboard();
+    } catch (error) {
+        window.alert(errorMessage(error));
+    } finally {
+        saveEditCheck.disabled = false;
+        saveEditCheck.textContent = originalLabel;
+    }
+}
+
+function expectedDecisionForScenario(scenario) {
+    return scenario === "genuine_live"
+        ? "approved"
+        : ["impostor_live", "printed_photo", "screen_photo", "replay_video", "remote_live_video"].includes(scenario)
+            ? "rejected"
+            : "";
+}
 async function openDetail(checkId) {
     try {
         const detail = await api(`/v1/admin/checks/${encodeURIComponent(checkId)}`);
