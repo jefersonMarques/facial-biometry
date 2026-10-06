@@ -676,7 +676,7 @@ func (repository *Repository) Summary(ctx context.Context) (DashboardSummary, er
 		    AVG(liveness_score) FILTER (WHERE liveness_score IS NOT NULL),
 		    AVG(passive_pad_score) FILTER (WHERE passive_pad_score IS NOT NULL),
 		    AVG(quality_score) FILTER (WHERE quality_score IS NOT NULL),
-		    COUNT(*) FILTER (WHERE native_shadow->>'status' = 'ok'),
+		    COUNT(*) FILTER (WHERE native_shadow->>'status' IN ('ok', 'authority')),
 		    COUNT(*) FILTER (WHERE native_shadow->>'status' = 'partial'),
 		    COUNT(*) FILTER (WHERE native_shadow->>'status' = 'drift')
 		 FROM faceproof_checks`,
