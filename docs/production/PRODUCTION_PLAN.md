@@ -33,6 +33,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
 
 4. ⏳ **Secure Core como biblioteca nativa persistente**
    - ✅ `libfaceproof_core.so` criada e compilando no CI Linux.
+   - ✅ Build local Linux validado em WSL com OpenCV 4.14.0, ONNX Runtime 1.30.0, ABI 1 e Secure Core 0.2.0.
    - ✅ ABI C v1 pequena e versionada.
    - ✅ Secure Core v0.2.0.
    - ✅ Contexto persistente carrega YuNet, SFace e MiniFASNet uma única vez.
