@@ -658,8 +658,13 @@ function nativeBadge(status) {
     if (!status) {
         return "—";
     }
-    const tone = status === "ok" ? "ok" : status === "drift" ? "drift" : "partial";
-    return `<span class="badge badge-${tone}">${escapeHtml(status.toUpperCase())}</span>`;
+    const tone = status === "ok" || status === "authority"
+        ? "ok"
+        : status === "drift"
+            ? "drift"
+            : "partial";
+    const label = status === "authority" ? "AUTH" : status.toUpperCase();
+    return `<span class="badge badge-${tone}">${escapeHtml(label)}</span>`;
 }
 
 function scenarioLabel(value) {
