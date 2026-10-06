@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(faceproof_biometric_core VERSION 0.1.0 LANGUAGES CXX)
+project(faceproof_biometric_core VERSION 0.2.0 LANGUAGES CXX)
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(FACEPROOF_BIOMETRIC_BUILD_TESTS "Build biometric core tests" ON)
 option(FACEPROOF_BIOMETRIC_BUILD_CLI "Build biometric math CLI" ON)
@@ -133,6 +135,48 @@ if(FACEPROOF_BIOMETRIC_WITH_ONNXRUNTIME)
                 faceproof_biometric_pad
         )
     endif()
+
+    add_library(faceproof_secure_core SHARED
+        src/secure_core.cpp
+    )
+    target_include_directories(faceproof_secure_core
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${OpenCV_INCLUDE_DIRS}
+            ${ONNXRUNTIME_INCLUDE_DIR}
+    )
+    target_compile_features(faceproof_secure_core PUBLIC cxx_std_17)
+    target_link_libraries(
+        faceproof_secure_core
+        PRIVATE
+            faceproof_biometric_core
+            faceproof_biometric_vision
+            faceproof_biometric_pad
+    )
+    set_target_properties(faceproof_secure_core PROPERTIES
+        OUTPUT_NAME faceproof_core
+        VERSION ${PROJECT_VERSION}
+        SOVERSION 1
+    )
+
+    if(MSVC)
+        target_compile_options(faceproof_secure_core PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(faceproof_secure_core PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    install(
+        TARGETS faceproof_secure_core
+        LIBRARY DESTINATION lib
+    )
+    install(
+        FILES
+            include/faceproof_biometric.h
+            include/faceproof_biometric_vision.h
+            include/faceproof_biometric_pad.h
+            include/faceproof_secure_core.h
+        DESTINATION include
+    )
 endif()
 
 if(FACEPROOF_BIOMETRIC_BUILD_TESTS)
