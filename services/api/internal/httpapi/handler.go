@@ -196,6 +196,15 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 }
 
 func (handler *Handler) createSession(writer http.ResponseWriter, request *http.Request, kind domain.SessionKind) {
+	if handler.engine.NativeIdentityEnabled() {
+		handler.writeError(
+			writer,
+			http.StatusGone,
+			"legacy biometric enrollment/verification is disabled in Secure Core production mode",
+		)
+		return
+	}
+
 	var payload createSessionRequest
 	if err := decodeJSON(request, &payload, 1<<20); err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
@@ -226,6 +235,15 @@ func (handler *Handler) createSession(writer http.ResponseWriter, request *http.
 }
 
 func (handler *Handler) completeSession(writer http.ResponseWriter, request *http.Request, sessionID string, expectedKind domain.SessionKind) {
+	if handler.engine.NativeIdentityEnabled() {
+		handler.writeError(
+			writer,
+			http.StatusGone,
+			"legacy biometric enrollment/verification is disabled in Secure Core production mode",
+		)
+		return
+	}
+
 	captureSession, err := handler.sessions.Get(sessionID)
 	if err != nil {
 		handler.writeError(writer, sessionErrorStatus(err), err.Error())
