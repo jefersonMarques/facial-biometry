@@ -5,18 +5,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 NATIVE_SHADOW=false
+NATIVE_CORE=false
 ANALYTICS=false
 for argument in "$@"; do
     case "$argument" in
         --native-shadow)
             NATIVE_SHADOW=true
             ;;
+        --native-core)
+            NATIVE_CORE=true
+            ;;
         --analytics)
             ANALYTICS=true
             ;;
         *)
             echo "Unknown argument: $argument" >&2
-            echo "Usage: scripts/run-dev.sh [--native-shadow] [--analytics]" >&2
+            echo "Usage: scripts/run-dev.sh [--native-core] [--native-shadow] [--analytics]" >&2
             exit 2
             ;;
     esac
@@ -80,6 +84,28 @@ export FACEPROOF_DEV_API_URL="${FACEPROOF_DEV_API_URL:-http://127.0.0.1:8180}"
 export FACEPROOF_YUNET_MODEL="${FACEPROOF_YUNET_MODEL:-$ROOT/models/yunet/face_detection_yunet_2023mar.onnx}"
 export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_recognition_sface_2021dec.onnx}"
 export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
+
+if [ "$NATIVE_CORE" = true ]; then
+    NATIVE_CORE_MANIFEST="$ROOT/.dev/biometric-core.json"
+    if [ ! -f "$NATIVE_CORE_MANIFEST" ]; then
+        echo "FaceProof Secure Core not prepared. Run scripts/build-biometric-core.sh first." >&2
+        exit 1
+    fi
+
+    export FACEPROOF_SECURE_CORE_LIBRARY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["libraryPath"])' "$NATIVE_CORE_MANIFEST")"
+    CORE_OPENCV_LIB_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["openCvLibDir"])' "$NATIVE_CORE_MANIFEST")"
+    CORE_ONNXRUNTIME_LIB_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["onnxRuntimeLibDir"])' "$NATIVE_CORE_MANIFEST")"
+
+    if [ ! -f "$FACEPROOF_SECURE_CORE_LIBRARY" ]; then
+        echo "Secure Core library not found: $FACEPROOF_SECURE_CORE_LIBRARY" >&2
+        exit 1
+    fi
+
+    export LD_LIBRARY_PATH="$CORE_OPENCV_LIB_DIR:$CORE_ONNXRUNTIME_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    echo "Secure Core C++ authority: ENABLED"
+else
+    unset FACEPROOF_SECURE_CORE_LIBRARY 2>/dev/null || true
+fi
 
 export FACEPROOF_NATIVE_SHADOW_ENABLED="false"
 if [ "$NATIVE_SHADOW" = true ]; then
@@ -203,6 +229,11 @@ if [ "$ANALYTICS" = true ]; then
     echo "Admin key: $ROOT/.dev/admin-key"
 fi
 echo "Development mode: review enrollments are stored as provisional templates."
+if [ "$NATIVE_CORE" = true ]; then
+    echo "Identity authority: FaceProof Secure Core C++"
+else
+    echo "Identity authority: Python development fallback"
+fi
 if [ "$NATIVE_SHADOW" = true ]; then
     echo "Native biometric shadow: active; Python remains authoritative."
 fi
