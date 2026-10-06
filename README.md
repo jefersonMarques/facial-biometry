@@ -76,8 +76,10 @@ The MVP also does not provide complete long-term certificate revocation/timestam
 
 ## Requirements
 
-- Go 1.23+
-- Python 3.11+
+- Linux x86_64;
+- Go 1.23+;
+- C++17 toolchain, CMake and Ninja for building the Secure Core;
+- Python is optional and reserved for validation/R&D tooling;
 - a modern browser with camera support;
 - Poppler tools: `pdfinfo` and `pdftoppm`; PDF signature cryptography is also verified natively in Go;
 - `bpgdec` is optional fallback support for VIO portraits encoded in BPG.
@@ -86,25 +88,34 @@ Node.js is only required when editing the TypeScript SDK. The compiled JavaScrip
 
 ## Run
 
-Linux/macOS:
+Build the Linux Secure Core once:
 
 ```bash
-./scripts/run-dev.sh
+bash scripts/build-biometric-core.sh
 ```
 
-Windows:
+Start the production-candidate runtime:
 
-```powershell
-.\scripts\run-dev.ps1
+```bash
+./scripts/run-dev.sh --analytics
 ```
 
-Services:
+The native Secure Core is the default runtime. It does not start the Python biometric engine.
+
+Python is available only as an explicit development/R&D fallback:
+
+```bash
+./scripts/run-dev.sh --python-engine --analytics
+```
+
+Services in native mode:
 
 ```text
 Web:              http://localhost:5173
 Identity page:    http://localhost:5173/verify.html
 Biometric API:    http://localhost:8180
-Biometric engine: http://localhost:8090
+Analytics panel:  http://localhost:5174
+Secure Core:      libfaceproof_core.so (in-process)
 ```
 
 To create a check, call:
@@ -147,7 +158,11 @@ Important biometric settings:
 - `FACEPROOF_MATCH_THRESHOLD`
 - `FACEPROOF_LIVENESS_THRESHOLD`
 - `FACEPROOF_REQUIRE_PASSIVE_PAD`
-- `FACEPROOF_ENGINE_URL`
+- `FACEPROOF_SECURE_CORE_LIBRARY`
+- `FACEPROOF_YUNET_MODEL`
+- `FACEPROOF_SFACE_MODEL`
+- `FACEPROOF_MINIFASNET_MODEL`
+- `FACEPROOF_ENGINE_URL` (Python R&D fallback only)
 
 ## Documentation
 
@@ -170,13 +185,13 @@ This means one tunnel is enough for browser + API:
 cloudflared tunnel --url http://localhost:5173
 ```
 
-After Cloudflare prints the public `https://....trycloudflare.com` URL, create a check with:
+After Cloudflare prints the public `https://....trycloudflare.com` URL, create a check with the Linux helper:
 
-```powershell
-.\scripts\create-identity-check.ps1 `
-  -CPF "CPF_DA_CNH" `
-  -MinimumDocumentDate "2026-01-01" `
-  -PublicBaseUrl "https://YOUR-SUBDOMAIN.trycloudflare.com"
+```bash
+./scripts/create-identity-check.sh \
+  --cpf "CPF_DA_CNH" \
+  --minimum-document-date "2026-01-01" \
+  --public-base-url "https://YOUR-SUBDOMAIN.trycloudflare.com"
 ```
 
 Do not tunnel only a plain static file server. The public origin must reach the FaceProof gateway so that `/v1/*` returns the API JSON responses.
