@@ -137,7 +137,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ `go test ./...`, `go build ./cmd/server` e `go build ./cmd/devgateway` validados localmente.
      - ✅ Perfil de listeners validado em runtime: 5173/5174/8180 somente em 127.0.0.1 e 8090 ausente.
      - ✅ `scripts/validate-production-network.sh` validado com sucesso no runtime local.
-     - ⏳ Validar em runtime que o gateway público bloqueia `/v1/admin/*` e o gateway admin encaminha a mesma rota somente localmente.
+     - ✅ Gateway público bloqueia `/v1/admin/*` com HTTP 404 mesmo com chave admin válida.
+     - ✅ Gateway admin local encaminha `/v1/admin/*` e retornou HTTP 200 com chave válida.
+     - ⏳ Revalidar listener da API em produção: o processo atual foi observado em `*:8180`, indicando execução fora do perfil `FACEPROOF_ENV=production`.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
