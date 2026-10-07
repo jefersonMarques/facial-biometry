@@ -278,14 +278,14 @@ API_PID=$!
 
 (
     cd services/api
-    FACEPROOF_WEB_DIR="$ROOT/apps/web-sdk" go run ./cmd/devgateway
+    FACEPROOF_GATEWAY_ROLE="public" FACEPROOF_WEB_DIR="$ROOT/apps/web-sdk" go run ./cmd/devgateway
 ) &
 WEB_PID=$!
 
 if [ "$ANALYTICS" = true ]; then
     (
         cd services/api
-        FACEPROOF_WEB_ADDR="127.0.0.1:5174" FACEPROOF_WEB_DIR="$ROOT/apps/admin" go run ./cmd/devgateway
+        FACEPROOF_GATEWAY_ROLE="admin" FACEPROOF_WEB_ADDR="127.0.0.1:5174" FACEPROOF_WEB_DIR="$ROOT/apps/admin" go run ./cmd/devgateway
     ) &
     ADMIN_PID=$!
 fi
