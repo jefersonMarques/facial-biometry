@@ -657,6 +657,9 @@ func (handler *Handler) getAdminReport(writer http.ResponseWriter, request *http
 
 		item := detail.CheckListItem
 		handler.applyAuthoritativeCheckItem(&item)
+		// Demo portraits are intentionally excluded from exported reports.
+		item.ReferencePhotoDataURL = ""
+		item.CapturedPhotoDataURL = ""
 		detail.CheckListItem = item
 
 		reportCheck := adminReportCheck{
