@@ -36,7 +36,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ `libfaceproof_core.so` criada e compilando no CI Linux.
    - ✅ Build local Linux validado em WSL com OpenCV 4.14.0, ONNX Runtime 1.30.0, ABI 1 e Secure Core 0.2.0.
    - ✅ ABI C v1 pequena e versionada.
-   - ✅ Secure Core v0.2.0.
+   - ✅ Secure Core v0.2.1.
    - ✅ Contexto persistente carrega YuNet, SFace e MiniFASNet uma única vez.
    - ✅ Build Linux dedicado em `scripts/build-biometric-core.sh`.
    - ✅ Manifesto local contém versão, ABI e SHA-256 da biblioteca.
@@ -134,7 +134,8 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ Admin fica em `127.0.0.1:5174`, fora do proxy público.
      - ✅ Validador de rede rejeita exposição de 5173/5174/8180 e presença da porta Python 8090.
      - ✅ Guia de deploy Linux em `deploy/production/README.md`.
-     - ⏳ Validar `go test ./...`, build do gateway e perfil de listeners em runtime.
+     - ✅ `go test ./...`, `go build ./cmd/server` e `go build ./cmd/devgateway` validados localmente.
+     - ⏳ Validar perfil de listeners loopback em runtime.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
