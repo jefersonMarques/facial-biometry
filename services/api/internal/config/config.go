@@ -41,6 +41,7 @@ type Config struct {
 	RuntimeFaceLandmarkerSHA256    string
 
 	IdentityIssuerKey       []byte
+	TenantRegistryPath      string
 	IdentityStoreKey        []byte
 	IdentityDirectory       string
 	IdentityVerifyURL       string
@@ -110,6 +111,7 @@ func Load() (Config, error) {
 		RuntimeMediaPipeVisionSHA256:   envString("FACEPROOF_RUNTIME_MEDIAPIPE_VISION_SHA256", "d885630c297c0b20b1fe86096cb06291c4c8080876f27852e724f24ac603713f"),
 		RuntimeFaceLandmarkerSHA256:    envString("FACEPROOF_RUNTIME_FACE_LANDMARKER_SHA256", "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"),
 		IdentityIssuerKey:       identityIssuerKey,
+		TenantRegistryPath:      strings.TrimSpace(os.Getenv("FACEPROOF_TENANT_REGISTRY")),
 		IdentityStoreKey:        deriveIdentityStoreKey(templateKey),
 		IdentityDirectory:       envString("FACEPROOF_IDENTITY_DIR", "../../data/identity-checks"),
 		IdentityVerifyURL:       envString("FACEPROOF_IDENTITY_VERIFY_URL", "http://localhost:5173/verify.html"),
