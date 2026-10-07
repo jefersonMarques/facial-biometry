@@ -3,8 +3,10 @@
 ## Implemented in the MVP
 
 - Short-lived signed capture sessions.
-- HMAC-SHA256 session tokens.
-- Atomic one-time session consumption to block concurrent replay of a valid capture session.
+- Server-generated capture `runId` bound to the session.
+- HMAC-SHA256 session tokens bind `sessionId`, `runId` and expiration.
+- Atomic one-time session consumption blocks concurrent replay of a valid capture session; concurrency tests assert exactly one consumer succeeds.
+- Capture completion also has a minimum elapsed time measured by the server clock, independent of client timestamps.
 - Randomized per-session illumination challenge with enforced high/low transitions.
 - Server-side reconstruction of the expected challenge index from capture timestamps.
 - Client-provided challenge index and light values are not trusted by the biometric engine.
@@ -14,6 +16,11 @@
 - Raw camera frames are processed in memory and not persisted by the application.
 - 1:1 verification only.
 - Configurable liveness and face-match thresholds.
+- Public identity endpoints have bounded in-memory rate limiting keyed by SHA-256 of the public token, with no cleartext token stored in limiter state.
+- Identity completion enforces request/body/frame size limits and JPEG content type.
+- Runtime fingerprint validation pins the supported SDK, liveness WASM, MediaPipe runtime and Face Landmarker build.
+- API responses use no-store/no-cache, nosniff, frame denial and no-referrer security headers.
+- Secure Core production runtime requires a signed FaceProof Model Pack; Ed25519 signature, model sizes and SHA-256 digests are verified before model loading.
 
 ## CNH Digital identity checks
 
@@ -39,11 +46,11 @@ The API therefore remains authoritative for session state, challenge definition,
 - Advanced deepfake stream injection.
 - 3D mask attacks.
 - Replay attacks tailored to the randomized screen illumination sequence.
-- Application/tenant authentication for session creation.
-- Distributed rate limiting.
-- Hardware-backed key storage.
+- Application/tenant authentication and tenant isolation.
+- Distributed rate limiting across multiple API instances / edge gateway.
+- Hardware-backed key storage and governed secret rotation.
 - Certified PAD evaluation.
 
 ## Production direction
 
-Before high-assurance production use, add application/tenant authentication, rate limiting, audit events, KMS/HSM-backed template keys, a governed attack dataset and independent PAD evaluation. Native mobile SDKs with device attestation remain the higher-assurance option for flows where browser camera provenance is insufficient.
+Before high-assurance production use, add application/tenant authentication, distributed/edge rate limiting, KMS/HSM-backed runtime and signing keys, a governed attack dataset and independent PAD evaluation. Native mobile SDKs with device attestation remain the higher-assurance option for flows where browser camera provenance is insufficient.
