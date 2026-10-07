@@ -218,7 +218,7 @@ function renderChecks(items) {
                     <h3>${escapeHtml(displayName)}</h3>
                     <p>${escapeHtml(dateTime(item.createdAt))}</p>
                     <div class="verification-meta">
-                        <span>Face <strong>${flowType === "face_enrollment" ? "—" : nullableScore(item.faceSimilarity)}</strong></span>
+                        <span>Similaridade <strong>${flowType === "face_enrollment" ? "—" : normalizedSimilarity(item.faceSimilarity)}</strong></span>
                         <span>Liveness <strong>${nullablePercent(item.livenessScore)}</strong></span>
                         <span>PAD <strong>${nullablePercent(item.passivePadScore)}</strong></span>
                     </div>
@@ -364,7 +364,7 @@ function renderDetail(detail) {
     const metrics = [
         ["Tipo", flowLabels[flowType] || flowType],
         ["Resultado", statusLabels[detail.status] || detail.decision || detail.status],
-        ["Face", flowType === "face_enrollment" ? "—" : nullableScore(detail.faceSimilarity)],
+        ["Similaridade", flowType === "face_enrollment" ? "—" : normalizedSimilarity(detail.faceSimilarity)],
         ["Liveness", nullablePercent(detail.livenessScore)],
         ["Passive PAD", nullablePercent(detail.passivePadScore)],
         ["Qualidade", nullablePercent(detail.qualityScore)],
@@ -510,6 +510,14 @@ function nullablePercent(value) {
     return value === null || value === undefined || !Number.isFinite(Number(value))
         ? "—"
         : (Number(value) * 100).toFixed(1) + "%";
+}
+
+function normalizedSimilarity(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        return "—";
+    }
+    const clamped = Math.max(-1, Math.min(1, Number(value)));
+    return Math.round(((clamped + 1) / 2) * 100) + "%";
 }
 
 function nullableScore(value) {
