@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/url"
@@ -118,16 +119,41 @@ func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Re
 }
 
 func (handler *Handler) authorizeAdmin(request *http.Request) bool {
-	if len(handler.config.AdminKey) == 0 {
-		return false
-	}
 	value := strings.TrimSpace(request.Header.Get("Authorization"))
-	const prefix = "Bearer "
-	if !strings.HasPrefix(value, prefix) {
+
+	const bearerPrefix = "Bearer "
+	if strings.HasPrefix(value, bearerPrefix) && len(handler.config.AdminKey) > 0 {
+		provided := []byte(strings.TrimSpace(strings.TrimPrefix(value, bearerPrefix)))
+		if constantTimeEqual(provided, handler.config.AdminKey) {
+			return true
+		}
+	}
+
+	if !handler.config.DemoMode {
 		return false
 	}
-	provided := []byte(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
-	return constantTimeEqual(provided, handler.config.AdminKey)
+
+	const basicPrefix = "Basic "
+	if !strings.HasPrefix(value, basicPrefix) {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(
+		strings.TrimSpace(strings.TrimPrefix(value, basicPrefix)),
+	)
+	if err != nil {
+		return false
+	}
+	username, password, ok := strings.Cut(string(decoded), ":")
+	if !ok {
+		return false
+	}
+	return constantTimeEqual(
+		[]byte(username),
+		[]byte(handler.config.DemoUser),
+	) && constantTimeEqual(
+		[]byte(password),
+		handler.config.DemoPassword,
+	)
 }
 
 func constantTimeEqual(left, right []byte) bool {
