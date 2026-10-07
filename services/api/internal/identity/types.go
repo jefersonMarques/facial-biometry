@@ -43,8 +43,8 @@ type DocumentEvidence struct {
 }
 
 type Check struct {
-	ID                     string
-	TenantID               string            `json:"tenantId,omitempty"`            `json:"id"`
+	ID                     string            `json:"id"`
+	TenantID               string            `json:"tenantId,omitempty"`
 	ExpectedCPF            string            `json:"expectedCpf"`
 	MinimumDocumentDate    time.Time         `json:"minimumDocumentDate"`
 	CampaignID             string            `json:"campaignId,omitempty"`
