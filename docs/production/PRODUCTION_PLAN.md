@@ -135,7 +135,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ Validador de rede rejeita exposição de 5173/5174/8180 e presença da porta Python 8090.
      - ✅ Guia de deploy Linux em `deploy/production/README.md`.
      - ✅ `go test ./...`, `go build ./cmd/server` e `go build ./cmd/devgateway` validados localmente.
-     - ⏳ Validar perfil de listeners loopback em runtime.
+     - ✅ Perfil de listeners validado em runtime: 5173/5174/8180 somente em 127.0.0.1 e 8090 ausente.
+     - ✅ `scripts/validate-production-network.sh` validado com sucesso no runtime local.
+     - ⏳ Validar em runtime que o gateway público bloqueia `/v1/admin/*` e o gateway admin encaminha a mesma rota somente localmente.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
