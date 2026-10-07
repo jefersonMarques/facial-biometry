@@ -180,6 +180,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		handler.getIdentityCheck(writer, request)
 		return
 	}
+	if request.URL.Path == "/v1/identity/view" && request.Method == http.MethodPost {
+		handler.confirmIdentityView(writer, request)
+		return
+	}
 	if request.URL.Path == "/v1/identity/document" && request.Method == http.MethodPost {
 		handler.uploadIdentityDocument(writer, request)
 		return
