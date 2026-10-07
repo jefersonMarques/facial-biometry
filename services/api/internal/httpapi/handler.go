@@ -160,6 +160,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		handler.createIdentityCheck(writer, request)
 		return
 	}
+	if request.URL.Path == "/v1/identity/usage" && request.Method == http.MethodGet {
+		handler.getTenantUsage(writer, request)
+		return
+	}
 	identitySegments := splitPath(request.URL.Path)
 	if len(identitySegments) == 4 &&
 		identitySegments[0] == "v1" &&
