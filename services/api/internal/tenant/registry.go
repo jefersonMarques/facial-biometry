@@ -145,7 +145,7 @@ func (registry *Registry) AuthenticateBearer(authorization string) (Tenant, bool
 		return Tenant{}, false
 	}
 	apiKey := strings.TrimSpace(strings.TrimPrefix(authorization, prefix))
-	if apiKey == "" {
+	if len(apiKey) < 32 {
 		return Tenant{}, false
 	}
 
