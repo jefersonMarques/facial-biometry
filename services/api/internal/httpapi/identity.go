@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -124,11 +123,12 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
 		return
 	}
-	if len(handler.config.IdentityIssuerKey) == 0 {
-		handler.writeError(writer, http.StatusServiceUnavailable, "identity issuer is not configured")
+	if handler.tenants == nil || handler.tenants.Count() == 0 {
+		handler.writeError(writer, http.StatusServiceUnavailable, "tenant authentication is not configured")
 		return
 	}
-	if !handler.authorizeIdentityIssuer(request) {
+	tenantID, authorized := handler.authorizeIdentityIssuer(request)
+	if !authorized {
 		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
 		return
 	}
@@ -139,7 +139,7 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		return
 	}
 
-	response, err := handler.createIdentityCheckRecord(request.Context(), payload)
+	response, err := handler.createIdentityCheckRecord(request.Context(), tenantID, payload)
 	if err != nil {
 		writeIdentityCreateError(handler, writer, err)
 		return
@@ -605,14 +605,27 @@ func (handler *Handler) loadPublicIdentityCheck(writer http.ResponseWriter, requ
 	return check, token, true
 }
 
-func (handler *Handler) authorizeIdentityIssuer(request *http.Request) bool {
-	value := strings.TrimSpace(request.Header.Get("Authorization"))
-	const prefix = "Bearer "
-	if !strings.HasPrefix(value, prefix) {
-		return false
+func (handler *Handler) authorizeIdentityIssuer(request *http.Request) (string, bool) {
+	if handler.tenants == nil {
+		return "", false
 	}
-	provided := []byte(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
-	return subtle.ConstantTimeCompare(provided, handler.config.IdentityIssuerKey) == 1
+	authenticated, ok := handler.tenants.AuthenticateBearer(
+		request.Header.Get("Authorization"),
+	)
+	if !ok {
+		return "", false
+	}
+	return authenticated.ID, true
+}
+
+func tenantOwnsCheck(check identity.Check, tenantID string) bool {
+	checkTenantID := strings.TrimSpace(strings.ToLower(check.TenantID))
+	tenantID = strings.TrimSpace(strings.ToLower(tenantID))
+
+	if checkTenantID == "" {
+		return tenantID == "default"
+	}
+	return checkTenantID == tenantID
 }
 
 func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error) {
@@ -737,7 +750,8 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
 		return
 	}
-	if !handler.authorizeIdentityIssuer(request) {
+	tenantID, authorized := handler.authorizeIdentityIssuer(request)
+	if !authorized {
 		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
 		return
 	}
@@ -749,6 +763,10 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 	}
 	if err != nil {
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load identity check")
+		return
+	}
+	if !tenantOwnsCheck(check, tenantID) {
+		handler.writeError(writer, http.StatusNotFound, "identity check not found")
 		return
 	}
 
