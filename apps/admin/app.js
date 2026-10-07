@@ -218,7 +218,7 @@ function renderChecks(items) {
                     <h3>${escapeHtml(displayName)}</h3>
                     <p>${escapeHtml(dateTime(item.createdAt))}</p>
                     <div class="verification-meta">
-                        <span>Face <strong>${nullableScore(item.faceSimilarity)}</strong></span>
+                        <span>Face <strong>${flowType === "face_enrollment" ? "—" : nullableScore(item.faceSimilarity)}</strong></span>
                         <span>Liveness <strong>${nullablePercent(item.livenessScore)}</strong></span>
                         <span>PAD <strong>${nullablePercent(item.passivePadScore)}</strong></span>
                     </div>
@@ -364,7 +364,7 @@ function renderDetail(detail) {
     const metrics = [
         ["Tipo", flowLabels[flowType] || flowType],
         ["Resultado", statusLabels[detail.status] || detail.decision || detail.status],
-        ["Face", nullableScore(detail.faceSimilarity)],
+        ["Face", flowType === "face_enrollment" ? "—" : nullableScore(detail.faceSimilarity)],
         ["Liveness", nullablePercent(detail.livenessScore)],
         ["Passive PAD", nullablePercent(detail.passivePadScore)],
         ["Qualidade", nullablePercent(detail.qualityScore)],
