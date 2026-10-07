@@ -285,6 +285,16 @@ func (repository *Repository) tokenHashForIDLocked(id string) (string, error) {
 	return tokenHash, nil
 }
 
+func (repository *Repository) CountTenantChecks(
+	tenantID string,
+	periodFrom time.Time,
+	periodTo time.Time,
+) (int, error) {
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+	return repository.countTenantChecksLocked(tenantID, periodFrom, periodTo)
+}
+
 func (repository *Repository) countTenantChecksLocked(
 	tenantID string,
 	periodFrom time.Time,
