@@ -1496,6 +1496,9 @@ function friendlyDocumentError(message: string): string {
 }
 
 function friendlyBiometryError(message: string): string {
+    if (message.includes("biometric comparison unavailable")) {
+        return "A comparação facial não pôde ser concluída. Tente novamente.";
+    }
     if (isInfrastructureBiometryError(message)) {
         return "A análise demorou mais que o esperado ou a conexão com o servidor foi interrompida. Tente novamente.";
     }
@@ -1519,7 +1522,8 @@ function isInfrastructureBiometryError(message: string): boolean {
     return message.includes("HTTP 502") ||
         message.includes("HTTP 503") ||
         message.includes("FaceProof API unavailable") ||
-        message.includes("biometric engine failed");
+        message.includes("biometric engine failed") ||
+        message.includes("biometric comparison unavailable");
 }
 
 function formatExpiration(value: string): string {
