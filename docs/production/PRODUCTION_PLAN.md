@@ -141,7 +141,8 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ Gateway admin local encaminha `/v1/admin/*` e retornou HTTP 200 com chave válida.
      - ✅ Perfil de produção confirmou CORS `https://faceproof.local` no runtime.
      - ✅ Corrigida corrida de startup no validador: ele agora aguarda API/gateway ficarem prontos antes de capturar listeners.
-     - ⏳ Reexecutar o validador atualizado uma vez para fechar o perímetro local.
+     - ✅ Validador atualizado reexecutado com sucesso: API/gateway prontos, 5173/5174/8180 loopback-only, 8090 ausente e health direto/via gateway aprovado.
+     - ✅ Perímetro local de produção fechado e validado.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
