@@ -17,16 +17,18 @@ const SchemaVersion = 1
 var tenantIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$`)
 
 type Tenant struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Enabled           bool   `json:"enabled"`
+	MonthlyCheckLimit int    `json:"monthlyCheckLimit,omitempty"`
 }
 
 type fileTenant struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	APIKeySHA256 string `json:"apiKeySha256"`
-	Enabled      bool   `json:"enabled"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	APIKeySHA256      string `json:"apiKeySha256"`
+	Enabled           bool   `json:"enabled"`
+	MonthlyCheckLimit int    `json:"monthlyCheckLimit,omitempty"`
 }
 
 type fileDocument struct {
@@ -112,6 +114,9 @@ func Load(path string) (*Registry, error) {
 		if _, err := hex.DecodeString(hash); err != nil {
 			return nil, fmt.Errorf("tenant %s API key hash is invalid", id)
 		}
+		if item.MonthlyCheckLimit < 0 {
+			return nil, fmt.Errorf("tenant %s monthlyCheckLimit cannot be negative", id)
+		}
 		if ids[id] {
 			return nil, fmt.Errorf("duplicate tenant id %q", id)
 		}
@@ -123,9 +128,10 @@ func Load(path string) (*Registry, error) {
 
 		credentials = append(credentials, credential{
 			Tenant: Tenant{
-				ID:      id,
-				Name:    name,
-				Enabled: item.Enabled,
+				ID:                id,
+				Name:              name,
+				Enabled:           item.Enabled,
+				MonthlyCheckLimit: item.MonthlyCheckLimit,
 			},
 			Hash: hash,
 		})
