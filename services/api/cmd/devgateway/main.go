@@ -20,6 +20,12 @@ func main() {
 	listenAddress := envString("FACEPROOF_WEB_ADDR", ":5173")
 	apiURL := envString("FACEPROOF_DEV_API_URL", "http://127.0.0.1:8180")
 	webDirectory := envString("FACEPROOF_WEB_DIR", "../../apps/web-sdk")
+	gatewayRole := strings.ToLower(strings.TrimSpace(
+		envString("FACEPROOF_GATEWAY_ROLE", "public"),
+	))
+	if gatewayRole != "public" && gatewayRole != "admin" {
+		log.Fatalf("invalid FACEPROOF_GATEWAY_ROLE %q", gatewayRole)
+	}
 
 	absoluteWebDirectory, err := filepath.Abs(webDirectory)
 	if err != nil {
@@ -54,8 +60,51 @@ func main() {
 	}
 
 	staticHandler := http.FileServer(http.Dir(absoluteWebDirectory))
-	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	handler := newGatewayHandler(
+		gatewayRole,
+		apiProxy,
+		staticHandler,
+	)
+
+	server := &http.Server{
+		Addr:              listenAddress,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       115 * time.Second,
+		WriteTimeout:      115 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	log.Printf(
+		"FaceProof %s gateway listening on %s",
+		gatewayRole,
+		listenAddress,
+	)
+	log.Printf("Static files: %s", absoluteWebDirectory)
+	log.Printf("API proxy: /v1/* -> %s", target)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+}
+
+func newGatewayHandler(
+	role string,
+	apiProxy http.Handler,
+	staticHandler http.Handler,
+) http.Handler {
+	return http.HandlerFunc(func(
+		writer http.ResponseWriter,
+		request *http.Request,
+	) {
 		setSecurityHeaders(writer)
+
+		isAdminAPI := request.URL.Path == "/v1/admin" ||
+			strings.HasPrefix(request.URL.Path, "/v1/admin/")
+		if role != "admin" && isAdminAPI {
+			http.NotFound(writer, request)
+			return
+		}
 
 		if request.URL.Path == "/health" ||
 			request.URL.Path == "/v1" ||
@@ -67,23 +116,6 @@ func main() {
 		writer.Header().Set("Cache-Control", "no-store")
 		staticHandler.ServeHTTP(writer, request)
 	})
-
-	server := &http.Server{
-		Addr:              listenAddress,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       115 * time.Second,
-		WriteTimeout:      115 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-
-	log.Printf("FaceProof web gateway listening on %s", listenAddress)
-	log.Printf("Static files: %s", absoluteWebDirectory)
-	log.Printf("API proxy: /v1/* -> %s", target)
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
-	}
 }
 
 func validateProductionGateway(
