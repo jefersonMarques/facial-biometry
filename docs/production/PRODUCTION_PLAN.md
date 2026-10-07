@@ -50,16 +50,16 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Seleção dos 3 melhores frames próximos e embedding combinado no C++.
    - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
-6. ⏳ **Retirar Python do runtime**
+6. ✅ **Retirar Python do runtime**
    - ✅ Secure Core C++ é o runtime padrão do `run-dev.sh`.
    - ✅ `--python-engine` virou fallback explícito de desenvolvimento/R&D.
    - ✅ Em modo nativo, não são criados/atualizados venv nem instalados NumPy/OpenCV Python/ONNX Runtime Python.
    - ✅ Em modo nativo, `engine_server.py` não é iniciado e a porta 8090 não é reservada.
    - ✅ Endpoints biométricos legados dependentes do Python ficam desabilitados no modo de produção.
-   - ⏳ Validar startup e uma biometria completa sem processo Python.
+   - ✅ Startup validado sem processo Python: somente 5173, 5174 e 8180 ativos; 8090 ausente.
    - Python permanece apenas em testes, validação e R&D.
 
-7. ⏳ **FaceProof Model Pack**
+7. ✅ **FaceProof Model Pack**
    - ✅ Formato `.fpmp` versionado.
    - ✅ Manifesto assinado com Ed25519.
    - ✅ SHA-256 e tamanho de cada modelo no manifesto.
@@ -69,8 +69,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Testes automatizados rejeitam manifesto e modelo adulterados.
    - ✅ Chave privada não é entregue ao processo do servidor; runtime usa somente chave pública.
    - ✅ Builder de desenvolvimento em `scripts/build-model-pack.sh`.
-   - ⏳ Validar startup local com pacote assinado e C++ authority.
-   - ⬜ Para distribuição comercial: chave de assinatura de produção offline/HSM e chave pública pinada no artefato de servidor.
+   - ✅ Startup local validado com `faceproof-standard 0.1.0` assinado, manifesto SHA-256 verificado e C++ authority ativo.
+   - ✅ Runtime inicializa o Secure Core somente após validação do Model Pack.
+   - Próximo endurecimento comercial: chave de assinatura de produção offline/HSM e chave pública pinada no artefato de servidor.
 
 8. ⬜ **Hardening de segurança**
    - Sessões curtas, single-use, runId server-generated, anti-replay, ordem/timing das fases, rate limiting, limites e isolamento por tenant.
