@@ -15,6 +15,9 @@ type Config struct {
 	APIAddress              string
 	EngineURL               string
 	SecureCoreLibrary       string
+	ModelPackPath           string
+	ModelPackPublicKey      string
+	ModelPackCacheDirectory string
 	YUNetModelPath          string
 	SFaceModelPath          string
 	MiniFASNetModelPath     string
@@ -83,6 +86,9 @@ func Load() (Config, error) {
 		APIAddress:              envString("FACEPROOF_API_ADDR", ":8180"),
 		EngineURL:               envString("FACEPROOF_ENGINE_URL", "http://127.0.0.1:8090"),
 		SecureCoreLibrary:       strings.TrimSpace(os.Getenv("FACEPROOF_SECURE_CORE_LIBRARY")),
+		ModelPackPath:           strings.TrimSpace(os.Getenv("FACEPROOF_MODEL_PACK")),
+		ModelPackPublicKey:      strings.TrimSpace(os.Getenv("FACEPROOF_MODEL_PACK_PUBLIC_KEY")),
+		ModelPackCacheDirectory: envString("FACEPROOF_MODEL_PACK_CACHE_DIR", "../../data/model-cache"),
 		YUNetModelPath:          strings.TrimSpace(os.Getenv("FACEPROOF_YUNET_MODEL")),
 		SFaceModelPath:          strings.TrimSpace(os.Getenv("FACEPROOF_SFACE_MODEL")),
 		MiniFASNetModelPath:     strings.TrimSpace(os.Getenv("FACEPROOF_MINIFASNET_MODEL")),
