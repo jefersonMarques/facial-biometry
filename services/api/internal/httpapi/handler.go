@@ -146,6 +146,9 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	if !handler.enforcePublicIdentityRateLimit(writer, request) {
 		return
 	}
+	if !handler.enforceIssuerRateLimit(writer, request) {
+		return
+	}
 
 	if request.URL.Path == "/health" && request.Method == http.MethodGet {
 		handler.writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
