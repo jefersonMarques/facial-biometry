@@ -77,3 +77,36 @@ func TestValidateCaptureProtocolSessionBindsServerRunID(t *testing.T) {
 		t.Fatal("expected capture run/session mismatch")
 	}
 }
+
+func TestValidateCaptureSessionServerTiming(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Unix(1_700_000_000, 0)
+	session := domain.CaptureSession{
+		CreatedAt: createdAt,
+		ExpiresAt: createdAt.Add(2 * time.Minute),
+	}
+
+	if err := validateCaptureSessionServerTiming(
+		session,
+		createdAt.Add(minimumServerCaptureAge),
+	); err != nil {
+		t.Fatalf("expected valid server timing: %v", err)
+	}
+
+	err := validateCaptureSessionServerTiming(
+		session,
+		createdAt.Add(minimumServerCaptureAge-time.Millisecond),
+	)
+	if err == nil || !strings.Contains(err.Error(), "too quickly") {
+		t.Fatalf("expected too-quick completion error, got %v", err)
+	}
+
+	err = validateCaptureSessionServerTiming(
+		session,
+		session.ExpiresAt.Add(time.Millisecond),
+	)
+	if err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("expected expired session error, got %v", err)
+	}
+}
