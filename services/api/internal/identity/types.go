@@ -7,6 +7,14 @@ import (
 )
 
 type Status string
+type FlowType string
+
+const (
+	FlowCNH               FlowType = "cnh"
+	FlowFaceEnrollment    FlowType = "face_enrollment"
+	FlowFaceVerification  FlowType = "face_verification"
+	FlowPhotoVerification FlowType = "photo_verification"
+)
 
 const (
 	StatusPendingDocument    Status = "pending_document"
@@ -42,8 +50,17 @@ type DocumentEvidence struct {
 	IssuingUF              string    `json:"issuingUf,omitempty"`
 }
 
+type DemoArtifacts struct {
+	ReferencePhotoDataURL string `json:"referencePhotoDataUrl,omitempty"`
+	CapturedPhotoDataURL  string `json:"capturedPhotoDataUrl,omitempty"`
+}
+
 type Check struct {
 	ID                     string            `json:"id"`
+	FlowType               FlowType          `json:"flowType,omitempty"`
+	SubjectID              string            `json:"subjectId,omitempty"`
+	DisplayName            string            `json:"displayName,omitempty"`
+	DemoArtifacts          *DemoArtifacts    `json:"demoArtifacts,omitempty"`
 	TenantID               string            `json:"tenantId,omitempty"`
 	ExpectedCPF            string            `json:"expectedCpf"`
 	MinimumDocumentDate    time.Time         `json:"minimumDocumentDate"`
