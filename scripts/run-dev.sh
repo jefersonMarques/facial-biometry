@@ -34,7 +34,9 @@ for argument in "$@"; do
     esac
 done
 
-python3 models/download_models.py
+if [ "$PYTHON_ENGINE" = true ]; then
+    python3 models/download_models.py
+fi
 
 WEB_SDK_DIR="$ROOT/apps/web-sdk"
 MEDIAPIPE_PACKAGE="$WEB_SDK_DIR/node_modules/@mediapipe/tasks-vision/package.json"
@@ -91,9 +93,11 @@ export FACEPROOF_IDENTITY_DIR="${FACEPROOF_IDENTITY_DIR:-$ROOT/data/identity-che
 export FACEPROOF_IDENTITY_VERIFY_URL="${FACEPROOF_IDENTITY_VERIFY_URL:-http://localhost:5173/verify.html}"
 export FACEPROOF_API_ADDR="${FACEPROOF_API_ADDR:-:8180}"
 export FACEPROOF_DEV_API_URL="${FACEPROOF_DEV_API_URL:-http://127.0.0.1:8180}"
-export FACEPROOF_YUNET_MODEL="${FACEPROOF_YUNET_MODEL:-$ROOT/models/yunet/face_detection_yunet_2023mar.onnx}"
-export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_recognition_sface_2021dec.onnx}"
-export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
+if [ "$PYTHON_ENGINE" = true ]; then
+    export FACEPROOF_YUNET_MODEL="${FACEPROOF_YUNET_MODEL:-$ROOT/models/yunet/face_detection_yunet_2023mar.onnx}"
+    export FACEPROOF_SFACE_MODEL="${FACEPROOF_SFACE_MODEL:-$ROOT/models/sface/face_recognition_sface_2021dec.onnx}"
+    export FACEPROOF_MINIFASNET_MODEL="${FACEPROOF_MINIFASNET_MODEL:-$ROOT/models/minifasnet/MiniFASNetV2.onnx}"
+fi
 
 if [ "$NATIVE_CORE" = true ]; then
     NATIVE_CORE_MANIFEST="$ROOT/.dev/biometric-core.json"
@@ -111,8 +115,39 @@ if [ "$NATIVE_CORE" = true ]; then
         exit 1
     fi
 
+    DEFAULT_MODEL_PACK="$ROOT/.dev/model-packs/faceproof-standard-0.1.0.fpmp"
+    DEFAULT_MODEL_PACK_PUBLIC_KEY="$ROOT/.dev/model-pack-public.key"
+
+    if [ -z "${FACEPROOF_MODEL_PACK:-}" ]; then
+        if [ ! -f "$DEFAULT_MODEL_PACK" ] || [ ! -f "$DEFAULT_MODEL_PACK_PUBLIC_KEY" ]; then
+            echo "Preparing signed development Model Pack..."
+            bash "$ROOT/scripts/build-model-pack.sh"
+        fi
+        export FACEPROOF_MODEL_PACK="$DEFAULT_MODEL_PACK"
+    fi
+
+    if [ ! -f "$FACEPROOF_MODEL_PACK" ]; then
+        echo "FaceProof Model Pack not found: $FACEPROOF_MODEL_PACK" >&2
+        exit 1
+    fi
+
+    if [ -z "${FACEPROOF_MODEL_PACK_PUBLIC_KEY:-}" ]; then
+        if [ ! -f "$DEFAULT_MODEL_PACK_PUBLIC_KEY" ]; then
+            echo "Model Pack public key not found: $DEFAULT_MODEL_PACK_PUBLIC_KEY" >&2
+            exit 1
+        fi
+        export FACEPROOF_MODEL_PACK_PUBLIC_KEY="$(tr -d '\r\n' < "$DEFAULT_MODEL_PACK_PUBLIC_KEY")"
+    fi
+
+    export FACEPROOF_MODEL_PACK_CACHE_DIR="${FACEPROOF_MODEL_PACK_CACHE_DIR:-$ROOT/data/model-cache}"
+    mkdir -p "$FACEPROOF_MODEL_PACK_CACHE_DIR"
+    chmod 700 "$FACEPROOF_MODEL_PACK_CACHE_DIR"
+
+    unset FACEPROOF_YUNET_MODEL FACEPROOF_SFACE_MODEL FACEPROOF_MINIFASNET_MODEL 2>/dev/null || true
+
     export LD_LIBRARY_PATH="$CORE_OPENCV_LIB_DIR:$CORE_ONNXRUNTIME_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     echo "Secure Core C++ authority: ENABLED"
+    echo "Signed Model Pack: $FACEPROOF_MODEL_PACK"
 else
     unset FACEPROOF_SECURE_CORE_LIBRARY 2>/dev/null || true
 fi
