@@ -59,11 +59,18 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ⏳ Validar startup e uma biometria completa sem processo Python.
    - Python permanece apenas em testes, validação e R&D.
 
-7. ⬜ **FaceProof Model Pack**
-   - Manifesto versionado.
-   - Hashes de todos os modelos.
-   - Assinatura do pacote.
-   - Preparar proteção adicional dos artefatos.
+7. ⏳ **FaceProof Model Pack**
+   - ✅ Formato `.fpmp` versionado.
+   - ✅ Manifesto assinado com Ed25519.
+   - ✅ SHA-256 e tamanho de cada modelo no manifesto.
+   - ✅ YuNet, SFace e MiniFASNet resolvidos por papel, não por caminho externo.
+   - ✅ Runtime Go verifica assinatura e hashes antes de inicializar o Secure Core.
+   - ✅ Compatibilidade mínima com Secure Core registrada e validada.
+   - ✅ Testes automatizados rejeitam manifesto e modelo adulterados.
+   - ✅ Chave privada não é entregue ao processo do servidor; runtime usa somente chave pública.
+   - ✅ Builder de desenvolvimento em `scripts/build-model-pack.sh`.
+   - ⏳ Validar startup local com pacote assinado e C++ authority.
+   - ⬜ Para distribuição comercial: chave de assinatura de produção offline/HSM e chave pública pinada no artefato de servidor.
 
 8. ⬜ **Hardening de segurança**
    - Sessões curtas, single-use, runId server-generated, anti-replay, ordem/timing das fases, rate limiting, limites e isolamento por tenant.
