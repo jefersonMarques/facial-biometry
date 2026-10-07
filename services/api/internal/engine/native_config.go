@@ -1,6 +1,6 @@
 package engine
 
-const CurrentSecureCoreVersion = "0.2.0"
+const CurrentSecureCoreVersion = "0.2.1"
 
 type NativeConfig struct {
 	LibraryPath     string
