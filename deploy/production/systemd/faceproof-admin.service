@@ -9,6 +9,7 @@ User=faceproof
 Group=faceproof
 WorkingDirectory=/opt/faceproof
 Environment=FACEPROOF_ENV=production
+Environment=FACEPROOF_GATEWAY_ROLE=admin
 Environment=FACEPROOF_WEB_ADDR=127.0.0.1:5174
 Environment=FACEPROOF_DEV_API_URL=http://127.0.0.1:8180
 Environment=FACEPROOF_WEB_DIR=/opt/faceproof/web/admin
