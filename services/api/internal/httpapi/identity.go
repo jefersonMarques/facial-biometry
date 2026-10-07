@@ -40,21 +40,27 @@ type createIdentityCheckRequest struct {
 }
 
 type createIdentityCheckResponse struct {
-	ID               string    `json:"id"`
-	VerificationURL  string    `json:"verificationUrl"`
-	ExpiresAt        time.Time `json:"expiresAt"`
-	CampaignID       string    `json:"campaignId,omitempty"`
-	Scenario         string    `json:"scenario,omitempty"`
-	ExpectedDecision string    `json:"expectedDecision,omitempty"`
+	ID               string            `json:"id"`
+	VerificationURL  string            `json:"verificationUrl"`
+	ExpiresAt        time.Time         `json:"expiresAt"`
+	CampaignID       string            `json:"campaignId,omitempty"`
+	Scenario         string            `json:"scenario,omitempty"`
+	ExpectedDecision string            `json:"expectedDecision,omitempty"`
+	FlowType         identity.FlowType `json:"flowType,omitempty"`
+	SubjectID        string            `json:"subjectId,omitempty"`
+	DisplayName      string            `json:"displayName,omitempty"`
 }
 
 type identityStatusResponse struct {
-	ID               string          `json:"id"`
-	Status           identity.Status `json:"status"`
-	ExpiresAt        time.Time       `json:"expiresAt"`
-	DocumentAccepted bool            `json:"documentAccepted"`
-	CanStartBiometry bool            `json:"canStartBiometry"`
-	Decision         string          `json:"decision,omitempty"`
+	ID               string            `json:"id"`
+	Status           identity.Status   `json:"status"`
+	ExpiresAt        time.Time         `json:"expiresAt"`
+	DocumentAccepted bool              `json:"documentAccepted"`
+	CanStartBiometry bool              `json:"canStartBiometry"`
+	Decision         string            `json:"decision,omitempty"`
+	FlowType         identity.FlowType `json:"flowType"`
+	SubjectID        string            `json:"subjectId,omitempty"`
+	DisplayName      string            `json:"displayName,omitempty"`
 }
 
 type identityDocumentDetails struct {
