@@ -31,6 +31,7 @@ type Campaign struct {
 
 type CheckCreated struct {
 	CheckID          string
+	TenantID         string
 	SubjectCPF       string
 	CampaignID       string
 	Scenario         string
@@ -156,6 +157,7 @@ type SummaryCheckRow struct {
 
 type CheckListItem struct {
 	CheckID          string     `json:"checkId"`
+	TenantID         string     `json:"tenantId,omitempty"`
 	CampaignID       string     `json:"campaignId,omitempty"`
 	CampaignName     string     `json:"campaignName,omitempty"`
 	Scenario         string     `json:"scenario"`
@@ -206,10 +208,24 @@ type Event struct {
 }
 
 type CheckFilter struct {
+	TenantID   string
 	Status     string
 	Scenario   string
 	CampaignID string
 	Limit      int
+}
+
+type TenantUsage struct {
+	TenantID   string    `json:"tenantId"`
+	PeriodFrom time.Time `json:"periodFrom"`
+	PeriodTo   time.Time `json:"periodTo"`
+	Issued     int64     `json:"issued"`
+	Completed  int64     `json:"completed"`
+	Approved   int64     `json:"approved"`
+	Review     int64     `json:"review"`
+	Rejected   int64     `json:"rejected"`
+	Expired    int64     `json:"expired"`
+	Pending    int64     `json:"pending"`
 }
 
 type OpenCheckState struct {
@@ -269,6 +285,7 @@ CREATE TABLE IF NOT EXISTS faceproof_campaigns (
 
 CREATE TABLE IF NOT EXISTS faceproof_checks (
     check_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'legacy',
     subject_hash TEXT NOT NULL,
     campaign_id TEXT REFERENCES faceproof_campaigns(id) ON DELETE SET NULL,
     scenario TEXT NOT NULL DEFAULT 'unknown',
@@ -305,8 +322,13 @@ CREATE TABLE IF NOT EXISTS faceproof_checks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE faceproof_checks
+    ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'legacy';
+
 CREATE INDEX IF NOT EXISTS faceproof_checks_created_at_idx
     ON faceproof_checks(created_at DESC);
+CREATE INDEX IF NOT EXISTS faceproof_checks_tenant_created_idx
+    ON faceproof_checks(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS faceproof_checks_scenario_idx
     ON faceproof_checks(scenario);
 CREATE INDEX IF NOT EXISTS faceproof_checks_status_idx
@@ -393,11 +415,12 @@ func (repository *Repository) RecordCheckCreated(ctx context.Context, record Che
 	_, err := repository.db.ExecContext(
 		ctx,
 		`INSERT INTO faceproof_checks (
-			check_id, subject_hash, campaign_id, scenario, expected_decision,
+			check_id, tenant_id, subject_hash, campaign_id, scenario, expected_decision,
 			status, created_at, expires_at
-		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8)
+		) VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9)
 		ON CONFLICT (check_id) DO NOTHING`,
 		record.CheckID,
+		normalizeTenantID(record.TenantID),
 		repository.subjectHash(record.SubjectCPF),
 		record.CampaignID,
 		record.Scenario,
@@ -938,6 +961,62 @@ func (repository *Repository) RecordAuthoritativeState(
 	return err
 }
 
+func (repository *Repository) TenantUsage(
+	ctx context.Context,
+	tenantID string,
+	periodFrom time.Time,
+	periodTo time.Time,
+) (TenantUsage, error) {
+	tenantID = normalizeTenantID(tenantID)
+	if !periodTo.After(periodFrom) {
+		return TenantUsage{}, errors.New("usage period must have a positive duration")
+	}
+
+	usage := TenantUsage{
+		TenantID:   tenantID,
+		PeriodFrom: periodFrom.UTC(),
+		PeriodTo:   periodTo.UTC(),
+	}
+	err := repository.db.QueryRowContext(
+		ctx,
+		`SELECT
+		    COUNT(*),
+		    COUNT(*) FILTER (WHERE completed_at IS NOT NULL),
+		    COUNT(*) FILTER (WHERE status = 'approved'),
+		    COUNT(*) FILTER (WHERE status = 'review'),
+		    COUNT(*) FILTER (WHERE status = 'rejected'),
+		    COUNT(*) FILTER (WHERE status = 'expired'),
+		    COUNT(*) FILTER (WHERE status NOT IN ('approved','review','rejected','expired'))
+		 FROM faceproof_checks
+		 WHERE tenant_id = $1
+		   AND created_at >= $2
+		   AND created_at < $3`,
+		tenantID,
+		periodFrom.UTC(),
+		periodTo.UTC(),
+	).Scan(
+		&usage.Issued,
+		&usage.Completed,
+		&usage.Approved,
+		&usage.Review,
+		&usage.Rejected,
+		&usage.Expired,
+		&usage.Pending,
+	)
+	if err != nil {
+		return TenantUsage{}, err
+	}
+	return usage, nil
+}
+
+func normalizeTenantID(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return "legacy"
+	}
+	return value
+}
+
 func (repository *Repository) ListCheckIDs(ctx context.Context) ([]string, error) {
 	rows, err := repository.db.QueryContext(
 		ctx,
@@ -983,6 +1062,7 @@ func (repository *Repository) ListChecks(
 		args = append(args, value)
 		where = append(where, fmt.Sprintf("%s = $%d", column, len(args)))
 	}
+	add("c.tenant_id", filter.TenantID)
 	add("c.status", filter.Status)
 	add("c.scenario", filter.Scenario)
 	add("c.campaign_id", filter.CampaignID)
@@ -991,6 +1071,7 @@ func (repository *Repository) ListChecks(
 	query := fmt.Sprintf(
 		`SELECT
 		    c.check_id,
+		    c.tenant_id,
 		    COALESCE(c.campaign_id, ''),
 		    COALESCE(p.name, ''),
 		    c.scenario,
@@ -1026,6 +1107,7 @@ func (repository *Repository) ListChecks(
 		var face, liveness, pad, quality sql.NullFloat64
 		if err := rows.Scan(
 			&item.CheckID,
+			&item.TenantID,
 			&item.CampaignID,
 			&item.CampaignName,
 			&item.Scenario,
@@ -1066,6 +1148,7 @@ func (repository *Repository) GetCheck(ctx context.Context, checkID string) (Che
 		ctx,
 		`SELECT
 		    c.check_id,
+		    c.tenant_id,
 		    COALESCE(c.campaign_id, ''),
 		    COALESCE(p.name, ''),
 		    c.scenario,
@@ -1107,6 +1190,7 @@ func (repository *Repository) GetCheck(ctx context.Context, checkID string) (Che
 		checkID,
 	).Scan(
 		&detail.CheckID,
+		&detail.TenantID,
 		&detail.CampaignID,
 		&detail.CampaignName,
 		&detail.Scenario,
