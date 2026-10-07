@@ -104,7 +104,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Acesso ao link não é tratado como leitura; “leitura realizada” não é inferida automaticamente.
    - ✅ Semântica de analytics validada com `go test ./...`.
    - ✅ Web SDK validado: `npm run typecheck`, `npm run build` e `npm run test:liveness-v2` (4/4).
-   - ⏳ Validar `link_accessed` + `view_confirmed` no runtime real.
+   - ✅ `link_accessed` + `view_confirmed` validados no runtime real; confirmação ocorreu após ~3s visíveis (`visibleMs` 3005–3011).
    - ⏳ Rate limiting distribuído/gateway para múltiplas instâncias.
    - ✅ Registry de tenants com API keys armazenadas somente como SHA-256.
    - ✅ Checks criptografados vinculados a `TenantID`.
