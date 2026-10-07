@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,6 +14,9 @@ import (
 )
 
 func main() {
+	environment := strings.ToLower(strings.TrimSpace(
+		envString("FACEPROOF_ENV", "development"),
+	))
 	listenAddress := envString("FACEPROOF_WEB_ADDR", ":5173")
 	apiURL := envString("FACEPROOF_DEV_API_URL", "http://127.0.0.1:8180")
 	webDirectory := envString("FACEPROOF_WEB_DIR", "../../apps/web-sdk")
@@ -26,6 +31,13 @@ func main() {
 
 	target, err := url.Parse(apiURL)
 	if err != nil {
+		log.Fatal(err)
+	}
+	if err := validateProductionGateway(
+		environment,
+		listenAddress,
+		target,
+	); err != nil {
 		log.Fatal(err)
 	}
 	apiProxy := httputil.NewSingleHostReverseProxy(target)
@@ -45,7 +57,9 @@ func main() {
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		setSecurityHeaders(writer)
 
-		if request.URL.Path == "/v1" || strings.HasPrefix(request.URL.Path, "/v1/") {
+		if request.URL.Path == "/health" ||
+			request.URL.Path == "/v1" ||
+			strings.HasPrefix(request.URL.Path, "/v1/") {
 			apiProxy.ServeHTTP(writer, request)
 			return
 		}
@@ -70,6 +84,47 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func validateProductionGateway(
+	environment string,
+	listenAddress string,
+	apiURL *url.URL,
+) error {
+	if environment != "production" {
+		return nil
+	}
+	if !isLoopbackGatewayAddress(listenAddress) {
+		return fmt.Errorf(
+			"FACEPROOF_WEB_ADDR must bind to loopback in production, got %q",
+			listenAddress,
+		)
+	}
+	if apiURL == nil ||
+		!strings.EqualFold(apiURL.Scheme, "http") ||
+		apiURL.Hostname() == "" ||
+		!isLoopbackHost(apiURL.Hostname()) {
+		return fmt.Errorf(
+			"FACEPROOF_DEV_API_URL must use an HTTP loopback upstream in production",
+		)
+	}
+	return nil
+}
+
+func isLoopbackGatewayAddress(address string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return false
+	}
+	return isLoopbackHost(strings.Trim(host, "[]"))
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(strings.TrimSpace(host), "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	return ip != nil && ip.IsLoopback()
 }
 
 func setSecurityHeaders(writer http.ResponseWriter) {
