@@ -101,8 +101,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ Endpoint autenticado `GET /v1/identity/usage` retorna uso mensal do próprio tenant.
      - ✅ Métricas: issued, completed, approved, review, rejected, expired e pending.
      - ✅ Rate limiting aplicado também às API keys de issuer.
-     - ⏳ Validar migração PostgreSQL e endpoint em runtime local.
-     - ⬜ Definir quota/faturamento transacional sem depender do analytics opcional.
+     - ✅ Migração PostgreSQL, endpoint de uso e registry validados em runtime local.
+     - ✅ `GET /v1/identity/usage` validado para o tenant `default`.
+     - ⏳ Definir quota/faturamento transacional sem depender do analytics opcional.
    - ⏳ Gestão/rotação de segredos em KMS/HSM para produção.
    - ⏳ Perfil TLS/reverse proxy e limites de infraestrutura.
 
