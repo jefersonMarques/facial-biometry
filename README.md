@@ -88,11 +88,14 @@ Node.js is only required when editing the TypeScript SDK. The compiled JavaScrip
 
 ## Run
 
-Build the Linux Secure Core once:
+Build the Linux Secure Core and signed development Model Pack once:
 
 ```bash
 bash scripts/build-biometric-core.sh
+bash scripts/build-model-pack.sh
 ```
+
+The Model Pack is a signed `.fpmp` archive. The runtime verifies its Ed25519 signature, manifest, model sizes and SHA-256 hashes before the C++ Secure Core receives any model path.
 
 Start the production-candidate runtime:
 
@@ -116,6 +119,7 @@ Identity page:    http://localhost:5173/verify.html
 Biometric API:    http://localhost:8180
 Analytics panel:  http://localhost:5174
 Secure Core:      libfaceproof_core.so (in-process)
+Model Pack:       signed .fpmp verified before Core startup
 ```
 
 To create a check, call:
@@ -159,10 +163,11 @@ Important biometric settings:
 - `FACEPROOF_LIVENESS_THRESHOLD`
 - `FACEPROOF_REQUIRE_PASSIVE_PAD`
 - `FACEPROOF_SECURE_CORE_LIBRARY`
-- `FACEPROOF_YUNET_MODEL`
-- `FACEPROOF_SFACE_MODEL`
-- `FACEPROOF_MINIFASNET_MODEL`
+- `FACEPROOF_MODEL_PACK`
+- `FACEPROOF_MODEL_PACK_PUBLIC_KEY`
+- `FACEPROOF_MODEL_PACK_CACHE_DIR`
 - `FACEPROOF_ENGINE_URL` (Python R&D fallback only)
+- `FACEPROOF_YUNET_MODEL`, `FACEPROOF_SFACE_MODEL`, `FACEPROOF_MINIFASNET_MODEL` (loose-model R&D/build tooling only)
 
 ## Documentation
 
