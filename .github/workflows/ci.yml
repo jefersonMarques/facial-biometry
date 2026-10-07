@@ -27,7 +27,7 @@ jobs:
         run: go test ./...
       - name: Validate Linux development scripts
         run: |
-          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh scripts/build-biometric-shadow.sh scripts/build-biometric-core.sh scripts/start-analytics-postgres.sh scripts/setup-analytics-postgres-native.sh
+          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh scripts/build-biometric-shadow.sh scripts/build-biometric-core.sh scripts/build-model-pack.sh scripts/start-analytics-postgres.sh scripts/setup-analytics-postgres-native.sh
 
   python:
     runs-on: ubuntu-latest
@@ -122,7 +122,10 @@ jobs:
       - name: Verify production Secure Core shared library
         run: |
           test -s build/biometric-vision/libfaceproof_core.so
-          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_create      - name: Compare Python and C++ vision pipeline
+          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_create$'
+          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_analyze_identity$'
+          nm -D build/biometric-vision/libfaceproof_core.so | grep -q ' fp_secure_core_reference_jpeg$'
+      - name: Compare Python and C++ vision pipeline
         env:
           PYTHONPATH: services/engine
           LD_LIBRARY_PATH: ${{ github.workspace }}/build/opencv-4.14.0/install/lib:${{ github.workspace }}/build/onnxruntime-1.30.0/lib
