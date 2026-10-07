@@ -1198,9 +1198,9 @@ function renderIdentityResult(
                     ></div>
                 </div>
                 <div class="match-scale-labels">
-                    <span>-1</span>
+                    <span>Escala -1</span>
                     <span class="match-scale-threshold-label">Limiar ${faceScore(result.matchThreshold)}</span>
-                    <span>+1</span>
+                    <span>Escala +1</span>
                 </div>
             </div>
 
@@ -1360,12 +1360,22 @@ function nativeShadowDetails(
         return nativeShadowDiagnosticFallback(diagnostics);
     }
 
+    const errors = shadow.errors?.length
+        ? `<div class="technical-row"><span>Secure Core warnings</span><strong>${escapeHtml(shadow.errors.join(" · "))}</strong></div>`
+        : "";
+
+    if (shadow.status.toLowerCase() === "authority") {
+        return `
+            <div class="technical-row"><span>Secure Core C++</span><strong>AUTHORITY</strong></div>
+            <div class="technical-row"><span>Frames processados nativamente</span><strong>${shadow.nativeFrames}</strong></div>
+            <div class="technical-row"><span>Comparação Python</span><strong>desativada</strong></div>
+            ${errors}
+        `;
+    }
+
     const padValue = shadow.padComparedFrames > 0
         ? `${shadow.padComparedFrames} frames · Δ máx. ${shadowDelta(shadow.passivePadMaxDelta)}`
         : "não comparado";
-    const errors = shadow.errors?.length
-        ? `<div class="technical-row"><span>Shadow warnings</span><strong>${escapeHtml(shadow.errors.join(" · "))}</strong></div>`
-        : "";
 
     return `
         <div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(shadow.status.toUpperCase())}</strong></div>
