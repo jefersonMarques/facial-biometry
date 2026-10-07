@@ -18,6 +18,15 @@ func (handler *Handler) getTenantUsage(
 	writer http.ResponseWriter,
 	request *http.Request,
 ) {
+	if handler.identityChecks == nil {
+		handler.writeError(
+			writer,
+			http.StatusServiceUnavailable,
+			"tenant usage is unavailable",
+		)
+		return
+	}
+
 	authenticatedTenant, authorized := handler.authorizeIdentityIssuer(request)
 	if !authorized {
 		handler.writeError(
