@@ -13,3 +13,5 @@ data/identity-checks/*
 apps/web-sdk/wasm/liveness-core/
 
 apps/web-sdk/vendor/mediapipe/
+
+data/model-cache/
