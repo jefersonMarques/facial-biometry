@@ -125,6 +125,7 @@ type identityCompleteResponse struct {
 	Document          identityDocumentDetails         `json:"document"`
 	FlowType          identity.FlowType               `json:"flowType"`
 	DisplayName       string                          `json:"displayName,omitempty"`
+	TemplateStored    bool                            `json:"templateStored,omitempty"`
 }
 
 func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request *http.Request) {
