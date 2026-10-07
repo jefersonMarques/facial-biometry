@@ -24,6 +24,7 @@ func (failure *identityCreateError) Error() string {
 func (handler *Handler) createIdentityCheckRecord(
 	ctx context.Context,
 	tenantID string,
+	monthlyCheckLimit int,
 	payload createIdentityCheckRequest,
 ) (createIdentityCheckResponse, error) {
 	if handler.identityChecks == nil || handler.cnhDocuments == nil {
@@ -125,7 +126,17 @@ func (handler *Handler) createIdentityCheckRecord(
 		CreatedAt:           now,
 		ExpiresAt:           now.Add(linkTTL),
 	}
-	if err := handler.identityChecks.Create(token, check); err != nil {
+	if err := handler.identityChecks.CreateWithMonthlyQuota(
+		token,
+		check,
+		monthlyCheckLimit,
+	); err != nil {
+		if errors.Is(err, identity.ErrTenantQuotaExceeded) {
+			return createIdentityCheckResponse{}, &identityCreateError{
+				Status:  http.StatusTooManyRequests,
+				Message: "tenant monthly verification quota exceeded",
+			}
+		}
 		return createIdentityCheckResponse{}, errors.New("failed to persist identity check")
 	}
 	handler.recordAnalyticsCheckCreated(ctx, check)
