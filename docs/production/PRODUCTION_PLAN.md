@@ -48,7 +48,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Orquestração multi-frame portada para C++.
    - ✅ YuNet → quality → PAD → SFace → embeddings → fusion → scoring no Secure Core.
    - ✅ Seleção dos 3 melhores frames próximos e embedding combinado no C++.
-   - ⏳ Correção de integridade do matching referência × captura.
+   - ✅ Correção de integridade do matching referência × captura.
      - ✅ Identificada causa-raiz do score sentinela `-1`: variantes de referência compactadas pelo tamanho real eram lidas com stride fixo da ABI.
      - ✅ Secure Core converte explicitamente variantes packed → linhas ABI de 512 floats.
      - ✅ Matching robusto não trata comparação inválida como cosine `-1`.
@@ -59,7 +59,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ Nova captura real validou o Secure Core 0.2.1: similaridade 0.629, limiar 0.363, margem +0.266 e três frames próximos consistentes.
      - ✅ Bug do score sentinela `-1` encerrado; a execução anterior foi classificada como falha técnica de integração, não falso negativo biométrico.
      - ✅ UI de desenvolvimento não exibe métricas de paridade Python quando o Secure Core está em modo `authority`; mostra apenas execução nativa.
-     - ⏳ Revalidar build/testes após ajuste final de apresentação do Web SDK.
+     - ✅ Web SDK revalidado após ajuste final: `typecheck`, `build` e `test:liveness-v2` (4/4).
    - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
 6. ✅ **Retirar Python do runtime**
