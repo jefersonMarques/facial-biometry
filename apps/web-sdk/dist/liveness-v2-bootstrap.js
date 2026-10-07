@@ -1,101 +1,131 @@
-import { ExperimentalGeometryLiveness } from "./liveness-v2.js";
-
+import { CAPTURE_LIFECYCLE_EVENT, } from "./capture-lifecycle.js";
+import { ExperimentalGeometryLiveness, } from "./liveness-v2.js";
 const video = document.getElementById("camera");
-const phaseLabel = document.getElementById("guidePhaseText");
 const biometryPanel = document.getElementById("biometryPanel");
 const finalPanel = document.getElementById("finalPanel");
 const resultPanel = document.getElementById("identityResult");
-
-if (video && phaseLabel && biometryPanel) {
+if (video && biometryPanel) {
     const diagnosticsHost = biometryPanel.querySelector(".stage-content");
     const diagnostics = createDiagnosticsPanel(diagnosticsHost ?? biometryPanel);
     const probe = new ExperimentalGeometryLiveness();
     let lastPhase = null;
     let lastSummary = probe.summarize();
+    let latestServerGuide = null;
+    const localGuideHistory = [];
     let startInProgress = false;
-
     const runtime = {
         engineState: "preparing",
         phase: null,
+        lifecycleState: "idle",
+        lifecycleRunId: "",
+        lifecycleSequence: 0,
         videoReadyState: video.readyState,
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
         cameraActive: false,
         errorMessage: "",
     };
-
     const renderDiagnostics = () => {
-        refreshRuntime(runtime, video, phaseLabel);
+        refreshRuntime(runtime, video);
         diagnostics.hidden = false;
         const output = diagnostics.querySelector("pre");
         if (output) {
-            output.textContent = formatDiagnostics(lastSummary, runtime);
+            output.textContent = formatDiagnostics(lastSummary, runtime, probe.getWasmShadowDiagnostics(), latestServerGuide, localGuideHistory);
         }
     };
-
-    let warmupError = null;
-    const warmup = probe.initialize()
-        .then(() => {
+    let initialization = null;
+    const ensureInitialized = async () => {
+        if (initialization) {
+            return initialization;
+        }
+        runtime.engineState = "preparing";
+        runtime.errorMessage = "";
+        renderDiagnostics();
+        initialization = new Promise((resolve) => {
+            window.setTimeout(resolve, 350);
+        })
+            .then(() => probe.initialize())
+            .then(() => {
             runtime.engineState = "ready";
             renderDiagnostics();
         })
-        .catch((error) => {
-            warmupError = error;
+            .catch((error) => {
+            initialization = null;
             runtime.engineState = "error";
             runtime.errorMessage = errorMessage(error);
             renderDiagnostics();
+            throw error;
         });
-
+        return initialization;
+    };
     const renderSummary = (summary) => {
         lastSummary = summary;
         renderDiagnostics();
-        persistSummary(summary);
-        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime);
+        const wasm = probe.getWasmShadowDiagnostics();
+        persistTelemetry(summary, wasm, runtime.lifecycleRunId);
+        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm, latestServerGuide, localGuideHistory);
     };
-
-    const syncPhase = (forceReset = false) => {
-        const phase = phaseFromLabel(phaseLabel.textContent ?? "");
-        if (phase === "far" && (forceReset || lastPhase !== "far")) {
+    const applyLifecycle = (detail) => {
+        if (detail.protocolVersion !== "1" || !detail.runId) {
+            return;
+        }
+        if (detail.runId === runtime.lifecycleRunId &&
+            detail.sequence <= runtime.lifecycleSequence) {
+            return;
+        }
+        const previousPhase = lastPhase;
+        const runChanged = detail.runId !== runtime.lifecycleRunId;
+        const phase = detail.state === "far" || detail.state === "near"
+            ? detail.state
+            : null;
+        runtime.lifecycleState = detail.state;
+        runtime.lifecycleRunId = detail.runId;
+        runtime.lifecycleSequence = detail.sequence;
+        runtime.phase = phase;
+        if (detail.state === "far" && (runChanged || previousPhase !== "far")) {
             probe.reset();
             lastSummary = probe.summarize();
         }
         probe.setPhase(phase);
-        if (phase === null && lastPhase !== null) {
-            renderSummary(probe.summarize());
-        }
         lastPhase = phase;
+        if (phase === null && previousPhase !== null) {
+            renderSummary(probe.summarize());
+            return;
+        }
         renderDiagnostics();
     };
-
+    const handleCaptureLifecycle = (event) => {
+        const detail = event.detail;
+        if (!detail) {
+            return;
+        }
+        applyLifecycle(detail);
+    };
     const start = async () => {
         if (startInProgress) {
             return;
         }
         startInProgress = true;
         renderDiagnostics();
-
         try {
             await ensureInitialized();
-            syncPhase(true);
             await probe.start(video, renderSummary);
             runtime.engineState = "ready";
             renderDiagnostics();
-        } catch (error) {
+        }
+        catch (error) {
             runtime.engineState = "error";
             runtime.errorMessage = errorMessage(error);
             renderDiagnostics();
-        } finally {
+        }
+        finally {
             startInProgress = false;
         }
     };
-
-    const phaseObserver = new MutationObserver(() => syncPhase());
-    phaseObserver.observe(phaseLabel, { childList: true, characterData: true, subtree: true });
-
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
-                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime);
+                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime, probe.getWasmShadowDiagnostics(), latestServerGuide, localGuideHistory);
             }
         })
         : null;
@@ -103,12 +133,32 @@ if (video && phaseLabel && biometryPanel) {
         attributes: true,
         attributeFilter: ["hidden"],
     });
-
+    const handleLocalGuide = (event) => {
+        const detail = event.detail;
+        if (!detail?.guide) {
+            return;
+        }
+        localGuideHistory.push(detail.guide);
+        if (localGuideHistory.length > 24) {
+            localGuideHistory.splice(0, localGuideHistory.length - 24);
+        }
+        renderDiagnostics();
+    };
+    const handleServerGuide = (event) => {
+        const detail = event.detail;
+        if (!detail?.guide) {
+            return;
+        }
+        latestServerGuide = detail;
+        renderDiagnostics();
+    };
+    window.addEventListener(CAPTURE_LIFECYCLE_EVENT, handleCaptureLifecycle);
+    window.addEventListener("faceproof:local-guide", handleLocalGuide);
+    window.addEventListener("faceproof:server-guide", handleServerGuide);
     const diagnosticTimer = window.setInterval(() => {
         lastSummary = probe.summarize();
         renderDiagnostics();
     }, 500);
-
     video.addEventListener("playing", () => void start());
     video.addEventListener("pause", () => {
         probe.stop();
@@ -118,77 +168,59 @@ if (video && phaseLabel && biometryPanel) {
         probe.stop();
         renderDiagnostics();
     });
-
     if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
         void start();
-    } else {
+    }
+    else {
         renderDiagnostics();
     }
-
     window.addEventListener("beforeunload", () => {
         window.clearInterval(diagnosticTimer);
-        phaseObserver.disconnect();
         finalPanelObserver?.disconnect();
+        window.removeEventListener(CAPTURE_LIFECYCLE_EVENT, handleCaptureLifecycle);
+        window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+        window.removeEventListener("faceproof:server-guide", handleServerGuide);
         probe.dispose();
     });
 }
-
-function phaseFromLabel(value) {
-    const normalized = value.trim().toLowerCase();
-    if (normalized.includes("captura 1")) {
-        return "far";
-    }
-    if (normalized.includes("captura 2")) {
-        return "near";
-    }
-    return null;
-}
-
 function createDiagnosticsPanel(parent) {
     const existing = document.getElementById("livenessV2Diagnostics");
     if (existing) {
         return existing;
     }
-
     const details = document.createElement("details");
     details.id = "livenessV2Diagnostics";
     details.open = true;
     details.hidden = false;
     details.style.cssText = "margin-top:16px;padding:14px 16px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(8,15,28,.58);";
-
     const summary = document.createElement("summary");
     summary.textContent = "Liveness V2 · diagnóstico experimental";
     summary.style.cssText = "cursor:pointer;font-weight:700;";
-
     const note = document.createElement("p");
     note.textContent = "Somente diagnóstico. Este sinal ainda não altera aprovação, revisão ou rejeição.";
     note.style.cssText = "margin:10px 0 8px;font-size:12px;opacity:.72;";
-
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.textContent = "Copiar diagnóstico";
     copyButton.style.cssText = "margin:0 0 10px;padding:7px 11px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;font:inherit;";
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
-
     const output = document.createElement("pre");
     output.textContent = "Preparando motor local...";
     output.style.cssText = "margin:0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
-
     details.append(summary, note, copyButton, output);
     parent.append(details);
     return details;
 }
-
 async function copyDiagnostics(panel, button) {
     const output = panel.querySelector("pre");
     const text = output?.textContent?.trim() ?? "";
     if (!text) {
         return;
     }
-
     try {
         await navigator.clipboard.writeText(text);
-    } catch {
+    }
+    catch {
         const textarea = document.createElement("textarea");
         textarea.value = text;
         textarea.style.position = "fixed";
@@ -198,16 +230,13 @@ async function copyDiagnostics(panel, button) {
         document.execCommand("copy");
         textarea.remove();
     }
-
     const previousText = button.textContent;
     button.textContent = "Copiado ✓";
     window.setTimeout(() => {
         button.textContent = previousText;
-    }, 1500);
+    }, 1_500);
 }
-
-function refreshRuntime(runtime, video, phaseLabel) {
-    runtime.phase = phaseFromLabel(phaseLabel.textContent ?? "");
+function refreshRuntime(runtime, video) {
     runtime.videoReadyState = video.readyState;
     runtime.videoWidth = video.videoWidth;
     runtime.videoHeight = video.videoHeight;
@@ -215,25 +244,23 @@ function refreshRuntime(runtime, video, phaseLabel) {
         !video.ended &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
 }
-
-function formatDiagnostics(summary, runtime) {
+function formatDiagnostics(summary, runtime, wasm, serverGuide, localGuideHistory) {
     const engineLabel = {
         preparing: "carregando",
         ready: "pronto",
         error: "erro",
     }[runtime.engineState];
-
     const phaseLabel = runtime.phase === "far"
         ? "longe"
         : runtime.phase === "near"
             ? "perto"
             : "fora da captura";
-
     const status = summary.status === "experimental" ? "EVIDÊNCIA COLETADA" : "AMOSTRA INSUFICIENTE";
     const lines = [
         `Motor: ${engineLabel}`,
         `Câmera: ${runtime.cameraActive ? "ativa" : "inativa"} · ${runtime.videoWidth}x${runtime.videoHeight} · readyState ${runtime.videoReadyState}`,
-        `Fase observada: ${phaseLabel}`,
+        `Lifecycle: ${runtime.lifecycleState} · seq ${runtime.lifecycleSequence} · run ${runtime.lifecycleRunId ? runtime.lifecycleRunId.slice(0, 8) : "—"}`,
+        `Fase explícita: ${phaseLabel}`,
         `Estado geométrico: ${status}`,
         `Frames geométricos válidos: ${summary.sampleCount} (longe ${summary.farSamples} · perto ${summary.nearSamples})`,
         `Escala perto/longe: ${summary.scaleRatio.toFixed(3)}x`,
@@ -242,55 +269,159 @@ function formatDiagnostics(summary, runtime) {
         `Mudança de profundidade: ${summary.depthChange.toFixed(5)}`,
         `Estabilidade por fase: ${percentage(summary.phaseStability)}`,
         `Geometry evidence: ${percentage(summary.evidenceScore)} · NÃO CALIBRADO`,
+        ...formatWasmDiagnostics(summary, wasm),
+        ...formatGuideCalibration(serverGuide, localGuideHistory),
     ];
-
     if (runtime.errorMessage) {
         lines.push(`Erro do motor: ${runtime.errorMessage}`);
     }
-
     return lines.join("\n");
 }
-
-function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime) {
+function formatWasmDiagnostics(typescriptSummary, wasm) {
+    if (wasm.state === "idle") {
+        return ["WASM shadow: aguardando"];
+    }
+    if (wasm.state === "loading") {
+        return ["WASM shadow: carregando"];
+    }
+    if (wasm.state === "error") {
+        return [
+            "WASM shadow: indisponível · fluxo principal preservado",
+            `Erro WASM: ${wasm.errorMessage || "não informado"}`,
+        ];
+    }
+    if (!wasm.summary) {
+        return ["WASM shadow: pronto · aguardando amostras"];
+    }
+    const candidate = wasm.summary;
+    if (candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples) {
+        return [
+            `WASM shadow: sincronizando · TS ${typescriptSummary.sampleCount} frames · WASM ${candidate.sampleCount} frames`,
+            `Amostras: TS ${typescriptSummary.farSamples}/${typescriptSummary.nearSamples} · WASM ${candidate.farSamples}/${candidate.nearSamples}`,
+            "Paridade TS × WASM: aguardando mesmas amostras",
+        ];
+    }
+    const deltas = [
+        Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
+        Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
+        Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange),
+        Math.abs(candidate.depthChange - typescriptSummary.depthChange),
+        Math.abs(candidate.phaseStability - typescriptSummary.phaseStability),
+        Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore),
+    ];
+    const maxDelta = Math.max(...deltas);
+    const parity = maxDelta <= 1e-9 ? "OK" : "DIVERGENTE";
+    return [
+        `WASM shadow: pronto · ${candidate.sampleCount} frames`,
+        `WASM Geometry evidence: ${percentage(candidate.evidenceScore)}`,
+        `Paridade TS × WASM: ${parity} · delta máx. ${maxDelta.toExponential(2)}`,
+    ];
+}
+function formatGuideCalibration(server, localHistory) {
+    if (localHistory.length === 0) {
+        return ["Guide local C++: aguardando primeira amostra"];
+    }
+    if (!server) {
+        const local = localHistory[localHistory.length - 1];
+        if (!local) {
+            return ["Guide local C++: aguardando primeira amostra"];
+        }
+        return [
+            "Guide local C++: ATIVO · /identity/guide sem POST contínuo",
+            `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
+            "Servidor continua validando integralmente os frames finais.",
+        ];
+    }
+    const local = nearestLocalGuide(server.timestampMs, localHistory);
+    if (!local) {
+        return ["Guide local: sem amostra temporal próxima"];
+    }
+    const ageMs = Math.abs(local.timestampMs - server.timestampMs);
+    const serverGuide = server.guide;
+    const localTop = local.centerY - local.heightRatio / 2;
+    const localBottom = local.centerY + local.heightRatio / 2;
+    const serverTop = serverGuide.centerY - serverGuide.heightRatio / 2;
+    const serverBottom = serverGuide.centerY + serverGuide.heightRatio / 2;
+    const heightScale = local.heightRatio > 1e-6
+        ? serverGuide.heightRatio / local.heightRatio
+        : 0;
+    return [
+        "Guide local C++ · calibração shadow",
+        `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
+        `YuNet: centro ${serverGuide.centerX.toFixed(3)}/${serverGuide.centerY.toFixed(3)} · tamanho ${serverGuide.widthRatio.toFixed(3)}×${serverGuide.heightRatio.toFixed(3)} · roll ${serverGuide.rollDegrees.toFixed(1)}° · faceSize ${percentage(serverGuide.quality.faceSize)} · conf ${percentage(serverGuide.confidence)}`,
+        `Vertical: top C++ ${localTop.toFixed(3)} / YuNet ${serverTop.toFixed(3)} · bottom C++ ${localBottom.toFixed(3)} / YuNet ${serverBottom.toFixed(3)} · fator altura ${heightScale.toFixed(3)}x`,
+        `Delta aprox. (${ageMs.toFixed(0)}ms): X ${signed(local.centerX - serverGuide.centerX, 3)} · Y ${signed(local.centerY - serverGuide.centerY, 3)} · altura ${signed(local.heightRatio - serverGuide.heightRatio, 3)} · roll ${signed(local.rollDegrees - serverGuide.rollDegrees, 1)}°`,
+        `Qualidade servidor: ${percentage(serverGuide.quality.score)} · cliente JS atual: brilho ${percentage(server.clientQuality.brightness)} · nitidez ${percentage(server.clientQuality.sharpness)}`,
+    ];
+}
+function nearestLocalGuide(timestampMs, history) {
+    let best = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const item of history) {
+        const distance = Math.abs(item.timestampMs - timestampMs);
+        if (distance < bestDistance) {
+            best = item;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+function signed(value, digits) {
+    const prefix = value >= 0 ? "+" : "";
+    return `${prefix}${value.toFixed(digits)}`;
+}
+function renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm, serverGuide, localGuideHistory) {
     if (!resultPanel || !finalPanel || finalPanel.hidden) {
         return;
     }
     document.getElementById("livenessV2FinalDiagnostics")?.remove();
-
     const details = document.createElement("details");
     details.id = "livenessV2FinalDiagnostics";
     details.style.cssText = "margin-top:16px;padding:14px 16px;border:1px solid rgba(255,255,255,.12);border-radius:12px;";
-
     const title = document.createElement("summary");
     title.textContent = "Liveness V2 · geometria experimental";
     title.style.cssText = "cursor:pointer;font-weight:700;";
-
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.textContent = "Copiar diagnóstico";
     copyButton.style.cssText = "margin:12px 0 0;padding:7px 11px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;font:inherit;";
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
-
     const output = document.createElement("pre");
-    output.textContent = formatDiagnostics(summary, runtime);
+    output.textContent = formatDiagnostics(summary, runtime, wasm, serverGuide, localGuideHistory);
     output.style.cssText = "margin:12px 0 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
-
     details.append(title, copyButton, output);
     resultPanel.append(details);
 }
-
-function persistSummary(summary) {
+function persistTelemetry(summary, wasm, runId) {
     try {
         sessionStorage.setItem("faceproof.liveness-v2.last-summary", JSON.stringify(summary));
-    } catch {
-        // Diagnóstico experimental; falhas de armazenamento não interferem no fluxo principal.
+        const wasmMaxDelta = geometryWasmMaxDelta(summary, wasm);
+        sessionStorage.setItem("faceproof.liveness-v2.telemetry", JSON.stringify({
+            runId,
+            ...summary,
+            wasmStatus: wasm.state,
+            ...(wasmMaxDelta === null ? {} : { wasmMaxDelta }),
+        }));
+    }
+    catch {
+        // Telemetria experimental; falhas de armazenamento não interferem no fluxo principal.
     }
 }
-
+function geometryWasmMaxDelta(typescriptSummary, wasm) {
+    const candidate = wasm.summary;
+    if (!candidate ||
+        candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples) {
+        return null;
+    }
+    return Math.max(Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio), Math.abs(candidate.transitionScore - typescriptSummary.transitionScore), Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange), Math.abs(candidate.depthChange - typescriptSummary.depthChange), Math.abs(candidate.phaseStability - typescriptSummary.phaseStability), Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore));
+}
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-
 function percentage(value) {
     return `${(value * 100).toFixed(1)}%`;
 }

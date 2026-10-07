@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="referrer" content="no-referrer">
+    <title>FaceProof · Demo Console</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <section id="loginPanel" class="login-screen">
+        <div class="login-card">
+            <div class="brand">
+                <span class="brand-mark"></span>
+                <span>FACEPROOF</span>
+            </div>
+            <div class="login-copy">
+                <span class="eyebrow">DEMO CONSOLE</span>
+                <h1>Biometria que você consegue ver.</h1>
+                <p>Entre para gerar links e acompanhar as validações.</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <label>
+                    <span>Usuário</span>
+                    <input id="demoUser" autocomplete="username" value="demo" required>
+                </label>
+                <label>
+                    <span>Senha</span>
+                    <input id="demoPassword" type="password" autocomplete="current-password" required>
+                </label>
+                <button class="button button-primary" type="submit">Entrar</button>
+                <div id="loginError" class="form-error" hidden></div>
+            </form>
+        </div>
+    </section>
+
+    <div id="appShell" class="app-shell" hidden>
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark"></span>
+                <span>FACEPROOF</span>
+            </div>
+            <div class="topbar-actions">
+                <span id="connectionState" class="connection-dot" title="Conexão"></span>
+                <button id="refreshButton" class="icon-button" type="button" title="Atualizar">↻</button>
+                <button id="logoutButton" class="text-button" type="button">Sair</button>
+            </div>
+        </header>
+
+        <main class="console">
+            <section class="console-hero">
+                <div>
+                    <span class="eyebrow">DEMONSTRAÇÃO</span>
+                    <h1>FaceProof</h1>
+                    <p>Gere um link. Faça a biometria. Veja a comparação.</p>
+                </div>
+                <button id="openGenerator" class="button button-primary" type="button">+ Novo link</button>
+            </section>
+
+            <section id="summaryCards" class="summary-grid" aria-label="Resumo"></section>
+
+            <section id="generatorPanel" class="panel generator-panel" hidden>
+                <div class="panel-head">
+                    <div>
+                        <span class="eyebrow">NOVO LINK</span>
+                        <h2>Escolha a experiência</h2>
+                    </div>
+                    <button id="closeGenerator" class="icon-button" type="button" aria-label="Fechar">×</button>
+                </div>
+
+                <form id="checkForm">
+                    <div class="flow-picker" role="radiogroup" aria-label="Tipo de demonstração">
+                        <label class="flow-option">
+                            <input type="radio" name="flowFamily" value="cnh" checked>
+                            <span class="flow-icon">01</span>
+                            <strong>CNH + Face</strong>
+                            <small>Documento oficial e prova de vida</small>
+                        </label>
+                        <label class="flow-option">
+                            <input type="radio" name="flowFamily" value="face">
+                            <span class="flow-icon">02</span>
+                            <strong>Cadastro facial</strong>
+                            <small>Cadastrar e revalidar uma pessoa</small>
+                        </label>
+                        <label class="flow-option">
+                            <input type="radio" name="flowFamily" value="photo">
+                            <span class="flow-icon">03</span>
+                            <strong>Foto de referência</strong>
+                            <small>Comparar uma foto com captura ao vivo</small>
+                        </label>
+                    </div>
+
+                    <div id="faceActionField" class="segmented" hidden>
+                        <label>
+                            <input type="radio" name="faceAction" value="face_enrollment" checked>
+                            <span>Cadastrar rosto</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="faceAction" value="face_verification">
+                            <span>Validar cadastro</span>
+                        </label>
+                    </div>
+
+                    <div class="form-grid">
+                        <label id="displayNameField" class="field" hidden>
+                            <span>Nome</span>
+                            <input id="checkDisplayName" maxlength="120" placeholder="Ex.: Cliente demonstração">
+                        </label>
+
+                        <label id="subjectField" class="field" hidden>
+                            <span>Identificador</span>
+                            <input id="checkSubjectId" maxlength="128" placeholder="Ex.: demo-001">
+                        </label>
+
+                        <label id="cpfField" class="field">
+                            <span>CPF esperado</span>
+                            <input id="checkCpf" inputmode="numeric" autocomplete="off" placeholder="Somente números">
+                        </label>
+
+                        <label id="minimumDateField" class="field">
+                            <span>CNH gerada a partir de</span>
+                            <input id="checkMinimumDate" type="date">
+                        </label>
+
+                        <label id="photoField" class="field field-wide" hidden>
+                            <span>Foto de referência</span>
+                            <span class="photo-upload">
+                                <input id="referencePhoto" type="file" accept="image/jpeg,image/png,image/webp">
+                                <span id="referencePhotoLabel">Selecionar foto</span>
+                                <img id="referencePhotoPreview" alt="Prévia da foto de referência" hidden>
+                            </span>
+                        </label>
+
+                        <label class="field">
+                            <span>Validade do link</span>
+                            <select id="checkExpires">
+                                <option value="30">30 minutos</option>
+                                <option value="60" selected>1 hora</option>
+                                <option value="240">4 horas</option>
+                                <option value="1440">24 horas</option>
+                            </select>
+                        </label>
+
+                        <label class="field">
+                            <span>URL pública</span>
+                            <input id="checkPublicBaseUrl" type="url" placeholder="Opcional · https://...">
+                        </label>
+                    </div>
+
+                    <div class="generator-actions">
+                        <button id="generateCheckButton" class="button button-primary" type="submit">Gerar link</button>
+                        <span id="generatedCheckFeedback" class="form-feedback"></span>
+                    </div>
+                </form>
+
+                <div id="generatedCheck" class="generated-link" hidden>
+                    <div>
+                        <span>Link pronto</span>
+                        <strong id="generatedCheckMeta">—</strong>
+                    </div>
+                    <div class="generated-link-row">
+                        <input id="generatedCheckUrl" readonly>
+                        <button id="copyGeneratedCheck" class="button button-dark" type="button">Copiar</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="history-section">
+                <div class="section-head">
+                    <div>
+                        <span class="eyebrow">HISTÓRICO</span>
+                        <h2>Biometrias realizadas</h2>
+                    </div>
+                    <select id="statusFilter" class="compact-select">
+                        <option value="">Todas</option>
+                        <option value="approved">Aprovadas</option>
+                        <option value="rejected">Rejeitadas</option>
+                        <option value="review">Em revisão</option>
+                        <option value="biometry_pending">Pendentes</option>
+                    </select>
+                </div>
+                <div id="verificationList" class="verification-list"></div>
+                <div id="lastUpdated" class="last-updated"></div>
+            </section>
+        </main>
+    </div>
+
+    <dialog id="detailDialog" class="detail-dialog">
+        <div class="dialog-head">
+            <div>
+                <span class="eyebrow">DETALHES</span>
+                <h2 id="detailTitle">Verificação</h2>
+            </div>
+            <button id="closeDetail" class="icon-button" type="button">×</button>
+        </div>
+        <div id="detailBody"></div>
+    </dialog>
+
+    <script src="./app.js" defer></script>
+</body>
+</html>

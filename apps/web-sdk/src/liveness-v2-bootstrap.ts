@@ -1,20 +1,46 @@
 import {
+    CAPTURE_LIFECYCLE_EVENT,
+    type CaptureLifecycleEventDetail,
+    type CaptureLifecycleState,
+} from "./capture-lifecycle.js";
+import {
     ExperimentalGeometryLiveness,
     type GeometryCapturePhase,
     type GeometryLivenessSummary,
 } from "./liveness-v2.js";
+import type {
+    LocalFaceGuideMetrics,
+    WasmShadowDiagnostics,
+} from "./liveness-core-shadow.js";
+import type {
+    FrameQualityAssessment,
+    IdentityGuideResult,
+} from "./types.js";
 
 const video = document.getElementById("camera") as HTMLVideoElement | null;
-const phaseLabel = document.getElementById("guidePhaseText") as HTMLSpanElement | null;
 const biometryPanel = document.getElementById("biometryPanel") as HTMLElement | null;
 const finalPanel = document.getElementById("finalPanel") as HTMLElement | null;
 const resultPanel = document.getElementById("identityResult") as HTMLElement | null;
 
 type EngineState = "preparing" | "ready" | "error";
 
+interface ServerGuideSnapshot {
+    timestampMs: number;
+    guide: IdentityGuideResult;
+    clientQuality: FrameQualityAssessment;
+}
+
+interface LocalGuideEventDetail {
+    timestampMs: number;
+    guide: LocalFaceGuideMetrics;
+}
+
 interface RuntimeDiagnostics {
     engineState: EngineState;
     phase: GeometryCapturePhase | null;
+    lifecycleState: CaptureLifecycleState;
+    lifecycleRunId: string;
+    lifecycleSequence: number;
     videoReadyState: number;
     videoWidth: number;
     videoHeight: number;
@@ -22,17 +48,22 @@ interface RuntimeDiagnostics {
     errorMessage: string;
 }
 
-if (video && phaseLabel && biometryPanel) {
+if (video && biometryPanel) {
     const diagnosticsHost = biometryPanel.querySelector(".stage-content") as HTMLElement | null;
     const diagnostics = createDiagnosticsPanel(diagnosticsHost ?? biometryPanel);
     const probe = new ExperimentalGeometryLiveness();
     let lastPhase: GeometryCapturePhase | null = null;
     let lastSummary: GeometryLivenessSummary = probe.summarize();
+    let latestServerGuide: ServerGuideSnapshot | null = null;
+    const localGuideHistory: LocalFaceGuideMetrics[] = [];
     let startInProgress = false;
 
     const runtime: RuntimeDiagnostics = {
         engineState: "preparing",
         phase: null,
+        lifecycleState: "idle",
+        lifecycleRunId: "",
+        lifecycleSequence: 0,
         videoReadyState: video.readyState,
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
@@ -41,11 +72,17 @@ if (video && phaseLabel && biometryPanel) {
     };
 
     const renderDiagnostics = (): void => {
-        refreshRuntime(runtime, video, phaseLabel);
+        refreshRuntime(runtime, video);
         diagnostics.hidden = false;
         const output = diagnostics.querySelector("pre");
         if (output) {
-            output.textContent = formatDiagnostics(lastSummary, runtime);
+            output.textContent = formatDiagnostics(
+                lastSummary,
+                runtime,
+                probe.getWasmShadowDiagnostics(),
+                latestServerGuide,
+                localGuideHistory,
+            );
         }
     };
 
@@ -82,22 +119,64 @@ if (video && phaseLabel && biometryPanel) {
     const renderSummary = (summary: GeometryLivenessSummary): void => {
         lastSummary = summary;
         renderDiagnostics();
-        persistSummary(summary);
-        renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime);
+        const wasm = probe.getWasmShadowDiagnostics();
+        persistTelemetry(summary, wasm, runtime.lifecycleRunId);
+        renderFinalDiagnostics(
+            resultPanel,
+            finalPanel,
+            summary,
+            runtime,
+            wasm,
+            latestServerGuide,
+            localGuideHistory,
+        );
     };
 
-    const syncPhase = (forceReset = false): void => {
-        const phase = phaseFromLabel(phaseLabel.textContent ?? "");
-        if (phase === "far" && (forceReset || lastPhase !== "far")) {
+    const applyLifecycle = (detail: CaptureLifecycleEventDetail): void => {
+        if (detail.protocolVersion !== "1" || !detail.runId) {
+            return;
+        }
+        if (
+            detail.runId === runtime.lifecycleRunId &&
+            detail.sequence <= runtime.lifecycleSequence
+        ) {
+            return;
+        }
+
+        const previousPhase = lastPhase;
+        const runChanged = detail.runId !== runtime.lifecycleRunId;
+        const phase: GeometryCapturePhase | null =
+            detail.state === "far" || detail.state === "near"
+                ? detail.state
+                : null;
+
+        runtime.lifecycleState = detail.state;
+        runtime.lifecycleRunId = detail.runId;
+        runtime.lifecycleSequence = detail.sequence;
+        runtime.phase = phase;
+
+        if (detail.state === "far" && (runChanged || previousPhase !== "far")) {
             probe.reset();
             lastSummary = probe.summarize();
         }
+
         probe.setPhase(phase);
-        if (phase === null && lastPhase !== null) {
-            renderSummary(probe.summarize());
-        }
         lastPhase = phase;
+
+        if (phase === null && previousPhase !== null) {
+            renderSummary(probe.summarize());
+            return;
+        }
+
         renderDiagnostics();
+    };
+
+    const handleCaptureLifecycle = (event: Event): void => {
+        const detail = (event as CustomEvent<CaptureLifecycleEventDetail>).detail;
+        if (!detail) {
+            return;
+        }
+        applyLifecycle(detail);
     };
 
     const start = async (): Promise<void> => {
@@ -109,7 +188,6 @@ if (video && phaseLabel && biometryPanel) {
 
         try {
             await ensureInitialized();
-            syncPhase(true);
             await probe.start(video, renderSummary);
             runtime.engineState = "ready";
             renderDiagnostics();
@@ -122,13 +200,18 @@ if (video && phaseLabel && biometryPanel) {
         }
     };
 
-    const phaseObserver = new MutationObserver(() => syncPhase());
-    phaseObserver.observe(phaseLabel, { childList: true, characterData: true, subtree: true });
-
     const finalPanelObserver = finalPanel
         ? new MutationObserver(() => {
             if (!finalPanel.hidden) {
-                renderFinalDiagnostics(resultPanel, finalPanel, lastSummary, runtime);
+                renderFinalDiagnostics(
+                    resultPanel,
+                    finalPanel,
+                    lastSummary,
+                    runtime,
+                    probe.getWasmShadowDiagnostics(),
+                    latestServerGuide,
+                    localGuideHistory,
+                );
             }
         })
         : null;
@@ -136,6 +219,31 @@ if (video && phaseLabel && biometryPanel) {
         attributes: true,
         attributeFilter: ["hidden"],
     });
+
+    const handleLocalGuide = (event: Event): void => {
+        const detail = (event as CustomEvent<LocalGuideEventDetail>).detail;
+        if (!detail?.guide) {
+            return;
+        }
+        localGuideHistory.push(detail.guide);
+        if (localGuideHistory.length > 24) {
+            localGuideHistory.splice(0, localGuideHistory.length - 24);
+        }
+        renderDiagnostics();
+    };
+
+    const handleServerGuide = (event: Event): void => {
+        const detail = (event as CustomEvent<ServerGuideSnapshot>).detail;
+        if (!detail?.guide) {
+            return;
+        }
+        latestServerGuide = detail;
+        renderDiagnostics();
+    };
+
+    window.addEventListener(CAPTURE_LIFECYCLE_EVENT, handleCaptureLifecycle);
+    window.addEventListener("faceproof:local-guide", handleLocalGuide);
+    window.addEventListener("faceproof:server-guide", handleServerGuide);
 
     const diagnosticTimer = window.setInterval(() => {
         lastSummary = probe.summarize();
@@ -160,21 +268,12 @@ if (video && phaseLabel && biometryPanel) {
 
     window.addEventListener("beforeunload", () => {
         window.clearInterval(diagnosticTimer);
-        phaseObserver.disconnect();
         finalPanelObserver?.disconnect();
+        window.removeEventListener(CAPTURE_LIFECYCLE_EVENT, handleCaptureLifecycle);
+        window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+        window.removeEventListener("faceproof:server-guide", handleServerGuide);
         probe.dispose();
     });
-}
-
-function phaseFromLabel(value: string): GeometryCapturePhase | null {
-    const normalized = value.trim().toLowerCase();
-    if (normalized.includes("captura 1")) {
-        return "far";
-    }
-    if (normalized.includes("captura 2")) {
-        return "near";
-    }
-    return null;
 }
 
 function createDiagnosticsPanel(parent: HTMLElement): HTMLDetailsElement {
@@ -242,9 +341,7 @@ async function copyDiagnostics(panel: HTMLElement, button: HTMLButtonElement): P
 function refreshRuntime(
     runtime: RuntimeDiagnostics,
     video: HTMLVideoElement,
-    phaseLabel: HTMLSpanElement,
 ): void {
-    runtime.phase = phaseFromLabel(phaseLabel.textContent ?? "");
     runtime.videoReadyState = video.readyState;
     runtime.videoWidth = video.videoWidth;
     runtime.videoHeight = video.videoHeight;
@@ -256,6 +353,9 @@ function refreshRuntime(
 function formatDiagnostics(
     summary: GeometryLivenessSummary,
     runtime: RuntimeDiagnostics,
+    wasm: WasmShadowDiagnostics,
+    serverGuide: ServerGuideSnapshot | null,
+    localGuideHistory: LocalFaceGuideMetrics[],
 ): string {
     const engineLabel = {
         preparing: "carregando",
@@ -273,7 +373,8 @@ function formatDiagnostics(
     const lines = [
         `Motor: ${engineLabel}`,
         `Câmera: ${runtime.cameraActive ? "ativa" : "inativa"} · ${runtime.videoWidth}x${runtime.videoHeight} · readyState ${runtime.videoReadyState}`,
-        `Fase observada: ${phaseLabel}`,
+        `Lifecycle: ${runtime.lifecycleState} · seq ${runtime.lifecycleSequence} · run ${runtime.lifecycleRunId ? runtime.lifecycleRunId.slice(0, 8) : "—"}`,
+        `Fase explícita: ${phaseLabel}`,
         `Estado geométrico: ${status}`,
         `Frames geométricos válidos: ${summary.sampleCount} (longe ${summary.farSamples} · perto ${summary.nearSamples})`,
         `Escala perto/longe: ${summary.scaleRatio.toFixed(3)}x`,
@@ -282,6 +383,8 @@ function formatDiagnostics(
         `Mudança de profundidade: ${summary.depthChange.toFixed(5)}`,
         `Estabilidade por fase: ${percentage(summary.phaseStability)}`,
         `Geometry evidence: ${percentage(summary.evidenceScore)} · NÃO CALIBRADO`,
+        ...formatWasmDiagnostics(summary, wasm),
+        ...formatGuideCalibration(serverGuide, localGuideHistory),
     ];
 
     if (runtime.errorMessage) {
@@ -291,11 +394,133 @@ function formatDiagnostics(
     return lines.join("\n");
 }
 
+function formatWasmDiagnostics(
+    typescriptSummary: GeometryLivenessSummary,
+    wasm: WasmShadowDiagnostics,
+): string[] {
+    if (wasm.state === "idle") {
+        return ["WASM shadow: aguardando"];
+    }
+    if (wasm.state === "loading") {
+        return ["WASM shadow: carregando"];
+    }
+    if (wasm.state === "error") {
+        return [
+            "WASM shadow: indisponível · fluxo principal preservado",
+            `Erro WASM: ${wasm.errorMessage || "não informado"}`,
+        ];
+    }
+    if (!wasm.summary) {
+        return ["WASM shadow: pronto · aguardando amostras"];
+    }
+
+    const candidate = wasm.summary;
+    if (
+        candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples
+    ) {
+        return [
+            `WASM shadow: sincronizando · TS ${typescriptSummary.sampleCount} frames · WASM ${candidate.sampleCount} frames`,
+            `Amostras: TS ${typescriptSummary.farSamples}/${typescriptSummary.nearSamples} · WASM ${candidate.farSamples}/${candidate.nearSamples}`,
+            "Paridade TS × WASM: aguardando mesmas amostras",
+        ];
+    }
+
+    const deltas = [
+        Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
+        Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
+        Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange),
+        Math.abs(candidate.depthChange - typescriptSummary.depthChange),
+        Math.abs(candidate.phaseStability - typescriptSummary.phaseStability),
+        Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore),
+    ];
+    const maxDelta = Math.max(...deltas);
+    const parity = maxDelta <= 1e-9 ? "OK" : "DIVERGENTE";
+
+    return [
+        `WASM shadow: pronto · ${candidate.sampleCount} frames`,
+        `WASM Geometry evidence: ${percentage(candidate.evidenceScore)}`,
+        `Paridade TS × WASM: ${parity} · delta máx. ${maxDelta.toExponential(2)}`,
+    ];
+}
+
+function formatGuideCalibration(
+    server: ServerGuideSnapshot | null,
+    localHistory: LocalFaceGuideMetrics[],
+): string[] {
+    if (localHistory.length === 0) {
+        return ["Guide local C++: aguardando primeira amostra"];
+    }
+
+    if (!server) {
+        const local = localHistory[localHistory.length - 1];
+        if (!local) {
+            return ["Guide local C++: aguardando primeira amostra"];
+        }
+        return [
+            "Guide local C++: ATIVO · /identity/guide sem POST contínuo",
+            `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
+            "Servidor continua validando integralmente os frames finais.",
+        ];
+    }
+
+    const local = nearestLocalGuide(server.timestampMs, localHistory);
+    if (!local) {
+        return ["Guide local: sem amostra temporal próxima"];
+    }
+
+    const ageMs = Math.abs(local.timestampMs - server.timestampMs);
+    const serverGuide = server.guide;
+    const localTop = local.centerY - local.heightRatio / 2;
+    const localBottom = local.centerY + local.heightRatio / 2;
+    const serverTop = serverGuide.centerY - serverGuide.heightRatio / 2;
+    const serverBottom = serverGuide.centerY + serverGuide.heightRatio / 2;
+    const heightScale = local.heightRatio > 1e-6
+        ? serverGuide.heightRatio / local.heightRatio
+        : 0;
+
+    return [
+        "Guide local C++ · calibração shadow",
+        `C++: centro ${local.centerX.toFixed(3)}/${local.centerY.toFixed(3)} · tamanho ${local.widthRatio.toFixed(3)}×${local.heightRatio.toFixed(3)} · roll ${local.rollDegrees.toFixed(1)}° · faceSize ${percentage(local.faceSizeScore)}`,
+        `YuNet: centro ${serverGuide.centerX.toFixed(3)}/${serverGuide.centerY.toFixed(3)} · tamanho ${serverGuide.widthRatio.toFixed(3)}×${serverGuide.heightRatio.toFixed(3)} · roll ${serverGuide.rollDegrees.toFixed(1)}° · faceSize ${percentage(serverGuide.quality.faceSize)} · conf ${percentage(serverGuide.confidence)}`,
+        `Vertical: top C++ ${localTop.toFixed(3)} / YuNet ${serverTop.toFixed(3)} · bottom C++ ${localBottom.toFixed(3)} / YuNet ${serverBottom.toFixed(3)} · fator altura ${heightScale.toFixed(3)}x`,
+        `Delta aprox. (${ageMs.toFixed(0)}ms): X ${signed(local.centerX - serverGuide.centerX, 3)} · Y ${signed(local.centerY - serverGuide.centerY, 3)} · altura ${signed(local.heightRatio - serverGuide.heightRatio, 3)} · roll ${signed(local.rollDegrees - serverGuide.rollDegrees, 1)}°`,
+        `Qualidade servidor: ${percentage(serverGuide.quality.score)} · cliente JS atual: brilho ${percentage(server.clientQuality.brightness)} · nitidez ${percentage(server.clientQuality.sharpness)}`,
+    ];
+}
+
+function nearestLocalGuide(
+    timestampMs: number,
+    history: LocalFaceGuideMetrics[],
+): LocalFaceGuideMetrics | null {
+    let best: LocalFaceGuideMetrics | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const item of history) {
+        const distance = Math.abs(item.timestampMs - timestampMs);
+        if (distance < bestDistance) {
+            best = item;
+            bestDistance = distance;
+        }
+    }
+
+    return best;
+}
+
+function signed(value: number, digits: number): string {
+    const prefix = value >= 0 ? "+" : "";
+    return `${prefix}${value.toFixed(digits)}`;
+}
+
 function renderFinalDiagnostics(
     resultPanel: HTMLElement | null,
     finalPanel: HTMLElement | null,
     summary: GeometryLivenessSummary,
     runtime: RuntimeDiagnostics,
+    wasm: WasmShadowDiagnostics,
+    serverGuide: ServerGuideSnapshot | null,
+    localGuideHistory: LocalFaceGuideMetrics[],
 ): void {
     if (!resultPanel || !finalPanel || finalPanel.hidden) {
         return;
@@ -317,19 +542,61 @@ function renderFinalDiagnostics(
     copyButton.addEventListener("click", () => void copyDiagnostics(details, copyButton));
 
     const output = document.createElement("pre");
-    output.textContent = formatDiagnostics(summary, runtime);
+    output.textContent = formatDiagnostics(
+        summary,
+        runtime,
+        wasm,
+        serverGuide,
+        localGuideHistory,
+    );
     output.style.cssText = "margin:12px 0 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;";
 
     details.append(title, copyButton, output);
     resultPanel.append(details);
 }
 
-function persistSummary(summary: GeometryLivenessSummary): void {
+function persistTelemetry(
+    summary: GeometryLivenessSummary,
+    wasm: WasmShadowDiagnostics,
+    runId: string,
+): void {
     try {
         sessionStorage.setItem("faceproof.liveness-v2.last-summary", JSON.stringify(summary));
+
+        const wasmMaxDelta = geometryWasmMaxDelta(summary, wasm);
+        sessionStorage.setItem("faceproof.liveness-v2.telemetry", JSON.stringify({
+            runId,
+            ...summary,
+            wasmStatus: wasm.state,
+            ...(wasmMaxDelta === null ? {} : { wasmMaxDelta }),
+        }));
     } catch {
-        // Diagnóstico experimental; falhas de armazenamento não interferem no fluxo principal.
+        // Telemetria experimental; falhas de armazenamento não interferem no fluxo principal.
     }
+}
+
+function geometryWasmMaxDelta(
+    typescriptSummary: GeometryLivenessSummary,
+    wasm: WasmShadowDiagnostics,
+): number | null {
+    const candidate = wasm.summary;
+    if (
+        !candidate ||
+        candidate.sampleCount !== typescriptSummary.sampleCount ||
+        candidate.farSamples !== typescriptSummary.farSamples ||
+        candidate.nearSamples !== typescriptSummary.nearSamples
+    ) {
+        return null;
+    }
+
+    return Math.max(
+        Math.abs(candidate.scaleRatio - typescriptSummary.scaleRatio),
+        Math.abs(candidate.transitionScore - typescriptSummary.transitionScore),
+        Math.abs(candidate.perspectiveChange - typescriptSummary.perspectiveChange),
+        Math.abs(candidate.depthChange - typescriptSummary.depthChange),
+        Math.abs(candidate.phaseStability - typescriptSummary.phaseStability),
+        Math.abs(candidate.evidenceScore - typescriptSummary.evidenceScore),
+    );
 }
 
 function errorMessage(error: unknown): string {

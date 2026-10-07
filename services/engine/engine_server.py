@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from biometric_engine import BiometricAnalyzer
+from biometric_engine.http_payload import parse_identity_multipart
 
 
 BASE_DIRECTORY = Path(__file__).resolve().parent
@@ -62,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if self.path == "/identity-analyze":
-                payload = self._read_json(max_bytes=10 * 1024 * 1024)
+                payload = self._read_identity_analyze(max_bytes=16 * 1024 * 1024)
                 with ANALYZER_LOCK:
                     result = ANALYZER.analyze_identity(payload)
                 self._write_json(200, result)
@@ -76,6 +77,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format_string: str, *args: Any) -> None:
         print(f"[engine] {self.address_string()} - {format_string % args}")
+
+    def _read_identity_analyze(self, max_bytes: int) -> dict[str, Any]:
+        content_type = self.headers.get("Content-Type", "").strip()
+        if not content_type.lower().startswith("multipart/form-data"):
+            return self._read_json(max_bytes=max_bytes)
+
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0 or content_length > max_bytes:
+            raise ValueError("invalid request size")
+
+        body = self.rfile.read(content_length)
+        return parse_identity_multipart(content_type, body)
 
     def _read_json(self, max_bytes: int) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))

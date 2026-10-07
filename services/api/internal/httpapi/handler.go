@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"faceproof/services/api/internal/analytics"
 	"faceproof/services/api/internal/config"
 	"faceproof/services/api/internal/document/cnh"
 	"faceproof/services/api/internal/domain"
@@ -16,6 +17,7 @@ import (
 	"faceproof/services/api/internal/security"
 	"faceproof/services/api/internal/session"
 	templaterepository "faceproof/services/api/internal/template"
+	"faceproof/services/api/internal/tenant"
 )
 
 const (
@@ -34,6 +36,9 @@ type Handler struct {
 	risk           *risk.Engine
 	identityChecks *identity.Repository
 	cnhDocuments   *cnh.Service
+	analytics      *analytics.Repository
+	publicLimiter  *security.WindowLimiter
+	tenants        *tenant.Registry
 }
 
 type createSessionRequest struct {
@@ -41,10 +46,12 @@ type createSessionRequest struct {
 }
 
 type createSessionResponse struct {
-	SessionID            string    `json:"sessionId"`
-	SessionToken         string    `json:"sessionToken"`
-	Kind                 string    `json:"kind"`
-	ExpiresAt            time.Time `json:"expiresAt"`
+	SessionID              string    `json:"sessionId"`
+	SessionToken           string    `json:"sessionToken"`
+	Kind                   string    `json:"kind"`
+	CaptureRunID           string    `json:"captureRunId"`
+	CaptureProtocolVersion string    `json:"captureProtocolVersion"`
+	ExpiresAt              time.Time `json:"expiresAt"`
 	CaptureDurationMS    int       `json:"captureDurationMs"`
 	SampleIntervalMS     int       `json:"sampleIntervalMs"`
 	IlluminationSettleMS int       `json:"illuminationSettleMs"`
@@ -68,8 +75,9 @@ type completeSessionResponse struct {
 	TemplateStored      bool                 `json:"templateStored,omitempty"`
 	TemplateProvisional bool                 `json:"templateProvisional,omitempty"`
 	Signals             signalResponse       `json:"signals"`
-	Quality             domain.EngineQuality `json:"quality"`
-	Diagnostics         []string             `json:"diagnostics"`
+	Quality             domain.EngineQuality            `json:"quality"`
+	Diagnostics         []string                        `json:"diagnostics"`
+	NativeShadow        *domain.NativeShadowComparison `json:"nativeShadow,omitempty"`
 }
 
 type signalResponse struct {
@@ -87,7 +95,19 @@ func NewHandler(
 	templates *templaterepository.Repository,
 	identityChecks *identity.Repository,
 	cnhDocuments *cnh.Service,
+	analyticsRepositories ...*analytics.Repository,
 ) *Handler {
+	var analyticsRepository *analytics.Repository
+	if len(analyticsRepositories) > 0 {
+		analyticsRepository = analyticsRepositories[0]
+	}
+
+	legacyTenants, _ := tenant.FromLegacyKey(
+		"default",
+		"Default development tenant",
+		configuration.IdentityIssuerKey,
+	)
+
 	return &Handler{
 		config:         configuration,
 		sessions:       sessions,
@@ -96,6 +116,9 @@ func NewHandler(
 		templates:      templates,
 		identityChecks: identityChecks,
 		cnhDocuments:   cnhDocuments,
+		analytics:      analyticsRepository,
+		publicLimiter:  security.NewWindowLimiter(8192),
+		tenants:        legacyTenants,
 		risk: risk.NewEngine(
 			configuration.LivenessThreshold,
 			configuration.ReviewLivenessThreshold,
@@ -105,10 +128,25 @@ func NewHandler(
 	}
 }
 
+func (handler *Handler) SetTenantRegistry(registry *tenant.Registry) {
+	if registry == nil {
+		return
+	}
+	handler.tenants = registry
+}
+
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	handler.setSecurityHeaders(writer)
 	handler.setCORS(writer)
 	if request.Method == http.MethodOptions {
 		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if !handler.enforcePublicIdentityRateLimit(writer, request) {
+		return
+	}
+	if !handler.enforceIssuerRateLimit(writer, request) {
 		return
 	}
 
@@ -117,8 +155,16 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	if handler.handleAdmin(writer, request) {
+		return
+	}
+
 	if request.URL.Path == "/v1/identity/checks" && request.Method == http.MethodPost {
 		handler.createIdentityCheck(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/usage" && request.Method == http.MethodGet {
+		handler.getTenantUsage(writer, request)
 		return
 	}
 	identitySegments := splitPath(request.URL.Path)
@@ -132,6 +178,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 	if request.URL.Path == "/v1/identity/check" && request.Method == http.MethodGet {
 		handler.getIdentityCheck(writer, request)
+		return
+	}
+	if request.URL.Path == "/v1/identity/view" && request.Method == http.MethodPost {
+		handler.confirmIdentityView(writer, request)
 		return
 	}
 	if request.URL.Path == "/v1/identity/document" && request.Method == http.MethodPost {
@@ -180,6 +230,15 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 }
 
 func (handler *Handler) createSession(writer http.ResponseWriter, request *http.Request, kind domain.SessionKind) {
+	if handler.engine.NativeIdentityEnabled() {
+		handler.writeError(
+			writer,
+			http.StatusGone,
+			"legacy biometric enrollment/verification is disabled in Secure Core production mode",
+		)
+		return
+	}
+
 	var payload createSessionRequest
 	if err := decodeJSON(request, &payload, 1<<20); err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
@@ -210,6 +269,15 @@ func (handler *Handler) createSession(writer http.ResponseWriter, request *http.
 }
 
 func (handler *Handler) completeSession(writer http.ResponseWriter, request *http.Request, sessionID string, expectedKind domain.SessionKind) {
+	if handler.engine.NativeIdentityEnabled() {
+		handler.writeError(
+			writer,
+			http.StatusGone,
+			"legacy biometric enrollment/verification is disabled in Secure Core production mode",
+		)
+		return
+	}
+
 	captureSession, err := handler.sessions.Get(sessionID)
 	if err != nil {
 		handler.writeError(writer, sessionErrorStatus(err), err.Error())
@@ -261,8 +329,9 @@ func (handler *Handler) completeSession(writer http.ResponseWriter, request *htt
 			TemporalMotion: result.TemporalMotion,
 			Illumination:   result.Illumination,
 		},
-		Quality:     result.Quality,
-		Diagnostics: append([]string(nil), result.Diagnostics...),
+		Quality:      result.Quality,
+		Diagnostics:  handler.publicDiagnostics(request, result.Diagnostics),
+		NativeShadow: handler.publicNativeShadow(request, result.NativeShadow),
 	}
 
 	passivePADAvailable := result.PassivePAD.Status == "available"

@@ -13,10 +13,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
+	"time"
 )
 
-var ErrNotFound = errors.New("identity check not found")
+var (
+	ErrNotFound            = errors.New("identity check not found")
+	ErrTenantQuotaExceeded = errors.New("tenant monthly check quota exceeded")
+)
 
 var checkIDPattern = regexp.MustCompile(`^chk_[A-Za-z0-9_-]{8,64}$`)
 
@@ -61,7 +66,53 @@ func NewRepository(directory string, key []byte) (*Repository, error) {
 func (repository *Repository) Create(token string, check Check) error {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
+	return repository.createLocked(token, check)
+}
 
+func (repository *Repository) CreateWithMonthlyQuota(
+	token string,
+	check Check,
+	monthlyLimit int,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+
+	if monthlyLimit < 0 {
+		return errors.New("monthly check quota cannot be negative")
+	}
+	if monthlyLimit > 0 {
+		createdAt := check.CreatedAt.UTC()
+		if createdAt.IsZero() {
+			return errors.New("check creation time is required for quota enforcement")
+		}
+		periodFrom := time.Date(
+			createdAt.Year(),
+			createdAt.Month(),
+			1,
+			0,
+			0,
+			0,
+			0,
+			time.UTC,
+		)
+		periodTo := periodFrom.AddDate(0, 1, 0)
+		used, err := repository.countTenantChecksLocked(
+			check.TenantID,
+			periodFrom,
+			periodTo,
+		)
+		if err != nil {
+			return err
+		}
+		if used >= monthlyLimit {
+			return ErrTenantQuotaExceeded
+		}
+	}
+
+	return repository.createLocked(token, check)
+}
+
+func (repository *Repository) createLocked(token string, check Check) error {
 	if !checkIDPattern.MatchString(check.ID) {
 		return errors.New("invalid identity check id")
 	}
@@ -232,6 +283,56 @@ func (repository *Repository) tokenHashForIDLocked(id string) (string, error) {
 		return "", errors.New("invalid identity check index")
 	}
 	return tokenHash, nil
+}
+
+func (repository *Repository) CountTenantChecks(
+	tenantID string,
+	periodFrom time.Time,
+	periodTo time.Time,
+) (int, error) {
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+	return repository.countTenantChecksLocked(tenantID, periodFrom, periodTo)
+}
+
+func (repository *Repository) countTenantChecksLocked(
+	tenantID string,
+	periodFrom time.Time,
+	periodTo time.Time,
+) (int, error) {
+	tenantID = strings.TrimSpace(strings.ToLower(tenantID))
+	if tenantID == "" {
+		return 0, errors.New("tenant id is required for quota enforcement")
+	}
+
+	entries, err := os.ReadDir(repository.directory)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		tokenHash := strings.TrimSuffix(entry.Name(), ".json")
+		if len(tokenHash) != sha256.Size*2 {
+			continue
+		}
+
+		check, err := repository.loadLocked(tokenHash)
+		if err != nil {
+			return 0, err
+		}
+		if strings.TrimSpace(strings.ToLower(check.TenantID)) != tenantID {
+			continue
+		}
+		createdAt := check.CreatedAt.UTC()
+		if !createdAt.Before(periodFrom) && createdAt.Before(periodTo) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (repository *Repository) pathFor(tokenHash string) string {

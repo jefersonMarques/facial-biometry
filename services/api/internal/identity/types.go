@@ -1,8 +1,20 @@
 package identity
 
-import "time"
+import (
+	"time"
+
+	"faceproof/services/api/internal/domain"
+)
 
 type Status string
+type FlowType string
+
+const (
+	FlowCNH               FlowType = "cnh"
+	FlowFaceEnrollment    FlowType = "face_enrollment"
+	FlowFaceVerification  FlowType = "face_verification"
+	FlowPhotoVerification FlowType = "photo_verification"
+)
 
 const (
 	StatusPendingDocument    Status = "pending_document"
@@ -38,10 +50,23 @@ type DocumentEvidence struct {
 	IssuingUF              string    `json:"issuingUf,omitempty"`
 }
 
+type DemoArtifacts struct {
+	ReferencePhotoDataURL string `json:"referencePhotoDataUrl,omitempty"`
+	CapturedPhotoDataURL  string `json:"capturedPhotoDataUrl,omitempty"`
+}
+
 type Check struct {
 	ID                     string            `json:"id"`
+	FlowType               FlowType          `json:"flowType,omitempty"`
+	SubjectID              string            `json:"subjectId,omitempty"`
+	DisplayName            string            `json:"displayName,omitempty"`
+	DemoArtifacts          *DemoArtifacts    `json:"demoArtifacts,omitempty"`
+	TenantID               string            `json:"tenantId,omitempty"`
 	ExpectedCPF            string            `json:"expectedCpf"`
 	MinimumDocumentDate    time.Time         `json:"minimumDocumentDate"`
+	CampaignID             string            `json:"campaignId,omitempty"`
+	Scenario               string            `json:"scenario,omitempty"`
+	ExpectedDecision       string            `json:"expectedDecision,omitempty"`
 	Status                 Status            `json:"status"`
 	CreatedAt              time.Time         `json:"createdAt"`
 	ExpiresAt              time.Time         `json:"expiresAt"`
@@ -57,5 +82,7 @@ type Check struct {
 	LivenessScore          float64           `json:"livenessScore,omitempty"`
 	FaceSimilarity         float64           `json:"faceSimilarity,omitempty"`
 	CompletedAt            *time.Time        `json:"completedAt,omitempty"`
-	LastErrorCode          string            `json:"lastErrorCode,omitempty"`
+	LastErrorCode          string                     `json:"lastErrorCode,omitempty"`
+	RuntimeFingerprint     *domain.RuntimeFingerprint      `json:"runtimeFingerprint,omitempty"`
+	CaptureProtocol        *domain.CaptureProtocolMetadata `json:"captureProtocol,omitempty"`
 }

@@ -6,9 +6,19 @@ import cv2
 import numpy as np
 
 
-def decode_data_url(value: str) -> np.ndarray:
+def decode_data_url_bytes(value: str) -> bytes:
     encoded = value.split(",", 1)[1] if "," in value else value
-    binary = base64.b64decode(encoded, validate=True)
+    return base64.b64decode(encoded, validate=True)
+
+
+def decode_data_url(value: str) -> np.ndarray:
+    return decode_image_bytes(decode_data_url_bytes(value))
+
+
+def decode_image_bytes(value: bytes | bytearray | memoryview) -> np.ndarray:
+    binary = bytes(value)
+    if not binary:
+        raise ValueError("image payload is empty")
     buffer = np.frombuffer(binary, dtype=np.uint8)
     image = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
     if image is None:

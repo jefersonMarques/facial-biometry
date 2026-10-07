@@ -51,17 +51,28 @@ export class BiometricClient {
             method: "POST",
         });
     }
-    async completeIdentityCheck(token, session, guidedFrames) {
+    async completeIdentityCheck(token, session, guidedFrames, runtime, captureProtocol, geometry) {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
         }
+        const form = new FormData();
+        form.append("sessionId", session.sessionId);
+        form.append("sessionToken", session.sessionToken);
+        form.append("manifest", JSON.stringify({
+            runtime,
+            captureProtocol,
+            geometry,
+            guidedFrames: guidedFrames.map((frame) => ({
+                phase: frame.phase,
+                clientQuality: frame.clientQuality,
+            })),
+        }));
+        guidedFrames.forEach((frame, index) => {
+            form.append("frame", frame.imageBlob, `${String(index).padStart(2, "0")}-${frame.phase}.jpg`);
+        });
         return this.identityRequest("/v1/identity/complete", token, {
             method: "POST",
-            body: JSON.stringify({
-                sessionId: session.sessionId,
-                sessionToken: session.sessionToken,
-                guidedFrames,
-            }),
+            body: form,
         });
     }
     async identityRequest(path, token, init) {

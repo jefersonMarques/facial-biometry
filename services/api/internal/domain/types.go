@@ -11,9 +11,11 @@ const (
 )
 
 type CaptureSession struct {
-	ID                   string
-	SubjectID            string
-	Kind                 SessionKind
+	ID                     string
+	SubjectID              string
+	Kind                   SessionKind
+	CaptureRunID           string
+	CaptureProtocolVersion string
 	IlluminationPattern  []float64
 	CaptureDurationMS    int
 	SampleIntervalMS     int
@@ -21,6 +23,25 @@ type CaptureSession struct {
 	CreatedAt            time.Time
 	ExpiresAt            time.Time
 	Completed            bool
+}
+
+type CaptureProtocolMetadata struct {
+	Version             string `json:"version"`
+	RunID               string `json:"runId"`
+	StartedAtUnixMS     int64  `json:"startedAtUnixMs"`
+	FarStartedAtUnixMS  int64  `json:"farStartedAtUnixMs"`
+	NearStartedAtUnixMS int64  `json:"nearStartedAtUnixMs"`
+	SubmittingAtUnixMS  int64  `json:"submittingAtUnixMs"`
+}
+
+type RuntimeFingerprint struct {
+	SDKVersion                 string `json:"sdkVersion"`
+	LivenessCoreVersion        string `json:"livenessCoreVersion"`
+	LivenessCoreWASMSHA256    string `json:"livenessCoreWasmSha256"`
+	MediaPipeVersion           string `json:"mediaPipeVersion"`
+	MediaPipeVisionSHA256      string `json:"mediaPipeVisionSha256"`
+	FaceLandmarkerSHA256       string `json:"faceLandmarkerSha256"`
+	RuntimeID                  string `json:"runtimeId"`
 }
 
 type ClientFrameQuality struct {
@@ -38,7 +59,8 @@ type CapturedFrame struct {
 }
 
 type GuidedCapturedFrame struct {
-	ImageBase64   string              `json:"imageBase64"`
+	ImageBase64   string              `json:"imageBase64,omitempty"`
+	ImageBytes    []byte              `json:"-"`
 	Phase         string              `json:"phase"`
 	ClientQuality *ClientFrameQuality `json:"clientQuality,omitempty"`
 }
@@ -96,18 +118,51 @@ type EngineFaceEmbedding struct {
 	Embedding  []float64 `json:"embedding"`
 }
 
+type GeometryTelemetry struct {
+	RunID             string  `json:"runId,omitempty"`
+	Status            string  `json:"status,omitempty"`
+	SampleCount       int     `json:"sampleCount,omitempty"`
+	FarSamples        int     `json:"farSamples,omitempty"`
+	NearSamples       int     `json:"nearSamples,omitempty"`
+	ScaleRatio        float64 `json:"scaleRatio,omitempty"`
+	TransitionScore   float64 `json:"transitionScore,omitempty"`
+	PerspectiveChange float64 `json:"perspectiveChange,omitempty"`
+	DepthChange       float64 `json:"depthChange,omitempty"`
+	PhaseStability    float64 `json:"phaseStability,omitempty"`
+	EvidenceScore     float64 `json:"evidenceScore,omitempty"`
+	WASMStatus        string  `json:"wasmStatus,omitempty"`
+	WASMMaxDelta      float64 `json:"wasmMaxDelta,omitempty"`
+}
+
+type NativeShadowComparison struct {
+	Status                       string   `json:"status"`
+	PythonFrames                 int      `json:"pythonFrames"`
+	NativeFrames                 int      `json:"nativeFrames"`
+	BBoxMaxDeltaPx               float64  `json:"bboxMaxDeltaPx"`
+	ConfidenceMaxDelta           float64  `json:"confidenceMaxDelta"`
+	QualityMaxDelta              float64  `json:"qualityMaxDelta"`
+	PadComparedFrames            int      `json:"padComparedFrames"`
+	PassivePadMaxDelta           float64  `json:"passivePadMaxDelta"`
+	SelectedEmbeddingMinCosine   float64  `json:"selectedEmbeddingMinCosine"`
+	SelectedEmbeddingMaxDelta    float64  `json:"selectedEmbeddingMaxDelta"`
+	CombinedEmbeddingCosine      float64  `json:"combinedEmbeddingCosine"`
+	CombinedEmbeddingMaxDelta    float64  `json:"combinedEmbeddingMaxDelta"`
+	Errors                       []string `json:"errors,omitempty"`
+}
+
 type EngineResult struct {
-	LivenessScore  float64               `json:"livenessScore"`
-	PassivePAD     EngineSignal          `json:"passivePad"`
-	TemporalMotion EngineSignal          `json:"temporalMotion"`
-	Illumination   EngineSignal          `json:"illumination"`
-	GuidedCapture  EngineSignal          `json:"guidedCapture"`
-	Quality        EngineQuality         `json:"quality"`
-	Embedding      []float64             `json:"embedding"`
-	FaceEmbeddings []EngineFaceEmbedding `json:"faceEmbeddings,omitempty"`
-	EmbeddingModel string                `json:"embeddingModel"`
-	BestFrameIndex int                   `json:"bestFrameIndex"`
-	Diagnostics    []string              `json:"diagnostics"`
+	LivenessScore  float64                 `json:"livenessScore"`
+	PassivePAD     EngineSignal            `json:"passivePad"`
+	TemporalMotion EngineSignal            `json:"temporalMotion"`
+	Illumination   EngineSignal            `json:"illumination"`
+	GuidedCapture  EngineSignal            `json:"guidedCapture"`
+	Quality        EngineQuality           `json:"quality"`
+	Embedding      []float64               `json:"embedding"`
+	FaceEmbeddings []EngineFaceEmbedding   `json:"faceEmbeddings,omitempty"`
+	EmbeddingModel string                  `json:"embeddingModel"`
+	BestFrameIndex int                     `json:"bestFrameIndex"`
+	Diagnostics    []string                `json:"diagnostics"`
+	NativeShadow   *NativeShadowComparison `json:"nativeShadow,omitempty"`
 }
 
 type ReferenceResult struct {
@@ -118,8 +173,9 @@ type ReferenceResult struct {
 }
 
 type BiometricTemplate struct {
-	SubjectID      string    `json:"subjectId"`
-	Embedding      []float64 `json:"embedding"`
-	EmbeddingModel string    `json:"embeddingModel"`
-	CreatedAt      time.Time `json:"createdAt"`
+	SubjectID             string    `json:"subjectId"`
+	Embedding             []float64 `json:"embedding"`
+	EmbeddingModel        string    `json:"embeddingModel"`
+	ReferencePhotoDataURL string    `json:"referencePhotoDataUrl,omitempty"`
+	CreatedAt             time.Time `json:"createdAt"`
 }

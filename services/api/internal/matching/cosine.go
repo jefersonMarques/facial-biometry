@@ -6,26 +6,17 @@ import (
 )
 
 func CosineSimilarity(left []float64, right []float64) float64 {
-	if len(left) == 0 || len(left) != len(right) {
+	score, ok := cosineSimilarity(left, right)
+	if !ok {
 		return -1
 	}
-
-	var dot float64
-	var leftNorm float64
-	var rightNorm float64
-	for index := range left {
-		dot += left[index] * right[index]
-		leftNorm += left[index] * left[index]
-		rightNorm += right[index] * right[index]
-	}
-
-	if leftNorm == 0 || rightNorm == 0 {
-		return -1
-	}
-	return dot / (math.Sqrt(leftNorm) * math.Sqrt(rightNorm))
+	return score
 }
 
-func RobustCosineSimilarity(referenceEmbeddings [][]float64, liveEmbeddings [][]float64) (float64, []float64) {
+func RobustCosineSimilarity(
+	referenceEmbeddings [][]float64,
+	liveEmbeddings [][]float64,
+) (float64, []float64) {
 	if len(referenceEmbeddings) == 0 || len(liveEmbeddings) == 0 {
 		return -1, nil
 	}
@@ -34,8 +25,8 @@ func RobustCosineSimilarity(referenceEmbeddings [][]float64, liveEmbeddings [][]
 	for _, live := range liveEmbeddings {
 		referenceScores := make([]float64, 0, len(referenceEmbeddings))
 		for _, reference := range referenceEmbeddings {
-			score := CosineSimilarity(reference, live)
-			if score >= -1 && score <= 1 {
+			score, ok := cosineSimilarity(reference, live)
+			if ok {
 				referenceScores = append(referenceScores, score)
 			}
 		}
@@ -55,6 +46,46 @@ func RobustCosineSimilarity(referenceEmbeddings [][]float64, liveEmbeddings [][]
 		total += score
 	}
 	return total / float64(len(frameScores)), frameScores
+}
+
+func cosineSimilarity(left []float64, right []float64) (float64, bool) {
+	if len(left) == 0 || len(left) != len(right) {
+		return 0, false
+	}
+
+	var dot float64
+	var leftNorm float64
+	var rightNorm float64
+	for index := range left {
+		if math.IsNaN(left[index]) ||
+			math.IsNaN(right[index]) ||
+			math.IsInf(left[index], 0) ||
+			math.IsInf(right[index], 0) {
+			return 0, false
+		}
+		dot += left[index] * right[index]
+		leftNorm += left[index] * left[index]
+		rightNorm += right[index] * right[index]
+	}
+
+	if leftNorm <= 0 || rightNorm <= 0 {
+		return 0, false
+	}
+
+	score := dot / (math.Sqrt(leftNorm) * math.Sqrt(rightNorm))
+	if math.IsNaN(score) || math.IsInf(score, 0) {
+		return 0, false
+	}
+	if score > 1 && score < 1+1e-12 {
+		score = 1
+	}
+	if score < -1 && score > -1-1e-12 {
+		score = -1
+	}
+	if score < -1 || score > 1 {
+		return 0, false
+	}
+	return score, true
 }
 
 func median(values []float64) float64 {

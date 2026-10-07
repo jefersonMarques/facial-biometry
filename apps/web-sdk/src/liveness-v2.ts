@@ -1,3 +1,9 @@
+import {
+    GeometryWasmShadow,
+    type LocalFaceGuideMetrics,
+    type WasmShadowDiagnostics,
+} from "./liveness-core-shadow.js";
+
 export type GeometryCapturePhase = "far" | "near";
 
 interface NormalizedLandmark {
@@ -58,9 +64,9 @@ export interface GeometryLivenessOptions {
     maxObservations?: number;
 }
 
-const DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
-const DEFAULT_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const DEFAULT_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const DEFAULT_MODULE_URL = "/vendor/mediapipe/1.0.1/vision_bundle.mjs";
+const DEFAULT_WASM_ROOT = "/vendor/mediapipe/1.0.1/wasm";
+const DEFAULT_MODEL_URL = "/vendor/mediapipe/1.0.1/models/face_landmarker.task";
 const DEFAULT_SAMPLE_INTERVAL_MS = 180;
 const DEFAULT_MAX_OBSERVATIONS = 120;
 const ANALYSIS_WIDTH = 384;
@@ -77,6 +83,7 @@ export class ExperimentalGeometryLiveness {
     private readonly observations: GeometryObservation[] = [];
     private readonly analysisCanvas: HTMLCanvasElement;
     private readonly analysisContext: CanvasRenderingContext2D;
+    private wasmShadow: GeometryWasmShadow | null = null;
     private onUpdate: ((summary: GeometryLivenessSummary) => void) | null = null;
     private readonly options: Required<GeometryLivenessOptions>;
 
@@ -135,12 +142,15 @@ export class ExperimentalGeometryLiveness {
         this.stop();
         this.landmarker?.close();
         this.landmarker = null;
+        this.wasmShadow?.dispose();
+        this.wasmShadow = null;
         this.initialization = null;
     }
 
     public reset(): void {
         this.observations.length = 0;
         this.lastInferenceAt = 0;
+        this.wasmShadow?.reset();
     }
 
     public setPhase(phase: GeometryCapturePhase | null): void {
@@ -149,6 +159,15 @@ export class ExperimentalGeometryLiveness {
 
     public summarize(): GeometryLivenessSummary {
         return summarizeGeometryEvidence(this.observations);
+    }
+
+    public getWasmShadowDiagnostics(): WasmShadowDiagnostics {
+        return this.wasmShadow?.snapshot() ?? {
+            state: "idle",
+            summary: null,
+            guide: null,
+            errorMessage: "",
+        };
     }
 
     private async initializeInternal(): Promise<void> {
@@ -176,6 +195,20 @@ export class ExperimentalGeometryLiveness {
         } catch {
             this.landmarker = await create("CPU");
         }
+
+        const wasmShadow = new GeometryWasmShadow((diagnostics) => {
+            if (diagnostics.guide) {
+                dispatchLocalGuide(diagnostics.guide);
+            }
+            this.onUpdate?.(this.summarize());
+        });
+        this.wasmShadow = wasmShadow;
+
+        try {
+            await wasmShadow.initialize();
+        } catch {
+            // Shadow mode: WASM failure must never affect the active verification flow.
+        }
     }
 
     private tick(timestampMs: number): void {
@@ -200,6 +233,7 @@ export class ExperimentalGeometryLiveness {
                 const result = this.landmarker.detectForVideo(analysisFrame, timestampMs);
                 const landmarks = result.faceLandmarks?.[0];
                 if (landmarks) {
+                    this.wasmShadow?.push(this.phase, timestampMs, landmarks);
                     const observation = extractGeometryObservation(landmarks, this.phase, timestampMs);
                     if (observation) {
                         this.observations.push(observation);
@@ -422,4 +456,13 @@ function median(values: number[]): number {
 
 function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value));
+}
+
+function dispatchLocalGuide(guide: LocalFaceGuideMetrics): void {
+    window.dispatchEvent(new CustomEvent("faceproof:local-guide", {
+        detail: {
+            timestampMs: performance.now(),
+            guide,
+        },
+    }));
 }

@@ -42,11 +42,33 @@ export class CameraCapture {
     isActive() {
         return this.stream !== null && this.stream.getVideoTracks().some((track) => track.readyState === "live");
     }
+    qualityForGuide(maxWidth = 360) {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        return this.qualityAnalyzer.analyze(imageData);
+    }
     snapshotForGuide(maxWidth = 360, jpegQuality = 0.72) {
         this.drawCurrentFrame(maxWidth);
         const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
         return {
             imageBase64: this.canvas.toDataURL("image/jpeg", jpegQuality),
+            quality: this.qualityAnalyzer.analyze(imageData),
+        };
+    }
+    async captureBlob(maxWidth = 640, jpegQuality = 0.80) {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const imageBlob = await new Promise((resolve, reject) => {
+            this.canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("Camera failed to encode JPEG"));
+                    return;
+                }
+                resolve(blob);
+            }, "image/jpeg", jpegQuality);
+        });
+        return {
+            imageBlob,
             quality: this.qualityAnalyzer.analyze(imageData),
         };
     }

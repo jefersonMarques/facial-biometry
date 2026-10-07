@@ -1,28 +1,51 @@
 import { resolveApiBaseUrl } from "./api-base-url.js";
 import { BiometricClient } from "./biometric-client.js";
 import { CameraCapture } from "./camera-capture.js";
+import { CaptureLifecycle } from "./capture-lifecycle.js";
+import {
+    LocalCaptureGate,
+    type LocalCaptureGateResult,
+} from "./local-capture-gate.js";
+import type { LocalFaceGuideMetrics } from "./liveness-core-shadow.js";
+import { getRuntimeFingerprint } from "./runtime-fingerprint.js";
 import type {
     GuidedCapturedFrame,
     GuidedCapturePhase,
     IdentityCheckStatus,
     IdentityCompletionResponse,
     IdentityDocumentDetails,
-    IdentityGuideResult,
+    IdentityFlowType,
+    NativeShadowComparison,
 } from "./types.js";
 
 const TOKEN_STORAGE_KEY = "faceproof.identity.token";
 const DOCUMENT_PREVIEW_STORAGE_KEY = "faceproof.identity.document-preview";
-const GUIDE_SAMPLE_MS = 360;
+const GUIDE_SAMPLE_MS = 260;
 const GUIDE_READY_SAMPLES = 2;
 const PHASE_CAPTURE_FRAMES = 4;
 const PHASE_CAPTURE_SAMPLE_MS = 140;
 const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
 const QUALITY_FALLBACK_SAMPLES = 5;
-const FIRST_CAPTURE_MAX_GUIDE_POSTS = 8;
+const FIRST_CAPTURE_MAX_GUIDE_SAMPLES = 8;
 const NEAR_HOLD_SECONDS = 3;
+const LOCAL_GUIDE_MAX_AGE_MS = 650;
+const LOCAL_GUIDE_FALLBACK_AFTER_MS = 1_500;
+const CONFIRMED_VIEW_VISIBLE_MS = 3_000;
 
 type GuideTone = "red" | "yellow" | "green";
+
+type GuideSource = "local" | "server";
+
+interface GuideGeometry {
+    source: GuideSource;
+    faceDetected: boolean;
+    centerX: number;
+    centerY: number;
+    widthRatio: number;
+    heightRatio: number;
+    rollDegrees: number;
+}
 
 interface GuideAssessment {
     ready: boolean;
@@ -41,7 +64,7 @@ interface PhaseGuideConfig {
     target: number;
 }
 
-const PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
+const SERVER_PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
     far: {
         idealMin: 0.31,
         idealMax: 0.46,
@@ -55,6 +78,23 @@ const PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
         captureMin: 0.47,
         captureMax: 0.73,
         target: 0.60,
+    },
+};
+
+const LOCAL_PHASE_GUIDE: Record<GuidedCapturePhase, PhaseGuideConfig> = {
+    far: {
+        idealMin: 0.25,
+        idealMax: 0.41,
+        captureMin: 0.21,
+        captureMax: 0.45,
+        target: 0.33,
+    },
+    near: {
+        idealMin: 0.42,
+        idealMax: 0.61,
+        captureMin: 0.38,
+        captureMax: 0.66,
+        target: 0.515,
     },
 };
 
@@ -78,14 +118,44 @@ const expiresText = requiredElement<HTMLSpanElement>("expiresText");
 const faceGuide = requiredElement<HTMLDivElement>("faceGuide");
 const guidePhaseText = requiredElement<HTMLSpanElement>("guidePhaseText");
 const captureFlash = requiredElement<HTMLDivElement>("captureFlash");
+const processingOverlay = requiredElement<HTMLDivElement>("processingOverlay");
+const flowEyebrow = requiredElement<HTMLElement>("flowEyebrow");
+const flowTitle = requiredElement<HTMLElement>("flowTitle");
+const flowSubtitle = requiredElement<HTMLElement>("flowSubtitle");
+const biometryStageIndex = requiredElement<HTMLElement>("biometryStageIndex");
+const finalStageIndex = requiredElement<HTMLElement>("finalStageIndex");
+const biometryTitle = requiredElement<HTMLElement>("biometryTitle");
+const biometryIntro = requiredElement<HTMLElement>("biometryIntro");
+const privacyText = requiredElement<HTMLElement>("privacyText");
+const processingText = requiredElement<HTMLElement>("processingText");
 
 const camera = new CameraCapture(video);
+const localCaptureGate = new LocalCaptureGate();
+const captureLifecycle = new CaptureLifecycle();
 let identityToken = "";
+let currentFlow: IdentityFlowType = "cnh";
+let currentDisplayName = "";
 let busy = false;
 let autoBiometryScheduled = false;
 let manualReadyResolver: (() => void) | null = null;
 let currentBiometryPhase: GuidedCapturePhase = "far";
 let documentDetails: IdentityDocumentDetails | null = null;
+let latestLocalGuide: LocalFaceGuideMetrics | null = null;
+let bestCaptureObjectURL = "";
+let viewConfirmed = false;
+let accumulatedVisibleMS = 0;
+let visibleStartedAt: number | null = null;
+let viewConfirmationTimer: number | null = null;
+
+const handleLocalGuide = (event: Event): void => {
+    const detail = (event as CustomEvent<{ guide?: LocalFaceGuideMetrics }>).detail;
+    if (detail?.guide) {
+        latestLocalGuide = detail.guide;
+        localCaptureGate.push(detail.guide);
+    }
+};
+
+window.addEventListener("faceproof:local-guide", handleLocalGuide);
 
 void initialize();
 
@@ -115,7 +185,18 @@ startButton.addEventListener("click", () => {
 
     void runBiometry();
 });
-window.addEventListener("beforeunload", () => camera.stop());
+window.addEventListener("beforeunload", () => {
+    window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+    document.removeEventListener("visibilitychange", handleViewVisibilityChange);
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+        viewConfirmationTimer = null;
+    }
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+    }
+    camera.stop();
+});
 
 async function initialize(): Promise<void> {
     identityToken = consumeIdentityToken();
@@ -128,8 +209,99 @@ async function initialize(): Promise<void> {
     try {
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
+        startConfirmedViewTracking();
     } catch (error) {
         showFatal(errorMessage(error));
+    }
+}
+
+function startConfirmedViewTracking(): void {
+    if (viewConfirmed) {
+        return;
+    }
+
+    document.addEventListener("visibilitychange", handleViewVisibilityChange);
+    if (document.visibilityState === "visible") {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+    }
+}
+
+function handleViewVisibilityChange(): void {
+    if (viewConfirmed) {
+        return;
+    }
+
+    if (document.visibilityState === "visible") {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+        return;
+    }
+
+    accumulateVisibleTime();
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+        viewConfirmationTimer = null;
+    }
+}
+
+function accumulateVisibleTime(): void {
+    if (visibleStartedAt === null) {
+        return;
+    }
+    accumulatedVisibleMS += Math.max(0, performance.now() - visibleStartedAt);
+    visibleStartedAt = null;
+}
+
+function scheduleViewConfirmation(): void {
+    if (viewConfirmed || document.visibilityState !== "visible") {
+        return;
+    }
+
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+    }
+
+    const elapsedCurrent = visibleStartedAt === null
+        ? 0
+        : Math.max(0, performance.now() - visibleStartedAt);
+    const remaining = Math.max(
+        0,
+        CONFIRMED_VIEW_VISIBLE_MS - accumulatedVisibleMS - elapsedCurrent,
+    );
+
+    viewConfirmationTimer = window.setTimeout(() => {
+        void confirmVisibleView();
+    }, remaining);
+}
+
+async function confirmVisibleView(): Promise<void> {
+    viewConfirmationTimer = null;
+    if (viewConfirmed || document.visibilityState !== "visible") {
+        return;
+    }
+
+    accumulateVisibleTime();
+    if (accumulatedVisibleMS < CONFIRMED_VIEW_VISIBLE_MS) {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+        return;
+    }
+
+    try {
+        await client.confirmIdentityView(
+            identityToken,
+            Math.round(accumulatedVisibleMS),
+        );
+        viewConfirmed = true;
+        document.removeEventListener("visibilitychange", handleViewVisibilityChange);
+    } catch {
+        visibleStartedAt = performance.now();
+        window.setTimeout(() => {
+            if (!viewConfirmed && document.visibilityState === "visible") {
+                scheduleViewConfirmation();
+            }
+        }, 1_000);
     }
 }
 
@@ -273,6 +445,7 @@ async function runBiometry(): Promise<void> {
     startButton.hidden = true;
     startButton.disabled = true;
     startButton.textContent = "Estou pronto";
+    processingOverlay.hidden = true;
     biometricStatus.textContent = "Iniciando câmera...";
     cameraState.textContent = "Iniciando câmera...";
     setProximityIndicator(0, "red");
@@ -280,39 +453,57 @@ async function runBiometry(): Promise<void> {
     let completed = false;
 
     try {
+        const runtimeFingerprint = await getRuntimeFingerprint();
         await camera.start();
         cameraState.textContent = "Câmera ativa";
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
 
         while (!completed) {
+            const session = await client.createIdentitySession(identityToken);
+            captureLifecycle.begin(
+                session.captureRunId,
+                session.captureProtocolVersion,
+            );
+            localCaptureGate.reset();
             currentBiometryPhase = "far";
+            captureLifecycle.transition("far");
             const farRelaxedQuality = await waitForFacePhase("far");
 
-            const session = await client.createIdentitySession(identityToken);
             const farFrames = await capturePhase("far", farRelaxedQuality);
+            localCaptureGate.lockFarReference();
             await showCaptureSuccess("Primeira captura concluída");
 
             currentBiometryPhase = "near";
+            captureLifecycle.transition("near");
             const nearRelaxedQuality = await waitForFacePhase("near");
             const nearFrames = await capturePhase("near", nearRelaxedQuality);
             await showCaptureSuccess("Segunda captura concluída");
 
-            biometricStatus.textContent = "Analisando sua identidade...";
-            guidePhaseText.textContent = "Verificando";
+            biometricStatus.textContent = "Analisando seu rosto...";
+            cameraState.textContent = "Captura concluída";
+            guidePhaseText.textContent = "Analisando";
+            processingOverlay.hidden = false;
             setProximityIndicator(100, "green");
 
             try {
                 const capturedFrames = [...farFrames, ...nearFrames];
+                captureLifecycle.transition("submitting");
                 const result = await client.completeIdentityCheck(
                     identityToken,
                     session,
                     capturedFrames,
+                    runtimeFingerprint,
+                    captureLifecycle.protocolMetadata(),
+                    loadGeometryTelemetry(session.captureRunId),
                 );
+                captureLifecycle.transition("complete");
                 renderIdentityResult(result, capturedFrames);
                 completed = true;
             } catch (error) {
                 const message = errorMessage(error);
                 if (isRecaptureRequired(message)) {
+                    captureLifecycle.cancel();
+                    processingOverlay.hidden = true;
                     setProximityIndicator(0, "red");
                     faceGuide.className = "face-guide phase-far";
                     guidePhaseText.textContent = "Captura 1 de 2";
@@ -324,6 +515,8 @@ async function runBiometry(): Promise<void> {
             }
         }
     } catch (error) {
+        captureLifecycle.cancel();
+        processingOverlay.hidden = true;
         const message = errorMessage(error);
         const infrastructureFailure = isInfrastructureBiometryError(message);
         biometricStatus.textContent = friendlyBiometryError(message);
@@ -346,7 +539,8 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     let stableSamples = 0;
     let networkFailures = 0;
     let qualityLimitedSamples = 0;
-    let guidePosts = 0;
+    let guideSamples = 0;
+    const phaseStartedAt = performance.now();
 
     faceGuide.className = `face-guide phase-${phase}`;
     guidePhaseText.textContent = phase === "far" ? "Captura 1 de 2" : "Captura 2 de 2";
@@ -358,35 +552,54 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
     const requiredStableSamples = phase === "far" ? 1 : GUIDE_READY_SAMPLES;
 
     while (stableSamples < requiredStableSamples) {
-        const snapshot = camera.snapshotForGuide();
+        const quality = camera.qualityForGuide();
+        let guide = getFreshLocalGuide(phaseStartedAt);
 
-        let guide: IdentityGuideResult;
-        try {
-            guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
-            networkFailures = 0;
-            guidePosts++;
-        } catch (error) {
-            networkFailures++;
-            if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
-                throw error;
+        if (!guide) {
+            if (performance.now() - phaseStartedAt < LOCAL_GUIDE_FALLBACK_AFTER_MS) {
+                cameraState.textContent = "Analisando rosto";
+                biometricStatus.textContent = "Preparando análise local...";
+                await sleep(GUIDE_SAMPLE_MS);
+                continue;
             }
-            cameraState.textContent = "Analisando rosto";
-            biometricStatus.textContent = "Ajustando o enquadramento...";
+
+            try {
+                guide = await requestServerGuideFallback(quality);
+                networkFailures = 0;
+            } catch (error) {
+                networkFailures++;
+                if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
+                    throw error;
+                }
+                cameraState.textContent = "Analisando rosto";
+                biometricStatus.textContent = "Ajustando o enquadramento...";
+                await sleep(GUIDE_SAMPLE_MS);
+                continue;
+            }
+        }
+
+        guideSamples++;
+        const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase, phaseStartedAt)
+            : null;
+
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            stableSamples = 0;
+            renderLocalGateIssue(localGate, assessment);
             await sleep(GUIDE_SAMPLE_MS);
             continue;
         }
 
-        const assessment = assessGuide(guide, phase);
-        const clientQualityGood = snapshot.quality.acceptable;
-        const clientQualityUsable = isClientQualityUsable(snapshot.quality);
-        const serverQualityGood = guide.quality.score >= 0.34;
+        const clientQualityGood = quality.acceptable;
+        const clientQualityUsable = isClientQualityUsable(quality);
         const qualityLimited = assessment.captureReady &&
             clientQualityUsable &&
-            (!clientQualityGood || !serverQualityGood);
+            !clientQualityGood;
 
         if (
             phase === "far" &&
-            guidePosts >= FIRST_CAPTURE_MAX_GUIDE_POSTS &&
+            guideSamples >= FIRST_CAPTURE_MAX_GUIDE_SAMPLES &&
             (!assessment.ready || !clientQualityGood)
         ) {
             cameraState.textContent = "Aguardando você";
@@ -410,7 +623,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
         if (assessment.captureReady && !clientQualityUsable) {
             qualityLimitedSamples = 0;
             stableSamples = 0;
-            const lightingHint = clientQualityInstruction(snapshot.quality);
+            const lightingHint = clientQualityInstruction(quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             faceGuide.classList.remove("guide-ready", "guide-near");
@@ -421,9 +634,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
 
         if (qualityLimited) {
             qualityLimitedSamples++;
-            const lightingHint = clientQualityGood
-                ? { message: "A qualidade está quase suficiente. Mantenha-se parado.", state: "Qualidade quase ideal" }
-                : clientQualityInstruction(snapshot.quality);
+            const lightingHint = clientQualityInstruction(quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             faceGuide.classList.remove("guide-ready");
@@ -435,7 +646,7 @@ async function waitForFacePhase(phase: GuidedCapturePhase): Promise<boolean> {
                     cameraState.textContent = "Pronto para tentar";
                     biometricStatus.textContent = "A qualidade está próxima do ideal. Se estiver pronto, continue.";
                     await waitForManualReady();
-                    biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade na análise.";
+                    biometricStatus.textContent = "Certo. Vamos capturar e validar a qualidade no servidor.";
                     return true;
                 }
 
@@ -494,22 +705,32 @@ async function holdStillForAutomaticCapture(phase: GuidedCapturePhase): Promise<
         cameraState.textContent = "Mantenha-se parado";
         setProximityIndicator(100, "yellow");
 
-        const snapshot = camera.snapshotForGuide();
-        if (!isClientQualityUsable(snapshot.quality)) {
-            const lightingHint = clientQualityInstruction(snapshot.quality);
+        const quality = camera.qualityForGuide();
+        if (!isClientQualityUsable(quality)) {
+            const lightingHint = clientQualityInstruction(quality);
             cameraState.textContent = lightingHint.state;
             biometricStatus.textContent = lightingHint.message;
             setProximityIndicator(0, "red");
             return false;
         }
+
+        let guide: GuideGeometry;
         try {
-            const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
-            const assessment = assessGuide(guide, phase);
-            if (!assessment.captureReady) {
-                renderGuideAssessment(assessment);
-                return false;
-            }
+            guide = await resolveGuideWithFallback(quality);
         } catch {
+            return false;
+        }
+
+        const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            renderLocalGateIssue(localGate, assessment);
+            return false;
+        }
+        if (!assessment.captureReady) {
+            renderGuideAssessment(assessment);
             return false;
         }
 
@@ -538,9 +759,26 @@ async function capturePhase(
     const captureJPEGQuality = phase === "near" ? 0.92 : 0.86;
 
     while (frames.length < PHASE_CAPTURE_FRAMES) {
-        const guideSnapshot = camera.snapshotForGuide(360, 0.72);
-        const guide = await client.guideIdentityFace(identityToken, guideSnapshot.imageBase64);
+        const guideQuality = camera.qualityForGuide();
+        let guide: GuideGeometry;
+        try {
+            guide = await resolveGuideWithFallback(guideQuality);
+        } catch {
+            relaxedQuality = await waitForFacePhase(phase);
+            continue;
+        }
+
         const assessment = assessGuide(guide, phase);
+        const localGate = guide.source === "local"
+            ? localCaptureGate.evaluate(phase)
+            : null;
+        if (localGate && (!localGate.stable || !localGate.nearScaleReady)) {
+            frames.length = 0;
+            renderLocalGateIssue(localGate, assessment);
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
+        }
+
         renderGuideAssessment(assessment);
 
         if (!assessment.captureReady) {
@@ -549,23 +787,24 @@ async function capturePhase(
             continue;
         }
 
-        const snapshot = camera.snapshotForGuide(captureWidth, captureJPEGQuality);
+        const quality = camera.qualityForGuide(captureWidth);
         if (
-            !isClientQualityUsable(snapshot.quality) ||
-            (!snapshot.quality.acceptable && !relaxedQuality)
+            !isClientQualityUsable(quality) ||
+            (!quality.acceptable && !relaxedQuality)
         ) {
             frames.length = 0;
             relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
 
+        const snapshot = await camera.captureBlob(captureWidth, captureJPEGQuality);
         frames.push({
-            imageBase64: snapshot.imageBase64,
+            imageBlob: snapshot.imageBlob,
             phase,
             clientQuality: {
-                brightness: snapshot.quality.brightness,
-                contrast: snapshot.quality.contrast,
-                sharpness: snapshot.quality.sharpness,
+                brightness: quality.brightness,
+                contrast: quality.contrast,
+                sharpness: quality.sharpness,
             },
         });
 
@@ -591,12 +830,15 @@ async function showCaptureSuccess(message: string): Promise<void> {
 }
 
 function assessGuide(
-    guide: IdentityGuideResult,
+    guide: GuideGeometry,
     phase: GuidedCapturePhase,
 ): GuideAssessment {
-    const config = PHASE_GUIDE[phase];
+    const config = guide.source === "local"
+        ? LOCAL_PHASE_GUIDE[phase]
+        : SERVER_PHASE_GUIDE[phase];
+    const centerTargetY = guide.source === "local" ? 0.50 : 0.46;
 
-    if (!guide.faceDetected || guide.confidence < 0.72) {
+    if (!guide.faceDetected) {
         return {
             ready: false,
             captureReady: false,
@@ -623,8 +865,8 @@ function assessGuide(
     }
 
     const horizontalOffset = Math.abs(guide.centerX - 0.5);
-    const verticalOffset = Math.abs(guide.centerY - 0.46);
-    if (horizontalOffset > 0.12 || verticalOffset > 0.14) {
+    const verticalOffset = Math.abs(guide.centerY - centerTargetY);
+    if (horizontalOffset > 0.14 || verticalOffset > 0.16) {
         return {
             ready: false,
             captureReady: false,
@@ -679,23 +921,12 @@ function assessGuide(
         };
     }
 
-    if (horizontalOffset > 0.09 || verticalOffset > 0.11) {
+    if (horizontalOffset > 0.10 || verticalOffset > 0.12) {
         return {
             ready: false,
             captureReady: true,
             message: "Quase lá. Centralize um pouco mais.",
             state: "Quase na posição",
-            tone: "yellow",
-            proximityPercent,
-        };
-    }
-
-    if (guide.quality.score < 0.34) {
-        return {
-            ready: false,
-            captureReady: true,
-            message: "Quase lá. Mantenha o aparelho firme.",
-            state: "Ajustando nitidez",
             tone: "yellow",
             proximityPercent,
         };
@@ -708,6 +939,61 @@ function assessGuide(
         state: "Posição ideal",
         tone: "green",
         proximityPercent: 100,
+    };
+}
+
+function getFreshLocalGuide(minTimestampMs = 0): GuideGeometry | null {
+    const guide = latestLocalGuide;
+    if (!guide) {
+        return null;
+    }
+    if (guide.timestampMs < minTimestampMs) {
+        return null;
+    }
+    if (performance.now() - guide.timestampMs > LOCAL_GUIDE_MAX_AGE_MS) {
+        return null;
+    }
+
+    return {
+        source: "local",
+        faceDetected: guide.faceDetected,
+        centerX: guide.centerX,
+        centerY: guide.centerY,
+        widthRatio: guide.widthRatio,
+        heightRatio: guide.heightRatio,
+        rollDegrees: guide.rollDegrees,
+    };
+}
+
+async function resolveGuideWithFallback(
+    clientQuality: { brightness: number; contrast: number; sharpness: number; acceptable: boolean; issue: string | null },
+): Promise<GuideGeometry> {
+    return getFreshLocalGuide() ?? requestServerGuideFallback(clientQuality);
+}
+
+async function requestServerGuideFallback(
+    clientQuality: { brightness: number; contrast: number; sharpness: number; acceptable: boolean; issue: string | null },
+): Promise<GuideGeometry> {
+    const snapshot = camera.snapshotForGuide();
+    const requestTimestampMs = performance.now();
+    const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
+
+    window.dispatchEvent(new CustomEvent("faceproof:server-guide", {
+        detail: {
+            timestampMs: requestTimestampMs,
+            guide,
+            clientQuality,
+        },
+    }));
+
+    return {
+        source: "server",
+        faceDetected: guide.faceDetected && guide.confidence >= 0.72,
+        centerX: guide.centerX,
+        centerY: guide.centerY,
+        widthRatio: guide.widthRatio,
+        heightRatio: guide.heightRatio,
+        rollDegrees: guide.rollDegrees,
     };
 }
 
@@ -751,6 +1037,31 @@ function clientQualityInstruction(
         message: quality.issue ?? "Ajuste a câmera.",
         state: "Ajuste a câmera",
     };
+}
+
+function renderLocalGateIssue(
+    gate: LocalCaptureGateResult,
+    assessment: GuideAssessment,
+): void {
+    window.dispatchEvent(new CustomEvent("faceproof:local-capture-gate", {
+        detail: gate,
+    }));
+
+    if (!gate.nearScaleReady) {
+        cameraState.textContent = "Aproxime o rosto";
+        biometricStatus.textContent = "A segunda captura precisa ficar claramente mais próxima da câmera.";
+        faceGuide.classList.remove("guide-ready", "guide-near");
+        setProximityIndicator(assessment.proximityPercent, "red");
+        return;
+    }
+
+    cameraState.textContent = "Mantenha-se parado";
+    biometricStatus.textContent = gate.sampleCount < 3 || gate.spanMs < 320
+        ? "Aguarde um instante enquanto estabilizamos a captura..."
+        : "Movimento detectado. Fique parado por um instante.";
+    faceGuide.classList.remove("guide-ready");
+    faceGuide.classList.add("guide-near");
+    setProximityIndicator(assessment.proximityPercent, "yellow");
 }
 
 function renderGuideAssessment(assessment: GuideAssessment): void {
@@ -800,12 +1111,86 @@ async function waitForManualReady(): Promise<void> {
     startButton.disabled = true;
 }
 
+function configurePublicFlow(status: IdentityCheckStatus): void {
+    currentFlow = status.flowType || "cnh";
+    currentDisplayName = status.displayName?.trim() ?? "";
+
+    const isCNH = currentFlow === "cnh";
+    const isEnrollment = currentFlow === "face_enrollment";
+
+    document.body.dataset.flow = currentFlow;
+    biometryStageIndex.textContent = isCNH ? "2" : "1";
+    finalStageIndex.textContent = isCNH ? "3" : "2";
+
+    switch (currentFlow) {
+    case "face_enrollment":
+        flowEyebrow.textContent = "CADASTRO FACIAL";
+        flowTitle.textContent = currentDisplayName
+            ? `Cadastre seu rosto, ${currentDisplayName}`
+            : "Cadastre seu rosto";
+        flowSubtitle.textContent = "Duas capturas rápidas para criar sua referência facial.";
+        biometryTitle.textContent = "Cadastro facial";
+        biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+        processingText.textContent = "Validando prova de vida e criando sua referência facial.";
+        privacyText.textContent = "O cadastro salva um template biométrico criptografado.";
+        documentDetails = null;
+        sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+        break;
+    case "face_verification":
+        flowEyebrow.textContent = "VALIDAÇÃO FACIAL";
+        flowTitle.textContent = currentDisplayName
+            ? `Olá, ${currentDisplayName}`
+            : "Confirme sua identidade";
+        flowSubtitle.textContent = "Vamos comparar sua captura com o cadastro facial existente.";
+        biometryTitle.textContent = "Confirme seu rosto";
+        biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+        processingText.textContent = "Validando prova de vida e correspondência facial.";
+        privacyText.textContent = "A captura é usada para validar o cadastro facial selecionado.";
+        documentDetails = null;
+        sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+        break;
+    case "photo_verification":
+        flowEyebrow.textContent = "FOTO DE REFERÊNCIA";
+        flowTitle.textContent = currentDisplayName
+            ? `Confirme sua identidade, ${currentDisplayName}`
+            : "Confirme sua identidade";
+        flowSubtitle.textContent = "Vamos comparar sua captura com a foto de referência.";
+        biometryTitle.textContent = "Biometria facial";
+        biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+        processingText.textContent = "Validando prova de vida e correspondência facial.";
+        privacyText.textContent = "A captura é usada somente para esta validação.";
+        documentDetails = null;
+        sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+        break;
+    case "cnh":
+    default:
+        flowEyebrow.textContent = "CNH + BIOMETRIA";
+        flowTitle.textContent = "Confirme sua identidade";
+        flowSubtitle.textContent = "Envie sua CNH Digital e conclua a biometria facial.";
+        biometryTitle.textContent = "Biometria facial";
+        biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+        processingText.textContent = "Validando prova de vida e correspondência com a CNH.";
+        privacyText.textContent = "O documento e a captura são usados para esta verificação.";
+        break;
+    }
+
+    if (!isCNH && isEnrollment) {
+        documentPanel.hidden = true;
+    }
+}
+
 function renderStatus(status: IdentityCheckStatus): void {
+    configurePublicFlow(status);
     expiresText.textContent = formatExpiration(status.expiresAt);
+    processingOverlay.hidden = true;
 
     switch (status.status) {
     case "pending_document":
     case "processing_document":
+        if (currentFlow !== "cnh") {
+            showFatal("Este link biométrico está em um estado inválido.");
+            return;
+        }
         documentPanel.hidden = false;
         biometryPanel.hidden = true;
         finalPanel.hidden = true;
@@ -839,10 +1224,69 @@ function renderIdentityResult(
     result: IdentityCompletionResponse,
     capturedFrames: GuidedCapturedFrame[],
 ): void {
+    processingOverlay.hidden = true;
     documentPanel.hidden = true;
     biometryPanel.hidden = true;
     finalPanel.hidden = false;
 
+    currentFlow = result.flowType || currentFlow;
+    currentDisplayName = result.displayName?.trim() || currentDisplayName;
+
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+        bestCaptureObjectURL = "";
+    }
+    const bestCaptureBlob = capturedFrames[result.bestFrameIndex]?.imageBlob;
+    if (bestCaptureBlob) {
+        bestCaptureObjectURL = URL.createObjectURL(bestCaptureBlob);
+    }
+
+    if (currentFlow === "face_enrollment") {
+        renderEnrollmentResult(result, bestCaptureObjectURL);
+        return;
+    }
+
+    renderVerificationResult(result, bestCaptureObjectURL);
+}
+
+function renderEnrollmentResult(
+    result: IdentityCompletionResponse,
+    bestCapture: string,
+): void {
+    const decisionLabel = {
+        approved: "ROSTO CADASTRADO",
+        review: "CADASTRO EM REVISÃO",
+        rejected: "CADASTRO NÃO CONCLUÍDO",
+    }[result.decision];
+
+    resultPanel.innerHTML = `
+        <div class="result-header result-${escapeHtml(result.decision)}">
+            <span>${escapeHtml(decisionLabel)}</span>
+        </div>
+
+        ${currentDisplayName
+            ? `<div class="demo-result-name">${escapeHtml(currentDisplayName)}</div>`
+            : ""}
+
+        <div class="demo-capture-result">
+            ${photoCard("Captura cadastrada", bestCapture)}
+        </div>
+
+        <div class="metrics-grid demo-metrics-grid">
+            ${metric("Prova de vida", percentage(result.livenessScore))}
+            ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
+            ${metric("Qualidade", percentage(result.quality.score))}
+            ${metric("Template", result.templateStored ? "SALVO" : "NÃO SALVO")}
+        </div>
+
+        ${technicalResultDetails(result, false)}
+    `;
+}
+
+function renderVerificationResult(
+    result: IdentityCompletionResponse,
+    bestCapture: string,
+): void {
     const decisionLabel = {
         approved: "IDENTIDADE CONFIRMADA",
         review: result.similarity >= result.matchThreshold
@@ -855,14 +1299,20 @@ function renderIdentityResult(
         ...result.document,
         ...(documentDetails ?? {}),
     };
-    const bestCapture = capturedFrames[result.bestFrameIndex]?.imageBase64 ?? "";
-    const referencePhoto = documentDetails?.referencePhotoDataUrl ?? "";
+    const isCNH = currentFlow === "cnh";
+    const referencePhoto = isCNH
+        ? documentDetails?.referencePhotoDataUrl ?? ""
+        : "";
     const match = faceMatchPresentation(result.similarity, result.matchThreshold);
 
     resultPanel.innerHTML = `
         <div class="result-header result-${escapeHtml(result.decision)}">
             <span>${escapeHtml(decisionLabel)}</span>
         </div>
+
+        ${currentDisplayName
+            ? `<div class="demo-result-name">${escapeHtml(currentDisplayName)}</div>`
+            : ""}
 
         <section class="match-strength match-strength-${match.tone}">
             <span class="match-strength-eyebrow">Correspondência facial</span>
@@ -874,95 +1324,102 @@ function renderIdentityResult(
             <div
                 class="match-scale"
                 style="--threshold-position: ${scorePosition(result.matchThreshold)}%"
-                aria-label="Posição do score facial em relação ao limiar técnico"
+                aria-label="Índice de similaridade facial em relação ao mínimo esperado"
             >
                 <div class="match-scale-track">
                     <div
                         class="match-scale-threshold"
                         style="left: ${scorePosition(result.matchThreshold)}%"
-                        title="Limiar técnico ${faceScore(result.matchThreshold)}"
+                        title="Mínimo esperado ${similarityPercent(result.matchThreshold)}"
                     ></div>
                     <div
                         class="match-scale-score match-scale-score-${match.tone}"
                         style="left: ${scorePosition(result.similarity)}%"
-                        title="Score biométrico ${faceScore(result.similarity)}"
+                        title="Similaridade facial ${similarityPercent(result.similarity)}"
                     ></div>
                 </div>
                 <div class="match-scale-labels">
-                    <span>-1</span>
-                    <span class="match-scale-threshold-label">Limiar ${faceScore(result.matchThreshold)}</span>
-                    <span>+1</span>
-                </div>
-            </div>
-
-            <div class="match-margin-grid">
-                <div>
-                    <span>Margem sobre o limiar</span>
-                    <strong>${signedFaceScore(match.margin)}</strong>
-                </div>
-                <div>
-                    <span>Distância relativa</span>
-                    <strong>${escapeHtml(match.relativeMarginLabel)}</strong>
+                    <span>0%</span>
+                    <span class="match-scale-threshold-label">Mínimo ${similarityPercent(result.matchThreshold)}</span>
+                    <span>100%</span>
                 </div>
             </div>
         </section>
 
-        <div class="identity-profile">
-            <div class="identity-summary">
-                <h3>Dados da CNH</h3>
-                <div class="identity-data-grid">
-                    ${dataLine("Nome", details.name)}
-                    ${dataLine("CPF", details.cpf)}
-                    ${dataLine("Nascimento", details.birthDate)}
-                    ${dataLine("Categoria", details.category)}
-                    ${dataLine("Validade", details.expiryDate)}
-                    ${dataLine("UF de emissão", details.issuingUf)}
+        ${isCNH ? `
+            <div class="identity-profile">
+                <div class="identity-summary">
+                    <h3>Dados da CNH</h3>
+                    <div class="identity-data-grid">
+                        ${dataLine("Nome", details.name)}
+                        ${dataLine("CPF", details.cpf)}
+                        ${dataLine("Nascimento", details.birthDate)}
+                        ${dataLine("Categoria", details.category)}
+                        ${dataLine("Validade", details.expiryDate)}
+                        ${dataLine("UF de emissão", details.issuingUf)}
+                    </div>
+                </div>
+
+                <div class="face-comparison">
+                    ${photoCard("Foto da CNH", referencePhoto)}
+                    <div class="face-comparison-mark" aria-hidden="true">↔</div>
+                    ${photoCard("Melhor captura", bestCapture)}
                 </div>
             </div>
-
-            <div class="face-comparison">
-                ${photoCard("Foto da CNH", referencePhoto)}
-                <div class="face-comparison-mark" aria-hidden="true">↔</div>
+        ` : `
+            <div class="demo-capture-result">
                 ${photoCard("Melhor captura", bestCapture)}
             </div>
-        </div>
+        `}
 
-        <div class="metrics-grid">
+        <div class="metrics-grid demo-metrics-grid">
+            ${metric("Similaridade facial", similarityPercent(result.similarity))}
             ${metric("Prova de vida", percentage(result.livenessScore))}
             ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
             ${metric("Qualidade", percentage(result.quality.score))}
-            ${metric("Captura guiada", percentage(result.signals.guidedCapture.score))}
         </div>
 
+        ${technicalResultDetails(result, true)}
+
+        ${isCNH ? `
+            <div class="identity-checks">
+                ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
+                ${checkLine("Assinatura VIO", result.document.vioSignatureValid)}
+                ${checkLine("CPF esperado", result.document.cpfMatch)}
+                ${checkLine("Data mínima do documento", result.document.freshnessValid)}
+            </div>
+        ` : ""}
+    `;
+}
+
+function technicalResultDetails(
+    result: IdentityCompletionResponse,
+    includeMatch: boolean,
+): string {
+    return `
         <details class="technical-details">
             <summary>Detalhes técnicos</summary>
             <div class="technical-details-body">
-                <div class="technical-row">
-                    <span>Score biométrico bruto</span>
-                    <strong>${faceScore(result.similarity)}</strong>
-                </div>
-                <div class="technical-row">
-                    <span>Limiar configurado</span>
-                    <strong>${faceScore(result.matchThreshold)}</strong>
-                </div>
-                <div class="technical-row">
-                    <span>Margem</span>
-                    <strong>${signedFaceScore(match.margin)}</strong>
-                </div>
-                ${frameScoreLine(result.frameSimilarities)}
+                ${includeMatch ? `
+                    <div class="technical-row">
+                        <span>Score biométrico bruto</span>
+                        <strong>${faceScore(result.similarity)}</strong>
+                    </div>
+                    <div class="technical-row">
+                        <span>Limiar configurado</span>
+                        <strong>${faceScore(result.matchThreshold)}</strong>
+                    </div>
+                    ${frameScoreLine(result.frameSimilarities)}
+                ` : ""}
+                ${nativeShadowDetails(result.nativeShadow, result.diagnostics)}
                 <p>
-                    O score facial é uma similaridade cosseno do modelo biométrico.
-                    Ele não representa uma porcentagem de certeza ou probabilidade.
+                    O índice percentual exibido na interface é uma normalização
+                    linear do score cosseno de -1 a +1 para uma escala de 0 a 100.
+                    Ele facilita a leitura e não representa probabilidade ou certeza
+                    de identidade.
                 </p>
             </div>
         </details>
-
-        <div class="identity-checks">
-            ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
-            ${checkLine("Assinatura VIO", result.document.vioSignatureValid)}
-            ${checkLine("CPF esperado", result.document.cpfMatch)}
-            ${checkLine("Data mínima do documento", result.document.freshnessValid)}
-        </div>
     `;
 }
 
@@ -983,7 +1440,7 @@ function faceMatchPresentation(similarity: number, threshold: number): FaceMatch
     if (similarity < threshold) {
         return {
             label: "ABAIXO DO LIMIAR",
-            summary: "O score facial não atingiu o limiar técnico configurado.",
+            summary: "A similaridade facial ficou abaixo do mínimo esperado.",
             tone: "below",
             margin,
             relativeMarginLabel: `${Math.abs(relativeMargin).toFixed(0)}% abaixo do limiar`,
@@ -993,7 +1450,7 @@ function faceMatchPresentation(similarity: number, threshold: number): FaceMatch
     if (relativeMargin >= 25) {
         return {
             label: "ALTA CORRESPONDÊNCIA",
-            summary: "O score facial está confortavelmente acima do limiar técnico.",
+            summary: "A similaridade facial está confortavelmente acima do mínimo esperado.",
             tone: "high",
             margin,
             relativeMarginLabel: `${relativeMargin.toFixed(0)}% acima do limiar`,
@@ -1012,6 +1469,10 @@ function faceMatchPresentation(similarity: number, threshold: number): FaceMatch
 function scorePosition(value: number): number {
     const clamped = Math.max(-1, Math.min(1, value));
     return ((clamped + 1) / 2) * 100;
+}
+
+function similarityPercent(value: number): string {
+    return `${Math.round(scorePosition(value))}%`;
 }
 
 function signedFaceScore(value: number): string {
@@ -1038,6 +1499,80 @@ function photoCard(label: string, imageBase64: string): string {
     `;
 }
 
+function nativeShadowDetails(
+    shadow: NativeShadowComparison | undefined,
+    diagnostics: string[],
+): string {
+    if (!isLocalDevelopmentHost()) {
+        return "";
+    }
+
+    if (!shadow) {
+        return nativeShadowDiagnosticFallback(diagnostics);
+    }
+
+    const errors = shadow.errors?.length
+        ? `<div class="technical-row"><span>Secure Core warnings</span><strong>${escapeHtml(shadow.errors.join(" · "))}</strong></div>`
+        : "";
+
+    if (shadow.status.toLowerCase() === "authority") {
+        return `
+            <div class="technical-row"><span>Secure Core C++</span><strong>AUTHORITY</strong></div>
+            <div class="technical-row"><span>Frames processados nativamente</span><strong>${shadow.nativeFrames}</strong></div>
+            <div class="technical-row"><span>Comparação Python</span><strong>desativada</strong></div>
+            ${errors}
+        `;
+    }
+
+    const padValue = shadow.padComparedFrames > 0
+        ? `${shadow.padComparedFrames} frames · Δ máx. ${shadowDelta(shadow.passivePadMaxDelta)}`
+        : "não comparado";
+
+    return `
+        <div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(shadow.status.toUpperCase())}</strong></div>
+        <div class="technical-row"><span>Frames Python × C++</span><strong>${shadow.pythonFrames} × ${shadow.nativeFrames}</strong></div>
+        <div class="technical-row"><span>YuNet bbox Δ máx.</span><strong>${shadow.bboxMaxDeltaPx.toFixed(3)} px</strong></div>
+        <div class="technical-row"><span>YuNet confiança Δ máx.</span><strong>${shadowDelta(shadow.confidenceMaxDelta)}</strong></div>
+        <div class="technical-row"><span>Qualidade Δ máx.</span><strong>${shadowDelta(shadow.qualityMaxDelta)}</strong></div>
+        <div class="technical-row"><span>SFace cosine mín.</span><strong>${shadow.selectedEmbeddingMinCosine.toFixed(8)}</strong></div>
+        <div class="technical-row"><span>SFace embedding Δ máx.</span><strong>${shadowDelta(shadow.selectedEmbeddingMaxDelta)}</strong></div>
+        <div class="technical-row"><span>Embedding combinado cosine</span><strong>${shadow.combinedEmbeddingCosine.toFixed(8)}</strong></div>
+        <div class="technical-row"><span>Embedding combinado Δ máx.</span><strong>${shadowDelta(shadow.combinedEmbeddingMaxDelta)}</strong></div>
+        <div class="technical-row"><span>PAD nativo</span><strong>${escapeHtml(padValue)}</strong></div>
+        ${errors}
+    `;
+}
+
+function nativeShadowDiagnosticFallback(diagnostics: string[]): string {
+    const diagnostic = diagnostics.find((item) =>
+        item.startsWith("native shadow "),
+    );
+    if (!diagnostic) {
+        return "";
+    }
+
+    const value = diagnostic.slice("native shadow ".length);
+    return `<div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function shadowDelta(value: number): string {
+    if (!Number.isFinite(value)) {
+        return "—";
+    }
+    if (value === 0) {
+        return "0";
+    }
+    return Math.abs(value) < 0.0001
+        ? value.toExponential(2)
+        : value.toFixed(6);
+}
+
+function isLocalDevelopmentHost(): boolean {
+    return ["localhost", "127.0.0.1", "::1"].includes(
+        window.location.hostname,
+    );
+}
+
 function frameScoreLine(scores: number[]): string {
     if (!scores.length) {
         return "";
@@ -1051,12 +1586,24 @@ function faceScore(value: number): string {
 }
 
 function renderFinalStatus(status: "approved" | "review" | "rejected"): void {
-    const labels = {
+    const enrollmentLabels = {
+        approved: "Rosto cadastrado.",
+        review: "Cadastro em revisão.",
+        rejected: "Cadastro não concluído.",
+    };
+    const verificationLabels = {
         approved: "Identidade confirmada.",
         review: "A verificação será analisada.",
         rejected: "Não foi possível confirmar a identidade.",
     };
-    resultPanel.innerHTML = `<div class="result-header result-${status}"><span>${labels[status]}</span></div>`;
+    const labels = currentFlow === "face_enrollment"
+        ? enrollmentLabels
+        : verificationLabels;
+    resultPanel.innerHTML = `
+        <div class="result-header result-${status}">
+            <span>${labels[status]}</span>
+        </div>
+    `;
 }
 
 function showFatal(message: string): void {
@@ -1080,6 +1627,22 @@ function consumeIdentityToken(): string {
         return fromFragment;
     }
     return sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
+}
+
+function loadGeometryTelemetry(expectedRunId: string): import("./types.js").GeometryTelemetry | undefined {
+    try {
+        const value = sessionStorage.getItem("faceproof.liveness-v2.telemetry");
+        if (!value) {
+            return undefined;
+        }
+        const parsed = JSON.parse(value) as import("./types.js").GeometryTelemetry;
+        if (!parsed || typeof parsed !== "object" || parsed.runId !== expectedRunId) {
+            return undefined;
+        }
+        return parsed;
+    } catch {
+        return undefined;
+    }
 }
 
 function friendlyDocumentError(message: string): string {
@@ -1106,6 +1669,9 @@ function friendlyDocumentError(message: string): string {
 }
 
 function friendlyBiometryError(message: string): string {
+    if (message.includes("biometric comparison unavailable")) {
+        return "A comparação facial não pôde ser concluída. Tente novamente.";
+    }
     if (isInfrastructureBiometryError(message)) {
         return "A análise demorou mais que o esperado ou a conexão com o servidor foi interrompida. Tente novamente.";
     }
@@ -1129,7 +1695,8 @@ function isInfrastructureBiometryError(message: string): boolean {
     return message.includes("HTTP 502") ||
         message.includes("HTTP 503") ||
         message.includes("FaceProof API unavailable") ||
-        message.includes("biometric engine failed");
+        message.includes("biometric engine failed") ||
+        message.includes("biometric comparison unavailable");
 }
 
 function formatExpiration(value: string): string {

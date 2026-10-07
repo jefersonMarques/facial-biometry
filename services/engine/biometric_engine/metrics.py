@@ -122,3 +122,63 @@ def robust_mean(values: list[float]) -> float:
     lower, upper = np.percentile(values_array, [15, 85])
     trimmed = values_array[(values_array >= lower) & (values_array <= upper)]
     return float(trimmed.mean()) if len(trimmed) else float(values_array.mean())
+
+
+def guided_capture_score(
+    far_scales: list[float],
+    near_scales: list[float],
+    center_scores: list[float],
+    quality_scores: list[float],
+) -> float:
+    if not far_scales or not near_scales:
+        return 0.0
+
+    far_median = float(np.median(far_scales))
+    near_median = float(np.median(near_scales))
+    scale_delta = near_median - far_median
+    transition_score = clamp01((scale_delta - 0.05) / 0.15)
+    coverage_score = clamp01(min(len(far_scales), len(near_scales)) / 3.0)
+    centering_score = robust_mean(center_scores) if center_scores else 0.0
+    quality_score = robust_mean(quality_scores) if quality_scores else 0.0
+
+    return clamp01(
+        0.40 * transition_score
+        + 0.25 * coverage_score
+        + 0.20 * centering_score
+        + 0.15 * quality_score
+    )
+
+
+def identity_liveness_score(
+    passive_score: float,
+    passive_available: bool,
+    guided_score: float,
+    temporal_score: float,
+    quality_score: float,
+    face_presence: float,
+) -> float:
+    quality_gate = clamp01((quality_score - 0.25) / 0.55)
+    presence_gate = clamp01((face_presence - 0.55) / 0.45)
+
+    if passive_available:
+        liveness_score = (
+            0.55 * passive_score
+            + 0.20 * guided_score
+            + 0.10 * temporal_score
+            + 0.10 * quality_score
+            + 0.05 * face_presence
+        )
+    else:
+        liveness_score = (
+            0.36 * guided_score
+            + 0.24 * temporal_score
+            + 0.22 * quality_score
+            + 0.18 * face_presence
+        )
+        liveness_score = min(liveness_score, 0.72)
+
+    return clamp01(
+        liveness_score
+        * (0.82 + 0.18 * quality_gate)
+        * (0.80 + 0.20 * presence_gate)
+    )

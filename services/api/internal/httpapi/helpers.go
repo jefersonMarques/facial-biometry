@@ -17,6 +17,15 @@ func sessionErrorStatus(err error) int {
 	return http.StatusBadRequest
 }
 
+func (handler *Handler) setSecurityHeaders(writer http.ResponseWriter) {
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.Header().Set("Pragma", "no-cache")
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("X-Frame-Options", "DENY")
+	writer.Header().Set("Referrer-Policy", "no-referrer")
+	writer.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), payment=()")
+}
+
 func (handler *Handler) setCORS(writer http.ResponseWriter) {
 	writer.Header().Set("Access-Control-Allow-Origin", handler.config.AllowedOrigin)
 	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-FaceProof-Identity-Token")

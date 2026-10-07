@@ -1,10 +1,14 @@
 # FaceProof
 
-Browser-first, self-hosted identity verification and facial biometric MVP.
+Browser-first facial biometric enrollment, liveness and verification platform.
 
-The primary flow now accepts an original Brazilian CNH Digital PDF, authenticates the signed PDF and VIO payload, extracts a biometric reference portrait from the cryptographically intact signed PDF, with the signed VIO portrait as fallback, performs browser-based live capture with liveness, and compares the live face against that portrait.
+The FaceProof core is biometric capture, liveness, enrollment and 1:1 re-verification with the server as the final authority. Document identity flows are optional product modules.
 
-## CNH Digital Identity Check
+The current repository also includes a Brazilian CNH Digital Identity module that authenticates the signed PDF and VIO payload, extracts an official biometric reference portrait and compares it against a live capture.
+
+See `docs/BROWSER_FIRST_ROADMAP.md` for the SDK, licensing, Control Plane and Go + HTMX Console direction.
+
+## Optional CNH Digital Identity Check
 
 ```text
 Issuer creates check
@@ -72,8 +76,10 @@ The MVP also does not provide complete long-term certificate revocation/timestam
 
 ## Requirements
 
-- Go 1.23+
-- Python 3.11+
+- Linux x86_64;
+- Go 1.23+;
+- C++17 toolchain, CMake and Ninja for building the Secure Core;
+- Python is optional and reserved for validation/R&D tooling;
 - a modern browser with camera support;
 - Poppler tools: `pdfinfo` and `pdftoppm`; PDF signature cryptography is also verified natively in Go;
 - `bpgdec` is optional fallback support for VIO portraits encoded in BPG.
@@ -82,25 +88,38 @@ Node.js is only required when editing the TypeScript SDK. The compiled JavaScrip
 
 ## Run
 
-Linux/macOS:
+Build the Linux Secure Core and signed development Model Pack once:
 
 ```bash
-./scripts/run-dev.sh
+bash scripts/build-biometric-core.sh
+bash scripts/build-model-pack.sh
 ```
 
-Windows:
+The Model Pack is a signed `.fpmp` archive. The runtime verifies its Ed25519 signature, manifest, model sizes and SHA-256 hashes before the C++ Secure Core receives any model path.
 
-```powershell
-.\scripts\run-dev.ps1
+Start the production-candidate runtime:
+
+```bash
+./scripts/run-dev.sh --analytics
 ```
 
-Services:
+The native Secure Core is the default runtime. It does not start the Python biometric engine.
+
+Python is available only as an explicit development/R&D fallback:
+
+```bash
+./scripts/run-dev.sh --python-engine --analytics
+```
+
+Services in native mode:
 
 ```text
 Web:              http://localhost:5173
 Identity page:    http://localhost:5173/verify.html
-Biometric API:    http://localhost:8080
-Biometric engine: http://localhost:8090
+Biometric API:    http://localhost:8180
+Analytics panel:  http://localhost:5174
+Secure Core:      libfaceproof_core.so (in-process)
+Model Pack:       signed .fpmp verified before Core startup
 ```
 
 To create a check, call:
@@ -143,7 +162,18 @@ Important biometric settings:
 - `FACEPROOF_MATCH_THRESHOLD`
 - `FACEPROOF_LIVENESS_THRESHOLD`
 - `FACEPROOF_REQUIRE_PASSIVE_PAD`
-- `FACEPROOF_ENGINE_URL`
+- `FACEPROOF_SECURE_CORE_LIBRARY`
+- `FACEPROOF_MODEL_PACK`
+- `FACEPROOF_MODEL_PACK_PUBLIC_KEY`
+- `FACEPROOF_MODEL_PACK_CACHE_DIR`
+- `FACEPROOF_ENGINE_URL` (Python R&D fallback only)
+- `FACEPROOF_YUNET_MODEL`, `FACEPROOF_SFACE_MODEL`, `FACEPROOF_MINIFASNET_MODEL` (loose-model R&D/build tooling only)
+
+## Production deployment
+
+The hardened single-instance Linux perimeter is documented in
+`deploy/production/README.md`. Production uses Caddy for HTTPS, keeps the
+web gateway/API on loopback and keeps the admin gateway off the public route.
 
 ## Documentation
 
@@ -158,7 +188,7 @@ Important biometric settings:
 The development server on port `5173` is a same-origin gateway:
 
 - static web files are served directly;
-- `/v1/*` is reverse-proxied to the FaceProof API on `127.0.0.1:8080`.
+- `/v1/*` is reverse-proxied to the FaceProof API on `127.0.0.1:8180`.
 
 This means one tunnel is enough for browser + API:
 
@@ -166,13 +196,17 @@ This means one tunnel is enough for browser + API:
 cloudflared tunnel --url http://localhost:5173
 ```
 
-After Cloudflare prints the public `https://....trycloudflare.com` URL, create a check with:
+After Cloudflare prints the public `https://....trycloudflare.com` URL, create a check with the Linux helper:
 
-```powershell
-.\scripts\create-identity-check.ps1 `
-  -CPF "CPF_DA_CNH" `
-  -MinimumDocumentDate "2026-01-01" `
-  -PublicBaseUrl "https://YOUR-SUBDOMAIN.trycloudflare.com"
+```bash
+./scripts/create-identity-check.sh \
+  "CPF_DA_CNH" \
+  "2026-01-01" \
+  60 \
+  "" \
+  genuine_live \
+  approved \
+  "https://YOUR-SUBDOMAIN.trycloudflare.com"
 ```
 
 Do not tunnel only a plain static file server. The public origin must reach the FaceProof gateway so that `/v1/*` returns the API JSON responses.

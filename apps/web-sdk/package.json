@@ -8,6 +8,7 @@
     "test:liveness-v2": "npm run build && node --test tests/liveness-v2.test.mjs"
   },
   "devDependencies": {
+    "@mediapipe/tasks-vision": "1.0.1",
     "typescript": "^5.8.3"
   }
 }

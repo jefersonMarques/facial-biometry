@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -15,7 +14,7 @@ import (
 	"faceproof/services/api/internal/domain"
 	"faceproof/services/api/internal/identity"
 	"faceproof/services/api/internal/matching"
-	"faceproof/services/api/internal/security"
+	"faceproof/services/api/internal/tenant"
 )
 
 const (
@@ -35,21 +34,33 @@ type createIdentityCheckRequest struct {
 	CPF                 string `json:"cpf"`
 	MinimumDocumentDate string `json:"minimumDocumentDate"`
 	ExpiresInMinutes    int    `json:"expiresInMinutes,omitempty"`
+	CampaignID          string `json:"campaignId,omitempty"`
+	Scenario            string `json:"scenario,omitempty"`
+	ExpectedDecision    string `json:"expectedDecision,omitempty"`
 }
 
 type createIdentityCheckResponse struct {
-	ID              string    `json:"id"`
-	VerificationURL string    `json:"verificationUrl"`
-	ExpiresAt       time.Time `json:"expiresAt"`
+	ID               string            `json:"id"`
+	VerificationURL  string            `json:"verificationUrl"`
+	ExpiresAt        time.Time         `json:"expiresAt"`
+	CampaignID       string            `json:"campaignId,omitempty"`
+	Scenario         string            `json:"scenario,omitempty"`
+	ExpectedDecision string            `json:"expectedDecision,omitempty"`
+	FlowType         identity.FlowType `json:"flowType,omitempty"`
+	SubjectID        string            `json:"subjectId,omitempty"`
+	DisplayName      string            `json:"displayName,omitempty"`
 }
 
 type identityStatusResponse struct {
-	ID               string          `json:"id"`
-	Status           identity.Status `json:"status"`
-	ExpiresAt        time.Time       `json:"expiresAt"`
-	DocumentAccepted bool            `json:"documentAccepted"`
-	CanStartBiometry bool            `json:"canStartBiometry"`
-	Decision         string          `json:"decision,omitempty"`
+	ID               string            `json:"id"`
+	Status           identity.Status   `json:"status"`
+	ExpiresAt        time.Time         `json:"expiresAt"`
+	DocumentAccepted bool              `json:"documentAccepted"`
+	CanStartBiometry bool              `json:"canStartBiometry"`
+	Decision         string            `json:"decision,omitempty"`
+	FlowType         identity.FlowType `json:"flowType"`
+	SubjectID        string            `json:"subjectId,omitempty"`
+	DisplayName      string            `json:"displayName,omitempty"`
 }
 
 type identityDocumentDetails struct {
@@ -72,22 +83,30 @@ type identityDocumentResponse struct {
 }
 
 type identityCompleteRequest struct {
-	SessionID    string                       `json:"sessionId"`
-	SessionToken string                       `json:"sessionToken"`
-	GuidedFrames []domain.GuidedCapturedFrame `json:"guidedFrames"`
-	Metadata     *domain.CaptureMetadata      `json:"metadata,omitempty"`
+	SessionID       string                         `json:"sessionId"`
+	SessionToken    string                         `json:"sessionToken"`
+	GuidedFrames    []domain.GuidedCapturedFrame   `json:"guidedFrames"`
+	Metadata        *domain.CaptureMetadata        `json:"metadata,omitempty"`
+	Runtime         domain.RuntimeFingerprint      `json:"runtime"`
+	CaptureProtocol domain.CaptureProtocolMetadata `json:"captureProtocol"`
+	Geometry        *domain.GeometryTelemetry       `json:"geometry,omitempty"`
 }
 
 type issuerIdentityCheckResponse struct {
-	ID                  string             `json:"id"`
-	Status              identity.Status    `json:"status"`
-	MinimumDocumentDate time.Time          `json:"minimumDocumentDate"`
-	CreatedAt           time.Time          `json:"createdAt"`
-	ExpiresAt           time.Time          `json:"expiresAt"`
-	Decision            string             `json:"decision,omitempty"`
+	ID                  string                     `json:"id"`
+	Status              identity.Status            `json:"status"`
+	MinimumDocumentDate time.Time                  `json:"minimumDocumentDate"`
+	CreatedAt           time.Time                  `json:"createdAt"`
+	ExpiresAt           time.Time                  `json:"expiresAt"`
+	Decision            string                     `json:"decision,omitempty"`
 	Document            *identity.DocumentEvidence `json:"document,omitempty"`
-	LivenessScore       float64            `json:"livenessScore,omitempty"`
-	FaceSimilarity      float64            `json:"faceSimilarity,omitempty"`
+	LivenessScore       float64                    `json:"livenessScore,omitempty"`
+	FaceSimilarity      float64                    `json:"faceSimilarity,omitempty"`
+	CampaignID          string                     `json:"campaignId,omitempty"`
+	Scenario            string                     `json:"scenario,omitempty"`
+	ExpectedDecision    string                     `json:"expectedDecision,omitempty"`
+	Runtime             *domain.RuntimeFingerprint      `json:"runtime,omitempty"`
+	CaptureProtocol     *domain.CaptureProtocolMetadata `json:"captureProtocol,omitempty"`
 }
 
 type identityCompleteResponse struct {
@@ -100,9 +119,13 @@ type identityCompleteResponse struct {
 	BestFrameIndex    int                     `json:"bestFrameIndex"`
 	MatchThreshold    float64                 `json:"matchThreshold"`
 	Signals           signalResponse          `json:"signals"`
-	Quality           domain.EngineQuality    `json:"quality"`
-	Diagnostics       []string                `json:"diagnostics"`
-	Document          identityDocumentDetails `json:"document"`
+	Quality           domain.EngineQuality            `json:"quality"`
+	Diagnostics       []string                        `json:"diagnostics"`
+	NativeShadow      *domain.NativeShadowComparison `json:"nativeShadow,omitempty"`
+	Document          identityDocumentDetails         `json:"document"`
+	FlowType          identity.FlowType               `json:"flowType"`
+	DisplayName       string                          `json:"displayName,omitempty"`
+	TemplateStored    bool                            `json:"templateStored,omitempty"`
 }
 
 func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request *http.Request) {
@@ -110,11 +133,12 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
 		return
 	}
-	if len(handler.config.IdentityIssuerKey) == 0 {
-		handler.writeError(writer, http.StatusServiceUnavailable, "identity issuer is not configured")
+	if handler.tenants == nil || handler.tenants.Count() == 0 {
+		handler.writeError(writer, http.StatusServiceUnavailable, "tenant authentication is not configured")
 		return
 	}
-	if !handler.authorizeIdentityIssuer(request) {
+	authenticatedTenant, authorized := handler.authorizeIdentityIssuer(request)
+	if !authorized {
 		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
 		return
 	}
@@ -125,65 +149,17 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		return
 	}
 
-	expectedCPF := cnh.NormalizeCPF(payload.CPF)
-	if !cnh.ValidCPF(expectedCPF) {
-		handler.writeError(writer, http.StatusBadRequest, "cpf is invalid")
-		return
-	}
-
-	location := time.FixedZone("America/Sao_Paulo", -3*60*60)
-	minimumDate, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(payload.MinimumDocumentDate), location)
+	response, err := handler.createIdentityCheckRecord(
+		request.Context(),
+		authenticatedTenant.ID,
+		authenticatedTenant.MonthlyCheckLimit,
+		payload,
+	)
 	if err != nil {
-		handler.writeError(writer, http.StatusBadRequest, "minimumDocumentDate must use YYYY-MM-DD")
+		writeIdentityCreateError(handler, writer, err)
 		return
 	}
-	today := time.Now().In(location)
-	todayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, location)
-	if minimumDate.After(todayStart) {
-		handler.writeError(writer, http.StatusBadRequest, "minimumDocumentDate cannot be in the future")
-		return
-	}
-
-	linkTTL := handler.config.IdentityLinkTTL
-	if payload.ExpiresInMinutes != 0 {
-		if payload.ExpiresInMinutes < 5 || payload.ExpiresInMinutes > 24*60 {
-			handler.writeError(writer, http.StatusBadRequest, "expiresInMinutes must be between 5 and 1440")
-			return
-		}
-		linkTTL = time.Duration(payload.ExpiresInMinutes) * time.Minute
-	}
-
-	idValue, err := security.RandomID(12)
-	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to create identity check")
-		return
-	}
-	token, err := security.RandomID(32)
-	if err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to create identity check")
-		return
-	}
-
-	now := time.Now().UTC()
-	check := identity.Check{
-		ID:                  "chk_" + idValue,
-		ExpectedCPF:         expectedCPF,
-		MinimumDocumentDate: minimumDate.UTC(),
-		Status:              identity.StatusPendingDocument,
-		CreatedAt:           now,
-		ExpiresAt:           now.Add(linkTTL),
-	}
-	if err := handler.identityChecks.Create(token, check); err != nil {
-		handler.writeError(writer, http.StatusInternalServerError, "failed to persist identity check")
-		return
-	}
-
-	baseURL := strings.Split(strings.TrimSpace(handler.config.IdentityVerifyURL), "#")[0]
-	handler.writeJSON(writer, http.StatusCreated, createIdentityCheckResponse{
-		ID:              check.ID,
-		VerificationURL: baseURL + "#identity=" + token,
-		ExpiresAt:       check.ExpiresAt,
-	})
+	handler.writeJSON(writer, http.StatusCreated, response)
 }
 
 func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *http.Request) {
@@ -191,6 +167,7 @@ func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *ht
 	if !ok {
 		return
 	}
+	handler.recordAnalyticsLinkAccessed(request.Context(), check.ID)
 	handler.writeJSON(writer, http.StatusOK, identityStatusResponse{
 		ID:               check.ID,
 		Status:           check.Status,
@@ -198,6 +175,9 @@ func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *ht
 		DocumentAccepted: check.Document != nil,
 		CanStartBiometry: check.Status == identity.StatusBiometryPending,
 		Decision:         check.Decision,
+		FlowType:         effectiveFlowType(check),
+		SubjectID:        check.SubjectID,
+		DisplayName:      check.DisplayName,
 	})
 }
 
@@ -233,10 +213,17 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		handler.writeIdentityStateError(writer, err)
 		return
 	}
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "document_upload_started", map[string]any{
+		"attempt": check.DocumentAttempts,
+		"bytes":   len(pdf),
+	})
 
 	document, documentErr := handler.cnhDocuments.Process(request.Context(), pdf, check.ExpectedCPF, check.MinimumDocumentDate)
 	if documentErr != nil {
 		handler.resetIdentityDocumentAttempt(token, documentErr)
+		if failedCheck, loadErr := handler.identityChecks.Load(token); loadErr == nil {
+			handler.recordAnalyticsDocumentFailure(request.Context(), failedCheck, documentErr)
+		}
 		switch {
 		case errors.Is(documentErr, cnh.ErrDependencyUnavailable):
 			handler.writeError(writer, http.StatusServiceUnavailable, documentErr.Error())
@@ -259,12 +246,16 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 	referenceImage := "data:" + document.PhotoMIME + ";base64," + base64.StdEncoding.EncodeToString(document.Photo)
 	reference, err := handler.engine.ExtractReference(request.Context(), referenceImage)
 	if err != nil {
-		handler.resetIdentityDocumentAttempt(token, errors.New("reference_face_failed"))
+		failure := errors.New("reference_face_failed")
+		handler.resetIdentityDocumentAttempt(token, failure)
+		if failedCheck, loadErr := handler.identityChecks.Load(token); loadErr == nil {
+			handler.recordAnalyticsDocumentFailure(request.Context(), failedCheck, failure)
+		}
 		handler.writeError(writer, http.StatusBadGateway, "could not analyze the CNH reference photo")
 		return
 	}
 
-	_, err = handler.identityChecks.Update(token, func(current *identity.Check) error {
+	updatedDocumentCheck, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
 		if current.Status != identity.StatusProcessingDocument {
 			return errIdentityInvalidState
 		}
@@ -297,6 +288,12 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 			current.ReferenceEmbeddings = [][]float64{append([]float64(nil), current.ReferenceEmbedding...)}
 		}
 		current.ReferenceEmbeddingModel = reference.EmbeddingModel
+		if handler.config.DemoMode {
+			if current.DemoArtifacts == nil {
+				current.DemoArtifacts = &identity.DemoArtifacts{}
+			}
+			current.DemoArtifacts.ReferencePhotoDataURL = referenceImage
+		}
 		current.Status = identity.StatusBiometryPending
 		current.LastErrorCode = ""
 		return nil
@@ -305,6 +302,7 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	handler.recordAnalyticsDocumentAccepted(request.Context(), updatedDocumentCheck)
 
 	response := identityDocumentResponse{
 		Status: identity.StatusBiometryPending,
@@ -332,12 +330,19 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 	}
 
 	var sessionResponse createSessionResponse
-	_, err := handler.identityChecks.Update(token, func(check *identity.Check) error {
+	updatedCheck, err := handler.identityChecks.Update(token, func(check *identity.Check) error {
 		if time.Now().After(check.ExpiresAt) {
 			return errIdentityExpired
 		}
-		if check.Status != identity.StatusBiometryPending || check.Document == nil ||
-			(len(check.ReferenceEmbedding) == 0 && len(check.ReferenceEmbeddings) == 0) {
+		if check.Status != identity.StatusBiometryPending {
+			return errIdentityInvalidState
+		}
+		if flowRequiresDocument(*check) && check.Document == nil {
+			return errIdentityInvalidState
+		}
+		if flowRequiresReference(*check) &&
+			len(check.ReferenceEmbedding) == 0 &&
+			len(check.ReferenceEmbeddings) == 0 {
 			return errIdentityInvalidState
 		}
 		if check.BiometricSessions >= maxIdentityBiometricSessions {
@@ -360,6 +365,7 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		handler.writeIdentityStateError(writer, err)
 		return
 	}
+	handler.recordAnalyticsBiometrySession(request.Context(), updatedCheck.ID, sessionResponse.SessionID)
 
 	handler.writeJSON(writer, http.StatusCreated, sessionResponse)
 }
@@ -378,13 +384,21 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		return
 	}
 
-	var payload identityCompleteRequest
-	if err := decodeJSON(request, &payload, 16<<20); err != nil {
+	payload, err := decodeIdentityCompleteRequest(writer, request)
+	if err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 	if payload.SessionID == "" || payload.SessionID != check.CaptureSessionID {
 		handler.writeError(writer, http.StatusBadRequest, "identity capture session mismatch")
+		return
+	}
+	if err := validateRuntimeFingerprint(payload.Runtime, handler.config); err != nil {
+		handler.writeError(writer, http.StatusUpgradeRequired, err.Error())
+		return
+	}
+	if err := validateCaptureProtocol(payload.CaptureProtocol); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -393,11 +407,23 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, sessionErrorStatus(err), err.Error())
 		return
 	}
+	if err := validateCaptureSessionServerTiming(captureSession, time.Now().UTC()); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := validateIdentityCaptureSession(captureSession, check.ID); err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := handler.signer.Verify(payload.SessionToken, payload.SessionID); err != nil {
+	if err := validateCaptureProtocolSession(payload.CaptureProtocol, captureSession); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := handler.signer.VerifyCapture(
+		payload.SessionToken,
+		payload.SessionID,
+		payload.CaptureProtocol.RunID,
+	); err != nil {
 		handler.writeError(writer, http.StatusUnauthorized, err.Error())
 		return
 	}
@@ -423,9 +449,19 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			}
 			return nil
 		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "engine_failed", map[string]any{
+			"sessionId": payload.SessionID,
+		})
 		handler.writeError(writer, http.StatusBadGateway, "biometric engine failed")
 		return
 	}
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "engine_completed", map[string]any{
+		"sessionId":     payload.SessionID,
+		"livenessScore": result.LivenessScore,
+		"passivePad":    result.PassivePAD.Score,
+		"quality":       result.Quality.Score,
+		"nativeShadow":  nativeStatus(result.NativeShadow),
+	})
 
 	if identityCaptureNeedsRecapture(result) {
 		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
@@ -435,6 +471,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			}
 			return nil
 		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "recapture_required", map[string]any{
+			"reason":    "capture_quality",
+			"sessionId": payload.SessionID,
+		})
 		handler.writeError(writer, http.StatusUnprocessableEntity, "capture quality insufficient; recapture required")
 		return
 	}
@@ -442,6 +482,18 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	check, err = handler.identityChecks.Load(token)
 	if err != nil || check.Status != identity.StatusBiometryPending || check.CaptureSessionID != payload.SessionID {
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
+		return
+	}
+	if effectiveFlowType(check) == identity.FlowFaceEnrollment {
+		handler.completeDemoFaceEnrollment(
+			writer,
+			request,
+			token,
+			check,
+			payload,
+			normalizedGuidedFrames,
+			result,
+		)
 		return
 	}
 	if check.ReferenceEmbeddingModel == "" || check.ReferenceEmbeddingModel != result.EmbeddingModel {
@@ -465,6 +517,40 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	}
 
 	similarity, frameSimilarities := matching.RobustCosineSimilarity(referenceEmbeddings, liveEmbeddings)
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "biometric_match_computed", map[string]any{
+		"similarity":           similarity,
+		"referenceFrames":      len(referenceEmbeddings),
+		"liveFrames":           len(liveEmbeddings),
+		"frameComparisons":     len(frameSimilarities),
+		"referenceDimensions":  embeddingDimensions(referenceEmbeddings),
+		"liveDimensions":       embeddingDimensions(liveEmbeddings),
+		"combinedLiveDimension": len(result.Embedding),
+	})
+
+	if len(frameSimilarities) == 0 {
+		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
+			if current.CaptureSessionID == payload.SessionID {
+				current.CaptureSessionID = ""
+				current.LastErrorCode = "biometric_match_unavailable"
+			}
+			return nil
+		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "biometric_match_unavailable", map[string]any{
+			"sessionId":             payload.SessionID,
+			"referenceFrames":       len(referenceEmbeddings),
+			"liveFrames":            len(liveEmbeddings),
+			"referenceDimensions":   embeddingDimensions(referenceEmbeddings),
+			"liveDimensions":        embeddingDimensions(liveEmbeddings),
+			"combinedLiveDimension": len(result.Embedding),
+			"embeddingModel":        result.EmbeddingModel,
+		})
+		handler.writeError(
+			writer,
+			http.StatusBadGateway,
+			"biometric comparison unavailable; retry capture",
+		)
+		return
+	}
 
 	if identityMatchNeedsRecapture(result, similarity, handler.config.MatchThreshold) {
 		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
@@ -473,6 +559,11 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 				current.LastErrorCode = "match_recapture_required"
 			}
 			return nil
+		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "recapture_required", map[string]any{
+			"reason":     "facial_match",
+			"sessionId":  payload.SessionID,
+			"similarity": similarity,
 		})
 		handler.writeError(writer, http.StatusUnprocessableEntity, "facial match inconclusive; recapture required")
 		return
@@ -489,6 +580,11 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	}
 
 	completedAt := time.Now().UTC()
+	capturedPhotoDataURL := demoCapturedPhotoDataURL(
+		handler.config.DemoMode,
+		normalizedGuidedFrames,
+		result.BestFrameIndex,
+	)
 	updated, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
 		if current.Status != identity.StatusBiometryPending || current.CaptureSessionID != payload.SessionID {
 			return errIdentityInvalidState
@@ -503,6 +599,16 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		current.FaceSimilarity = similarity
 		current.CompletedAt = &completedAt
 		current.CaptureSessionID = ""
+		runtimeCopy := payload.Runtime
+		current.RuntimeFingerprint = &runtimeCopy
+		protocolCopy := payload.CaptureProtocol
+		current.CaptureProtocol = &protocolCopy
+		if handler.config.DemoMode {
+			if current.DemoArtifacts == nil {
+				current.DemoArtifacts = &identity.DemoArtifacts{}
+			}
+			current.DemoArtifacts.CapturedPhotoDataURL = capturedPhotoDataURL
+		}
 		current.ReferenceEmbedding = nil
 		current.ReferenceEmbeddings = nil
 		current.ReferenceEmbeddingModel = ""
@@ -512,12 +618,28 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	handler.recordAnalyticsAuthoritativeState(request.Context(), updated)
+	handler.recordAnalyticsEvent(request.Context(), check.ID, "identity_state_persisted", map[string]any{
+		"status":         updated.Status,
+		"decision":       updated.Decision,
+		"faceSimilarity": similarity,
+	})
+	handler.recordAnalyticsCompletion(
+		request.Context(),
+		updated,
+		result,
+		similarity,
+		frameSimilarities,
+		payload.Geometry,
+	)
 
 	response := identityCompleteResponse{
 		ID:             updated.ID,
 		Status:         updated.Status,
 		Decision:       decision,
 		LivenessScore:  result.LivenessScore,
+		FlowType:       effectiveFlowType(updated),
+		DisplayName:    updated.DisplayName,
 		Similarity:        similarity,
 		FrameSimilarities: append([]float64(nil), frameSimilarities...),
 		BestFrameIndex:    result.BestFrameIndex,
@@ -528,8 +650,9 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			Illumination:   result.Illumination,
 			GuidedCapture:  result.GuidedCapture,
 		},
-		Quality:     result.Quality,
-		Diagnostics: append([]string(nil), result.Diagnostics...),
+		Quality:      result.Quality,
+		Diagnostics:  handler.publicDiagnostics(request, result.Diagnostics),
+		NativeShadow: handler.publicNativeShadow(request, result.NativeShadow),
 	}
 	response.Document = identityDocumentDetailsFromEvidence(updated.Document, updated.ExpectedCPF)
 	handler.writeJSON(writer, http.StatusOK, response)
@@ -561,18 +684,30 @@ func (handler *Handler) loadPublicIdentityCheck(writer http.ResponseWriter, requ
 			handler.writeError(writer, http.StatusInternalServerError, "failed to expire identity check")
 			return identity.Check{}, "", false
 		}
+		handler.recordAnalyticsStatus(request.Context(), check, "identity_expired")
 	}
 	return check, token, true
 }
 
-func (handler *Handler) authorizeIdentityIssuer(request *http.Request) bool {
-	value := strings.TrimSpace(request.Header.Get("Authorization"))
-	const prefix = "Bearer "
-	if !strings.HasPrefix(value, prefix) {
-		return false
+func (handler *Handler) authorizeIdentityIssuer(
+	request *http.Request,
+) (tenant.Tenant, bool) {
+	if handler.tenants == nil {
+		return tenant.Tenant{}, false
 	}
-	provided := []byte(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
-	return subtle.ConstantTimeCompare(provided, handler.config.IdentityIssuerKey) == 1
+	return handler.tenants.AuthenticateBearer(
+		request.Header.Get("Authorization"),
+	)
+}
+
+func tenantOwnsCheck(check identity.Check, tenantID string) bool {
+	checkTenantID := strings.TrimSpace(strings.ToLower(check.TenantID))
+	tenantID = strings.TrimSpace(strings.ToLower(tenantID))
+
+	if checkTenantID == "" {
+		return tenantID == "default"
+	}
+	return checkTenantID == tenantID
 }
 
 func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error) {
@@ -586,6 +721,10 @@ func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error
 		if check.DocumentAttempts >= maxIdentityDocumentAttempts {
 			check.Status = identity.StatusRejected
 			check.Decision = "rejected"
+			if check.CompletedAt == nil {
+				completedAt := time.Now().UTC()
+				check.CompletedAt = &completedAt
+			}
 		} else {
 			check.Status = identity.StatusPendingDocument
 		}
@@ -604,6 +743,17 @@ func (handler *Handler) writeIdentityStateError(writer http.ResponseWriter, err 
 	default:
 		handler.writeError(writer, http.StatusInternalServerError, "identity check operation failed")
 	}
+}
+
+func embeddingDimensions(values [][]float64) []int {
+	if len(values) == 0 {
+		return nil
+	}
+	dimensions := make([]int, 0, len(values))
+	for _, value := range values {
+		dimensions = append(dimensions, len(value))
+	}
+	return dimensions
 }
 
 func cloneEmbeddings(values [][]float64) [][]float64 {
@@ -693,7 +843,8 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
 		return
 	}
-	if !handler.authorizeIdentityIssuer(request) {
+	authenticatedTenant, authorized := handler.authorizeIdentityIssuer(request)
+	if !authorized {
 		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
 		return
 	}
@@ -707,6 +858,10 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load identity check")
 		return
 	}
+	if !tenantOwnsCheck(check, authenticatedTenant.ID) {
+		handler.writeError(writer, http.StatusNotFound, "identity check not found")
+		return
+	}
 
 	if shouldExpireIdentityCheck(check, time.Now().UTC()) {
 		check, err = handler.identityChecks.UpdateByID(check.ID, expireIdentityCheck)
@@ -714,6 +869,7 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 			handler.writeError(writer, http.StatusInternalServerError, "failed to expire identity check")
 			return
 		}
+		handler.recordAnalyticsStatus(request.Context(), check, "identity_expired")
 	}
 
 	handler.writeJSON(writer, http.StatusOK, issuerIdentityCheckResponse{
@@ -726,6 +882,11 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		Document:            check.Document,
 		LivenessScore:       check.LivenessScore,
 		FaceSimilarity:      check.FaceSimilarity,
+		CampaignID:          check.CampaignID,
+		Scenario:            check.Scenario,
+		ExpectedDecision:    check.ExpectedDecision,
+		Runtime:             check.RuntimeFingerprint,
+		CaptureProtocol:     check.CaptureProtocol,
 	})
 }
 
