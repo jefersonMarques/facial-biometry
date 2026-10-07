@@ -39,6 +39,11 @@ check_loopback_port() {
 check_loopback_port 8180
 check_loopback_port 5173
 
+if printf '%s\n' "$LISTENERS" | awk '$4 ~ /:8090$/ {found=1} END {exit !found}'; then
+    fail "port 8090 is active; Python biometric runtime must be absent in production"
+fi
+ok "Python biometric port 8090 is absent"
+
 if printf '%s
 ' "$LISTENERS" | awk '$4 ~ /:5174$/ {found=1} END {exit !found}'; then
     check_loopback_port 5174
