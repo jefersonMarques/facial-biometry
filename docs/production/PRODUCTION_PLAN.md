@@ -87,6 +87,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Rate limiting por hash do token público, sem armazenar o token em claro.
    - ✅ `Retry-After` em respostas 429.
    - ✅ Headers `no-store`, `nosniff`, `DENY` e `no-referrer`.
+   - ✅ Semântica de analytics separa `link_accessed` de `view_confirmed`.
+   - ✅ `view_confirmed` exige pelo menos 3s acumulados com a página visível.
+   - ✅ Acesso ao link não é tratado como leitura; “leitura realizada” não é inferida automaticamente.
    - ⏳ Rate limiting distribuído/gateway para múltiplas instâncias.
    - ✅ Registry de tenants com API keys armazenadas somente como SHA-256.
    - ✅ Checks criptografados vinculados a `TenantID`.
