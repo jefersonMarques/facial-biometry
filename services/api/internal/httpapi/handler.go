@@ -17,6 +17,7 @@ import (
 	"faceproof/services/api/internal/security"
 	"faceproof/services/api/internal/session"
 	templaterepository "faceproof/services/api/internal/template"
+	"faceproof/services/api/internal/tenant"
 )
 
 const (
