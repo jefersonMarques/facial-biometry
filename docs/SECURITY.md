@@ -61,6 +61,16 @@ The legacy `FACEPROOF_IDENTITY_ISSUER_KEY` remains only as a development fallbac
 
 Each tenant may define `monthlyCheckLimit`. In the current single-instance Production Candidate, quota enforcement is performed inside the encrypted authoritative identity repository: quota counting and check creation share the same process lock, so concurrent requests cannot exceed the configured limit within that instance. The analytics database is not consulted for quota decisions. A future multi-instance deployment must move this control to a shared transactional control plane.
 
+## Analytics semantics
+
+FaceProof does not treat link access as proof that a person read the verification screen.
+
+- `link_accessed`: the public verification link/API state was accessed.
+- `view_confirmed`: the browser reported at least 3 seconds of accumulated foreground visibility; time pauses while the document is hidden.
+- “read” / “reading completed”: not inferred from either event. Cognitive reading cannot be proven from page visibility alone.
+
+These events are telemetry only and are not trusted inputs for biometric or security decisions. Historical `link_opened` events, if present, remain historical data and should not be reinterpreted as reads.
+
 ## Production direction
 
 Before high-assurance production use, extend tenant isolation into analytics/billing/quotas, add distributed/edge rate limiting, KMS/HSM-backed runtime and signing keys, a governed attack dataset and independent PAD evaluation. Native mobile SDKs with device attestation remain the higher-assurance option for flows where browser camera provenance is insufficient.
