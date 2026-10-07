@@ -36,6 +36,9 @@ type Config struct {
 	AllowReviewEnrollment   bool
 	RequirePassivePAD       bool
 	Debug                    bool
+	DemoMode                 bool
+	DemoUser                 string
+	DemoPassword             []byte
 
 	RuntimeSDKVersion              string
 	RuntimeLivenessCoreVersion     string
@@ -109,6 +112,9 @@ func Load() (Config, error) {
 		AllowReviewEnrollment:   envBool("FACEPROOF_ALLOW_REVIEW_ENROLLMENT", false),
 		RequirePassivePAD:       envBool("FACEPROOF_REQUIRE_PASSIVE_PAD", true),
 		Debug:                   envBool("FACEPROOF_DEBUG", false),
+		DemoMode:                envBool("FACEPROOF_DEMO_MODE", false),
+		DemoUser:                strings.TrimSpace(os.Getenv("FACEPROOF_DEMO_USER")),
+		DemoPassword:            []byte(strings.TrimSpace(os.Getenv("FACEPROOF_DEMO_PASSWORD"))),
 		RuntimeSDKVersion:              envString("FACEPROOF_RUNTIME_SDK_VERSION", "0.3.0"),
 		RuntimeLivenessCoreVersion:     envString("FACEPROOF_RUNTIME_LIVENESS_CORE_VERSION", "0.1.0"),
 		RuntimeLivenessCoreWASMSHA256: strings.ToLower(strings.TrimSpace(os.Getenv("FACEPROOF_RUNTIME_LIVENESS_WASM_SHA256"))),
@@ -136,6 +142,14 @@ func Load() (Config, error) {
 }
 
 func validateProductionConfiguration(configuration Config) error {
+	if configuration.DemoMode {
+		if strings.TrimSpace(configuration.DemoUser) == "" {
+			return errors.New("FACEPROOF_DEMO_USER is required when FACEPROOF_DEMO_MODE=true")
+		}
+		if len(configuration.DemoPassword) < 8 {
+			return errors.New("FACEPROOF_DEMO_PASSWORD must contain at least 8 characters when demo mode is enabled")
+		}
+	}
 	if configuration.Environment != "production" {
 		return nil
 	}
