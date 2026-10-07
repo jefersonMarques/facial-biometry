@@ -56,7 +56,10 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ Telemetria registra somente contagens/dimensões dos embeddings quando o matching está indisponível.
      - ✅ Cliente nativo rejeita embeddings zerados/não-finitos antes da decisão.
      - ✅ Correção versionada como Secure Core 0.2.1, mantendo ABI v1.
-     - ⏳ Validar build do Secure Core 0.2.1, testes Go/Web SDK e nova captura real.
+     - ✅ Nova captura real validou o Secure Core 0.2.1: similaridade 0.629, limiar 0.363, margem +0.266 e três frames próximos consistentes.
+     - ✅ Bug do score sentinela `-1` encerrado; a execução anterior foi classificada como falha técnica de integração, não falso negativo biométrico.
+     - ✅ UI de desenvolvimento não exibe métricas de paridade Python quando o Secure Core está em modo `authority`; mostra apenas execução nativa.
+     - ⏳ Revalidar build/testes após ajuste final de apresentação do Web SDK.
    - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
 6. ✅ **Retirar Python do runtime**
