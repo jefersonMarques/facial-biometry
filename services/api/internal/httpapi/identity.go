@@ -14,6 +14,7 @@ import (
 	"faceproof/services/api/internal/domain"
 	"faceproof/services/api/internal/identity"
 	"faceproof/services/api/internal/matching"
+	"faceproof/services/api/internal/tenant"
 )
 
 const (
@@ -127,7 +128,7 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		handler.writeError(writer, http.StatusServiceUnavailable, "tenant authentication is not configured")
 		return
 	}
-	tenantID, authorized := handler.authorizeIdentityIssuer(request)
+	authenticatedTenant, authorized := handler.authorizeIdentityIssuer(request)
 	if !authorized {
 		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
 		return
@@ -139,7 +140,12 @@ func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request 
 		return
 	}
 
-	response, err := handler.createIdentityCheckRecord(request.Context(), tenantID, payload)
+	response, err := handler.createIdentityCheckRecord(
+		request.Context(),
+		authenticatedTenant.ID,
+		authenticatedTenant.MonthlyCheckLimit,
+		payload,
+	)
 	if err != nil {
 		writeIdentityCreateError(handler, writer, err)
 		return
@@ -605,17 +611,15 @@ func (handler *Handler) loadPublicIdentityCheck(writer http.ResponseWriter, requ
 	return check, token, true
 }
 
-func (handler *Handler) authorizeIdentityIssuer(request *http.Request) (string, bool) {
+func (handler *Handler) authorizeIdentityIssuer(
+	request *http.Request,
+) (tenant.Tenant, bool) {
 	if handler.tenants == nil {
-		return "", false
+		return tenant.Tenant{}, false
 	}
-	authenticated, ok := handler.tenants.AuthenticateBearer(
+	return handler.tenants.AuthenticateBearer(
 		request.Header.Get("Authorization"),
 	)
-	if !ok {
-		return "", false
-	}
-	return authenticated.ID, true
 }
 
 func tenantOwnsCheck(check identity.Check, tenantID string) bool {
@@ -750,7 +754,7 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusServiceUnavailable, "identity verification is unavailable")
 		return
 	}
-	tenantID, authorized := handler.authorizeIdentityIssuer(request)
+	authenticatedTenant, authorized := handler.authorizeIdentityIssuer(request)
 	if !authorized {
 		handler.writeError(writer, http.StatusUnauthorized, "invalid issuer credentials")
 		return
@@ -765,7 +769,7 @@ func (handler *Handler) getIssuerIdentityCheck(writer http.ResponseWriter, reque
 		handler.writeError(writer, http.StatusInternalServerError, "failed to load identity check")
 		return
 	}
-	if !tenantOwnsCheck(check, tenantID) {
+	if !tenantOwnsCheck(check, authenticatedTenant.ID) {
 		handler.writeError(writer, http.StatusNotFound, "identity check not found")
 		return
 	}
