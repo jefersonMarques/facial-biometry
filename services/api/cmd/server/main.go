@@ -23,6 +23,7 @@ import (
 	"faceproof/services/api/internal/security"
 	"faceproof/services/api/internal/session"
 	templaterepository "faceproof/services/api/internal/template"
+	"faceproof/services/api/internal/tenant"
 )
 
 func main() {
@@ -135,6 +136,22 @@ func main() {
 		cnh.NewService(vioService, previewService),
 		analyticsRepository,
 	)
+
+	if configuration.TenantRegistryPath != "" {
+		tenantRegistry, tenantErr := tenant.Load(configuration.TenantRegistryPath)
+		if tenantErr != nil {
+			log.Fatalf("FaceProof tenant registry could not load: %v", tenantErr)
+		}
+		handler.SetTenantRegistry(tenantRegistry)
+		log.Printf(
+			"FaceProof tenant registry enabled: %d tenant(s)",
+			tenantRegistry.Count(),
+		)
+	} else if len(configuration.IdentityIssuerKey) > 0 {
+		log.Printf("FaceProof tenant registry: legacy default tenant fallback enabled")
+	} else {
+		log.Printf("FaceProof tenant registry: no issuer tenant configured")
+	}
 
 	server := &http.Server{
 		Addr:              configuration.APIAddress,
