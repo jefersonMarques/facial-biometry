@@ -201,6 +201,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"unsafe"
@@ -382,6 +383,11 @@ func (client *NativeClient) AnalyzeIdentity(
 	for index := 0; index < embeddingSize; index++ {
 		embedding[index] = float64(nativeResult.embedding[index])
 	}
+	if !validEmbeddingVector(embedding) {
+		return domain.EngineResult{}, errors.New(
+			"Secure Core returned invalid combined identity embedding",
+		)
+	}
 
 	selectedCount := int(nativeResult.selected_embedding_count)
 	if selectedCount < 0 ||
@@ -405,6 +411,11 @@ func (client *NativeClient) AnalyzeIdentity(
 		values := make([]float64, size)
 		for embeddingIndex := 0; embeddingIndex < size; embeddingIndex++ {
 			values[embeddingIndex] = float64(selected.embedding[embeddingIndex])
+		}
+		if !validEmbeddingVector(values) {
+			return domain.EngineResult{}, errors.New(
+				"Secure Core returned invalid selected identity embedding",
+			)
 		}
 		faceEmbeddings = append(faceEmbeddings, domain.EngineFaceEmbedding{
 			FrameIndex: int(selected.frame_index),
@@ -514,6 +525,11 @@ func (client *NativeClient) ExtractReference(
 	for index := 0; index < embeddingSize; index++ {
 		embedding[index] = float64(nativeResult.embedding[index])
 	}
+	if !validEmbeddingVector(embedding) {
+		return domain.ReferenceResult{}, errors.New(
+			"Secure Core returned invalid combined reference embedding",
+		)
+	}
 
 	variants := make([][]float64, variantCount)
 	for variantIndex := 0; variantIndex < variantCount; variantIndex++ {
@@ -521,6 +537,11 @@ func (client *NativeClient) ExtractReference(
 		for embeddingIndex := 0; embeddingIndex < embeddingSize; embeddingIndex++ {
 			variants[variantIndex][embeddingIndex] = float64(
 				nativeResult.variants[variantIndex][embeddingIndex],
+			)
+		}
+		if !validEmbeddingVector(variants[variantIndex]) {
+			return domain.ReferenceResult{}, errors.New(
+				"Secure Core returned invalid reference embedding variant",
 			)
 		}
 	}
@@ -662,6 +683,20 @@ func decodeImagePayload(value string) ([]byte, error) {
 		return nil, errors.New("decoded image payload is empty")
 	}
 	return decoded, nil
+}
+
+func validEmbeddingVector(values []float64) bool {
+	if len(values) == 0 {
+		return false
+	}
+	var normSquared float64
+	for _, value := range values {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return false
+		}
+		normSquared += value * value
+	}
+	return normSquared > 1e-12
 }
 
 func nativeDiagnostics(
