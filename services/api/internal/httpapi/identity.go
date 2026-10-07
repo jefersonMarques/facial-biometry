@@ -376,6 +376,10 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, sessionErrorStatus(err), err.Error())
 		return
 	}
+	if err := validateCaptureSessionServerTiming(captureSession, time.Now().UTC()); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := validateIdentityCaptureSession(captureSession, check.ID); err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
