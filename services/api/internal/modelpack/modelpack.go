@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -304,6 +305,46 @@ func VerifyAndExtract(packPath string, publicKeyValue string, cacheRoot string) 
 
 	if result.YUNetPath == "" || result.SFacePath == "" || result.MiniFASNetPath == "" {
 		return VerifiedPack{}, errors.New("model pack did not resolve all required model roles")
+	}
+	return result, nil
+}
+
+func ValidateSecureCoreCompatibility(manifest Manifest, currentVersion string) error {
+	required, err := parseVersion(manifest.SecureCoreMinVersion)
+	if err != nil {
+		return fmt.Errorf("invalid Secure Core minimum version: %w", err)
+	}
+	current, err := parseVersion(currentVersion)
+	if err != nil {
+		return fmt.Errorf("invalid current Secure Core version: %w", err)
+	}
+	for index := 0; index < len(required); index++ {
+		if current[index] > required[index] {
+			return nil
+		}
+		if current[index] < required[index] {
+			return fmt.Errorf(
+				"model pack requires Secure Core >= %s; current is %s",
+				manifest.SecureCoreMinVersion,
+				currentVersion,
+			)
+		}
+	}
+	return nil
+}
+
+func parseVersion(value string) ([3]int, error) {
+	var result [3]int
+	parts := strings.Split(strings.TrimSpace(value), ".")
+	if len(parts) != 3 {
+		return result, fmt.Errorf("version %q must use major.minor.patch", value)
+	}
+	for index, part := range parts {
+		parsed, err := strconv.Atoi(part)
+		if err != nil || parsed < 0 {
+			return result, fmt.Errorf("invalid version %q", value)
+		}
+		result[index] = parsed
 	}
 	return result, nil
 }
