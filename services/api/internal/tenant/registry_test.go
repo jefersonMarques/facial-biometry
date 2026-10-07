@@ -22,7 +22,8 @@ func TestRegistryAuthenticatesEnabledTenant(t *testing.T) {
 		"      \"id\": \"client-a\",\n" +
 		"      \"name\": \"Client A\",\n" +
 		"      \"apiKeySha256\": \"" + hex.EncodeToString(sum[:]) + "\",\n" +
-		"      \"enabled\": true\n" +
+		"      \"enabled\": true,\n" +
+		"      \"monthlyCheckLimit\": 250\n" +
 		"    }\n" +
 		"  ]\n" +
 		"}\n"
@@ -40,6 +41,12 @@ func TestRegistryAuthenticatesEnabledTenant(t *testing.T) {
 	}
 	if authenticated.ID != "client-a" {
 		t.Fatalf("tenant id = %q", authenticated.ID)
+	}
+	if authenticated.MonthlyCheckLimit != 250 {
+		t.Fatalf(
+			"monthlyCheckLimit = %d, want 250",
+			authenticated.MonthlyCheckLimit,
+		)
 	}
 }
 
@@ -74,5 +81,33 @@ func TestRegistryRejectsWrongOrDisabledKey(t *testing.T) {
 	}
 	if _, ok := registry.AuthenticateBearer("Bearer wrong"); ok {
 		t.Fatal("wrong API key must not authenticate")
+	}
+}
+
+func TestRegistryRejectsNegativeMonthlyQuota(t *testing.T) {
+	t.Parallel()
+
+	const apiKey = "tenant-secret-api-key-with-sufficient-entropy"
+	sum := sha256.Sum256([]byte(apiKey))
+	path := filepath.Join(t.TempDir(), "tenants.json")
+
+	document := "{\n" +
+		"  \"schemaVersion\": 1,\n" +
+		"  \"tenants\": [\n" +
+		"    {\n" +
+		"      \"id\": \"client-a\",\n" +
+		"      \"name\": \"Client A\",\n" +
+		"      \"apiKeySha256\": \"" + hex.EncodeToString(sum[:]) + "\",\n" +
+		"      \"enabled\": true,\n" +
+		"      \"monthlyCheckLimit\": -1\n" +
+		"    }\n" +
+		"  ]\n" +
+		"}\n"
+
+	if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("negative monthly quota must be rejected")
 	}
 }
