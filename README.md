@@ -169,6 +169,12 @@ Important biometric settings:
 - `FACEPROOF_ENGINE_URL` (Python R&D fallback only)
 - `FACEPROOF_YUNET_MODEL`, `FACEPROOF_SFACE_MODEL`, `FACEPROOF_MINIFASNET_MODEL` (loose-model R&D/build tooling only)
 
+## Production deployment
+
+The hardened single-instance Linux perimeter is documented in
+`deploy/production/README.md`. Production uses Caddy for HTTPS, keeps the
+web gateway/API on loopback and keeps the admin gateway off the public route.
+
 ## Documentation
 
 - `docs/IDENTITY_CHECK.md`
