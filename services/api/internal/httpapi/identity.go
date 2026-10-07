@@ -175,6 +175,9 @@ func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *ht
 		DocumentAccepted: check.Document != nil,
 		CanStartBiometry: check.Status == identity.StatusBiometryPending,
 		Decision:         check.Decision,
+		FlowType:         effectiveFlowType(check),
+		SubjectID:        check.SubjectID,
+		DisplayName:      check.DisplayName,
 	})
 }
 
