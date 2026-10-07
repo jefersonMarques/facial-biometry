@@ -1,6 +1,11 @@
 export type SessionKind = "enrollment" | "verification" | "identity";
 export type BiometricSessionKind = Exclude<SessionKind, "identity">;
 export type Decision = "approved" | "review" | "rejected";
+export type IdentityFlowType =
+    | "cnh"
+    | "face_enrollment"
+    | "face_verification"
+    | "photo_verification";
 export type IdentityStatus =
     | "pending_document"
     | "processing_document"
@@ -171,6 +176,9 @@ export interface IdentityCheckStatus {
     documentAccepted: boolean;
     canStartBiometry: boolean;
     decision?: Decision;
+    flowType: IdentityFlowType;
+    subjectId?: string;
+    displayName?: string;
 }
 
 export interface IdentityDocumentDetails {
@@ -196,6 +204,9 @@ export interface IdentityCompletionResponse {
     id: string;
     status: IdentityStatus;
     decision: Decision;
+    flowType: IdentityFlowType;
+    displayName?: string;
+    templateStored?: boolean;
     livenessScore: number;
     similarity: number;
     frameSimilarities: number[];
