@@ -481,11 +481,39 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 
 	similarity, frameSimilarities := matching.RobustCosineSimilarity(referenceEmbeddings, liveEmbeddings)
 	handler.recordAnalyticsEvent(request.Context(), check.ID, "biometric_match_computed", map[string]any{
-		"similarity":       similarity,
-		"referenceFrames":  len(referenceEmbeddings),
-		"liveFrames":       len(liveEmbeddings),
-		"frameComparisons": len(frameSimilarities),
+		"similarity":           similarity,
+		"referenceFrames":      len(referenceEmbeddings),
+		"liveFrames":           len(liveEmbeddings),
+		"frameComparisons":     len(frameSimilarities),
+		"referenceDimensions":  embeddingDimensions(referenceEmbeddings),
+		"liveDimensions":       embeddingDimensions(liveEmbeddings),
+		"combinedLiveDimension": len(result.Embedding),
 	})
+
+	if len(frameSimilarities) == 0 {
+		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
+			if current.CaptureSessionID == payload.SessionID {
+				current.CaptureSessionID = ""
+				current.LastErrorCode = "biometric_match_unavailable"
+			}
+			return nil
+		})
+		handler.recordAnalyticsEvent(request.Context(), check.ID, "biometric_match_unavailable", map[string]any{
+			"sessionId":             payload.SessionID,
+			"referenceFrames":       len(referenceEmbeddings),
+			"liveFrames":            len(liveEmbeddings),
+			"referenceDimensions":   embeddingDimensions(referenceEmbeddings),
+			"liveDimensions":        embeddingDimensions(liveEmbeddings),
+			"combinedLiveDimension": len(result.Embedding),
+			"embeddingModel":        result.EmbeddingModel,
+		})
+		handler.writeError(
+			writer,
+			http.StatusBadGateway,
+			"biometric comparison unavailable; retry capture",
+		)
+		return
+	}
 
 	if identityMatchNeedsRecapture(result, similarity, handler.config.MatchThreshold) {
 		_, _ = handler.identityChecks.Update(token, func(current *identity.Check) error {
@@ -665,6 +693,17 @@ func (handler *Handler) writeIdentityStateError(writer http.ResponseWriter, err 
 	default:
 		handler.writeError(writer, http.StatusInternalServerError, "identity check operation failed")
 	}
+}
+
+func embeddingDimensions(values [][]float64) []int {
+	if len(values) == 0 {
+		return nil
+	}
+	dimensions := make([]int, 0, len(values))
+	for _, value := range values {
+		dimensions = append(dimensions, len(value))
+	}
+	return dimensions
 }
 
 func cloneEmbeddings(values [][]float64) [][]float64 {
