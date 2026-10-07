@@ -123,6 +123,8 @@ type identityCompleteResponse struct {
 	Diagnostics       []string                        `json:"diagnostics"`
 	NativeShadow      *domain.NativeShadowComparison `json:"nativeShadow,omitempty"`
 	Document          identityDocumentDetails         `json:"document"`
+	FlowType          identity.FlowType               `json:"flowType"`
+	DisplayName       string                          `json:"displayName,omitempty"`
 }
 
 func (handler *Handler) createIdentityCheck(writer http.ResponseWriter, request *http.Request) {
@@ -282,6 +284,12 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 			current.ReferenceEmbeddings = [][]float64{append([]float64(nil), current.ReferenceEmbedding...)}
 		}
 		current.ReferenceEmbeddingModel = reference.EmbeddingModel
+		if handler.config.DemoMode {
+			if current.DemoArtifacts == nil {
+				current.DemoArtifacts = &identity.DemoArtifacts{}
+			}
+			current.DemoArtifacts.ReferencePhotoDataURL = referenceImage
+		}
 		current.Status = identity.StatusBiometryPending
 		current.LastErrorCode = ""
 		return nil
@@ -322,8 +330,15 @@ func (handler *Handler) issueIdentitySession(writer http.ResponseWriter, request
 		if time.Now().After(check.ExpiresAt) {
 			return errIdentityExpired
 		}
-		if check.Status != identity.StatusBiometryPending || check.Document == nil ||
-			(len(check.ReferenceEmbedding) == 0 && len(check.ReferenceEmbeddings) == 0) {
+		if check.Status != identity.StatusBiometryPending {
+			return errIdentityInvalidState
+		}
+		if flowRequiresDocument(*check) && check.Document == nil {
+			return errIdentityInvalidState
+		}
+		if flowRequiresReference(*check) &&
+			len(check.ReferenceEmbedding) == 0 &&
+			len(check.ReferenceEmbeddings) == 0 {
 			return errIdentityInvalidState
 		}
 		if check.BiometricSessions >= maxIdentityBiometricSessions {
@@ -465,6 +480,18 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		handler.writeError(writer, http.StatusConflict, "identity check state changed")
 		return
 	}
+	if effectiveFlowType(check) == identity.FlowFaceEnrollment {
+		handler.completeDemoFaceEnrollment(
+			writer,
+			request,
+			token,
+			check,
+			payload,
+			normalizedGuidedFrames,
+			result,
+		)
+		return
+	}
 	if check.ReferenceEmbeddingModel == "" || check.ReferenceEmbeddingModel != result.EmbeddingModel {
 		handler.writeError(writer, http.StatusConflict, "biometric model mismatch")
 		return
@@ -549,6 +576,11 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	}
 
 	completedAt := time.Now().UTC()
+	capturedPhotoDataURL := demoCapturedPhotoDataURL(
+		handler.config.DemoMode,
+		normalizedGuidedFrames,
+		result.BestFrameIndex,
+	)
 	updated, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
 		if current.Status != identity.StatusBiometryPending || current.CaptureSessionID != payload.SessionID {
 			return errIdentityInvalidState
@@ -567,6 +599,12 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		current.RuntimeFingerprint = &runtimeCopy
 		protocolCopy := payload.CaptureProtocol
 		current.CaptureProtocol = &protocolCopy
+		if handler.config.DemoMode {
+			if current.DemoArtifacts == nil {
+				current.DemoArtifacts = &identity.DemoArtifacts{}
+			}
+			current.DemoArtifacts.CapturedPhotoDataURL = capturedPhotoDataURL
+		}
 		current.ReferenceEmbedding = nil
 		current.ReferenceEmbeddings = nil
 		current.ReferenceEmbeddingModel = ""
@@ -596,6 +634,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		Status:         updated.Status,
 		Decision:       decision,
 		LivenessScore:  result.LivenessScore,
+		FlowType:       effectiveFlowType(updated),
+		DisplayName:    updated.DisplayName,
 		Similarity:        similarity,
 		FrameSimilarities: append([]float64(nil), frameSimilarities...),
 		BestFrameIndex:    result.BestFrameIndex,
