@@ -88,7 +88,12 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ `Retry-After` em respostas 429.
    - ✅ Headers `no-store`, `nosniff`, `DENY` e `no-referrer`.
    - ⏳ Rate limiting distribuído/gateway para múltiplas instâncias.
-   - ⏳ Isolamento/autenticação por tenant.
+   - ✅ Registry de tenants com API keys armazenadas somente como SHA-256.
+   - ✅ Checks criptografados vinculados a `TenantID`.
+   - ✅ Criação via issuer resolve o tenant pela API key.
+   - ✅ Consulta issuer exige o mesmo tenant; acesso cruzado retorna 404.
+   - ✅ Ambiente dev gera `.dev/tenants.json` sem chave em claro.
+   - ⏳ Propagar tenant para analytics/billing e quotas comerciais.
    - ⏳ Gestão/rotação de segredos em KMS/HSM para produção.
    - ⏳ Perfil TLS/reverse proxy e limites de infraestrutura.
 
