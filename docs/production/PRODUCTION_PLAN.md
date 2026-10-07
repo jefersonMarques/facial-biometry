@@ -93,6 +93,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Criação via issuer resolve o tenant pela API key.
    - ✅ Consulta issuer exige o mesmo tenant; acesso cruzado retorna 404.
    - ✅ Ambiente dev gera `.dev/tenants.json` sem chave em claro.
+   - ✅ Isolamento por tenant validado com `go test ./...`.
    - ⏳ Propagar tenant para analytics/billing e quotas comerciais.
    - ⏳ Gestão/rotação de segredos em KMS/HSM para produção.
    - ⏳ Perfil TLS/reverse proxy e limites de infraestrutura.
