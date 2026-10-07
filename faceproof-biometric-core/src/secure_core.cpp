@@ -635,6 +635,22 @@ int fp_secure_core_reference_jpeg(
             embedding_size,
             result->variants[variant_index]
         );
+
+        double norm_squared = 0.0;
+        for (size_t index = 0; index < embedding_size; ++index) {
+            const double value = static_cast<double>(
+                result->variants[variant_index][index]
+            );
+            if (!std::isfinite(value)) {
+                set_last_error("reference variant contains non-finite values");
+                return -5;
+            }
+            norm_squared += value * value;
+        }
+        if (norm_squared <= 1e-12) {
+            set_last_error("reference variant has zero norm");
+            return -5;
+        }
     }
 
     result->embedding_size = embedding_size;
