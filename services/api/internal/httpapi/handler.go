@@ -36,6 +36,7 @@ type Handler struct {
 	identityChecks *identity.Repository
 	cnhDocuments   *cnh.Service
 	analytics      *analytics.Repository
+	publicLimiter  *security.WindowLimiter
 }
 
 type createSessionRequest struct {
@@ -108,6 +109,7 @@ func NewHandler(
 		identityChecks: identityChecks,
 		cnhDocuments:   cnhDocuments,
 		analytics:      analyticsRepository,
+		publicLimiter:  security.NewWindowLimiter(8192),
 		risk: risk.NewEngine(
 			configuration.LivenessThreshold,
 			configuration.ReviewLivenessThreshold,
@@ -118,9 +120,14 @@ func NewHandler(
 }
 
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	handler.setSecurityHeaders(writer)
 	handler.setCORS(writer)
 	if request.Method == http.MethodOptions {
 		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if !handler.enforcePublicIdentityRateLimit(writer, request) {
 		return
 	}
 
