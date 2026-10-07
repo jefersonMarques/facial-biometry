@@ -74,3 +74,18 @@ These events are telemetry only and are not trusted inputs for biometric or secu
 ## Production direction
 
 Before high-assurance production use, extend tenant isolation into analytics/billing/quotas, add distributed/edge rate limiting, KMS/HSM-backed runtime and signing keys, a governed attack dataset and independent PAD evaluation. Native mobile SDKs with device attestation remain the higher-assurance option for flows where browser camera provenance is insufficient.
+
+
+## Production network perimeter
+
+The single-instance Production Candidate uses a strict reverse-proxy boundary:
+
+```text
+Internet -> Caddy :443 -> 127.0.0.1:5173 -> 127.0.0.1:8180 -> Secure Core
+```
+
+In `FACEPROOF_ENV=production`, the API and Go web gateway fail closed if configured on non-loopback listeners. The public gateway does not proxy `/v1/admin/*`; the optional admin gateway is a separate loopback-only service on port 5174. Caddy is the only intended public application listener and terminates HTTPS.
+
+The deployment validator also rejects a running port 8090 so the Python biometric runtime cannot silently reappear in the production profile.
+
+This perimeter is single-host isolation. Distributed rate limiting, shared session/quota authority and KMS/HSM-backed secrets remain separate production-hardening milestones.
