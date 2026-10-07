@@ -3,271 +3,200 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex,nofollow">
-    <title>FaceProof Analytics</title>
+    <meta name="color-scheme" content="light">
+    <meta name="referrer" content="no-referrer">
+    <title>FaceProof · Demo Console</title>
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-    <div class="shell">
+    <section id="loginPanel" class="login-screen">
+        <div class="login-card">
+            <div class="brand">
+                <span class="brand-mark"></span>
+                <span>FACEPROOF</span>
+            </div>
+            <div class="login-copy">
+                <span class="eyebrow">DEMO CONSOLE</span>
+                <h1>Biometria que você consegue ver.</h1>
+                <p>Entre para gerar links e acompanhar as validações.</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <label>
+                    <span>Usuário</span>
+                    <input id="demoUser" autocomplete="username" value="demo" required>
+                </label>
+                <label>
+                    <span>Senha</span>
+                    <input id="demoPassword" type="password" autocomplete="current-password" required>
+                </label>
+                <button class="button button-primary" type="submit">Entrar</button>
+                <div id="loginError" class="form-error" hidden></div>
+            </form>
+        </div>
+    </section>
+
+    <div id="appShell" class="app-shell" hidden>
         <header class="topbar">
-            <div>
-                <span class="eyebrow">FACEPROOF · INTERNAL</span>
-                <h1>Analytics</h1>
+            <div class="brand">
+                <span class="brand-mark"></span>
+                <span>FACEPROOF</span>
             </div>
             <div class="topbar-actions">
-                <span id="connectionState" class="status-pill status-off">Desconectado</span>
-                <button id="reportButton" type="button" class="button button-secondary" hidden>Gerar relatório</button>
-                <button id="refreshButton" type="button" class="button button-secondary">Atualizar</button>
-                <button id="logoutButton" type="button" class="button button-secondary" hidden>Sair</button>
+                <span id="connectionState" class="connection-dot" title="Conexão"></span>
+                <button id="refreshButton" class="icon-button" type="button" title="Atualizar">↻</button>
+                <button id="logoutButton" class="text-button" type="button">Sair</button>
             </div>
         </header>
 
-        <main>
-            <section id="loginPanel" class="login-card">
+        <main class="console">
+            <section class="console-hero">
                 <div>
-                    <span class="eyebrow">ACESSO RESTRITO</span>
-                    <h2>Chave administrativa</h2>
-                    <p>Use a chave gerada localmente pelo ambiente FaceProof. Ela fica somente nesta sessão do navegador.</p>
+                    <span class="eyebrow">DEMONSTRAÇÃO</span>
+                    <h1>FaceProof</h1>
+                    <p>Gere um link. Faça a biometria. Veja a comparação.</p>
                 </div>
-                <form id="loginForm">
-                    <input id="adminKey" type="password" autocomplete="off" placeholder="FACEPROOF_ADMIN_KEY" required>
-                    <button type="submit" class="button button-primary">Entrar</button>
-                </form>
-                <p id="loginError" class="error-text" hidden></p>
+                <button id="openGenerator" class="button button-primary" type="button">+ Novo link</button>
             </section>
 
-            <div id="dashboard" hidden>
-                <section class="section card generator-card">
-                    <div class="card-heading card-heading-responsive">
-                        <div>
-                            <span class="eyebrow">NOVA VERIFICAÇÃO</span>
-                            <h2>Gerar link</h2>
-                            <p class="muted">Crie um link já classificado para a campanha e o cenário de teste.</p>
-                        </div>
+            <section id="summaryCards" class="summary-grid" aria-label="Resumo"></section>
+
+            <section id="generatorPanel" class="panel generator-panel" hidden>
+                <div class="panel-head">
+                    <div>
+                        <span class="eyebrow">NOVO LINK</span>
+                        <h2>Escolha a experiência</h2>
+                    </div>
+                    <button id="closeGenerator" class="icon-button" type="button" aria-label="Fechar">×</button>
+                </div>
+
+                <form id="checkForm">
+                    <div class="flow-picker" role="radiogroup" aria-label="Tipo de demonstração">
+                        <label class="flow-option">
+                            <input type="radio" name="flowFamily" value="cnh" checked>
+                            <span class="flow-icon">01</span>
+                            <strong>CNH + Face</strong>
+                            <small>Documento oficial e prova de vida</small>
+                        </label>
+                        <label class="flow-option">
+                            <input type="radio" name="flowFamily" value="face">
+                            <span class="flow-icon">02</span>
+                            <strong>Cadastro facial</strong>
+                            <small>Cadastrar e revalidar uma pessoa</small>
+                        </label>
+                        <label class="flow-option">
+                            <input type="radio" name="flowFamily" value="photo">
+                            <span class="flow-icon">03</span>
+                            <strong>Foto de referência</strong>
+                            <small>Comparar uma foto com captura ao vivo</small>
+                        </label>
                     </div>
 
-                    <form id="checkForm" class="generator-form">
+                    <div id="faceActionField" class="segmented" hidden>
                         <label>
-                            <span>CPF</span>
-                            <input id="checkCpf" inputmode="numeric" autocomplete="off" placeholder="00000000000" maxlength="14" required>
+                            <input type="radio" name="faceAction" value="face_enrollment" checked>
+                            <span>Cadastrar rosto</span>
                         </label>
                         <label>
-                            <span>Data mínima do documento</span>
-                            <input id="checkMinimumDate" type="date" value="2025-01-01" required>
+                            <input type="radio" name="faceAction" value="face_verification">
+                            <span>Validar cadastro</span>
                         </label>
-                        <label>
+                    </div>
+
+                    <div class="form-grid">
+                        <label id="displayNameField" class="field" hidden>
+                            <span>Nome</span>
+                            <input id="checkDisplayName" maxlength="120" placeholder="Ex.: Cliente demonstração">
+                        </label>
+
+                        <label id="subjectField" class="field" hidden>
+                            <span>Identificador</span>
+                            <input id="checkSubjectId" maxlength="128" placeholder="Ex.: demo-001">
+                        </label>
+
+                        <label id="cpfField" class="field">
+                            <span>CPF esperado</span>
+                            <input id="checkCpf" inputmode="numeric" autocomplete="off" placeholder="Somente números">
+                        </label>
+
+                        <label id="minimumDateField" class="field">
+                            <span>CNH gerada a partir de</span>
+                            <input id="checkMinimumDate" type="date">
+                        </label>
+
+                        <label id="photoField" class="field field-wide" hidden>
+                            <span>Foto de referência</span>
+                            <span class="photo-upload">
+                                <input id="referencePhoto" type="file" accept="image/jpeg,image/png,image/webp">
+                                <span id="referencePhotoLabel">Selecionar foto</span>
+                                <img id="referencePhotoPreview" alt="Prévia da foto de referência" hidden>
+                            </span>
+                        </label>
+
+                        <label class="field">
                             <span>Validade do link</span>
                             <select id="checkExpires">
                                 <option value="30">30 minutos</option>
-                                <option value="60" selected>60 minutos</option>
-                                <option value="120">2 horas</option>
-                                <option value="360">6 horas</option>
+                                <option value="60" selected>1 hora</option>
+                                <option value="240">4 horas</option>
                                 <option value="1440">24 horas</option>
                             </select>
                         </label>
-                        <label>
-                            <span>Campanha</span>
-                            <select id="checkCampaign">
-                                <option value="">Sem campanha</option>
-                            </select>
+
+                        <label class="field">
+                            <span>URL pública</span>
+                            <input id="checkPublicBaseUrl" type="url" placeholder="Opcional · https://...">
                         </label>
-                        <label>
-                            <span>Cenário</span>
-                            <select id="checkScenario">
-                                <option value="genuine_live" selected>Genuine live</option>
-                                <option value="impostor_live">Impostor live</option>
-                                <option value="printed_photo">Foto impressa</option>
-                                <option value="screen_photo">Foto em tela</option>
-                                <option value="replay_video">Replay de vídeo</option>
-                                <option value="remote_live_video">Vídeo remoto ao vivo</option>
-                                <option value="unknown">Sem classificação</option>
-                            </select>
-                        </label>
-                        <label class="generator-public-url">
-                            <span>URL pública opcional</span>
-                            <input id="checkPublicBaseUrl" type="url" autocomplete="off" placeholder="https://xxxx.trycloudflare.com">
-                            <small>Se vazio, o link usa localhost. A URL fica salva somente neste navegador.</small>
-                        </label>
-                        <button id="generateCheckButton" class="button button-primary generator-submit" type="submit">Gerar link</button>
-                    </form>
-
-                    <div id="generatedCheck" class="generated-check" hidden>
-                        <div>
-                            <span class="eyebrow">LINK GERADO</span>
-                            <strong id="generatedCheckMeta"></strong>
-                        </div>
-                        <div class="generated-link-row">
-                            <input id="generatedCheckUrl" readonly>
-                            <button id="copyGeneratedCheck" class="button button-secondary" type="button">Copiar link</button>
-                        </div>
-                        <div id="generatedCheckFeedback" class="muted"></div>
                     </div>
-                </section>
 
-                <section class="section">
-                    <div class="section-heading">
-                        <div>
-                            <span class="eyebrow">VISÃO GERAL</span>
-                            <h2>Validação biométrica</h2>
-                        </div>
-                        <span id="lastUpdated" class="muted"></span>
+                    <div class="generator-actions">
+                        <button id="generateCheckButton" class="button button-primary" type="submit">Gerar link</button>
+                        <span id="generatedCheckFeedback" class="form-feedback"></span>
                     </div>
-                    <div id="summaryCards" class="summary-grid"></div>
-                </section>
+                </form>
 
-                <section class="grid-two section">
-                    <article class="card">
-                        <div class="card-heading">
-                            <div>
-                                <span class="eyebrow">SEGURANÇA</span>
-                                <h3>Cenários de teste</h3>
-                            </div>
-                        </div>
-                        <div class="table-wrap">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Cenário</th>
-                                        <th>Total</th>
-                                        <th>Aprov.</th>
-                                        <th>Rej.</th>
-                                        <th>Acurácia esperada</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="scenarioRows"></tbody>
-                            </table>
-                        </div>
-                    </article>
-
-                    <article class="card">
-                        <div class="card-heading">
-                            <div>
-                                <span class="eyebrow">ORGANIZAÇÃO</span>
-                                <h3>Campanhas</h3>
-                            </div>
-                        </div>
-                        <form id="campaignForm" class="stack-form">
-                            <input id="campaignName" placeholder="Nome da campanha" maxlength="120" required>
-                            <textarea id="campaignDescription" placeholder="Descrição opcional" maxlength="500"></textarea>
-                            <button type="submit" class="button button-primary">Criar campanha</button>
-                        </form>
-                        <div id="campaignList" class="campaign-list"></div>
-                    </article>
-                </section>
-
-                <section class="section card">
-                    <div class="card-heading card-heading-responsive">
-                        <div>
-                            <span class="eyebrow">EXECUÇÕES</span>
-                            <h3>Verificações</h3>
-                        </div>
-                        <form id="filtersForm" class="filters">
-                            <select id="scenarioFilter">
-                                <option value="">Todos os cenários</option>
-                                <option value="unknown">Sem classificação</option>
-                                <option value="genuine_live">Genuine live</option>
-                                <option value="impostor_live">Impostor live</option>
-                                <option value="printed_photo">Foto impressa</option>
-                                <option value="screen_photo">Foto em tela</option>
-                                <option value="replay_video">Replay de vídeo</option>
-                                <option value="remote_live_video">Vídeo remoto ao vivo</option>
-                            </select>
-                            <select id="statusFilter">
-                                <option value="">Todos os status</option>
-                                <option value="approved">Aprovado</option>
-                                <option value="review">Review</option>
-                                <option value="rejected">Rejeitado</option>
-                                <option value="expired">Expirado</option>
-                                <option value="biometry_pending">Biometria pendente</option>
-                                <option value="pending_document">Documento pendente</option>
-                            </select>
-                            <select id="campaignFilter">
-                                <option value="">Todas as campanhas</option>
-                            </select>
-                            <button class="button button-secondary" type="submit">Filtrar</button>
-                        </form>
+                <div id="generatedCheck" class="generated-link" hidden>
+                    <div>
+                        <span>Link pronto</span>
+                        <strong id="generatedCheckMeta">—</strong>
                     </div>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Data</th>
-                                    <th>ID</th>
-                                    <th>Cenário</th>
-                                    <th>Resultado</th>
-                                    <th>Face</th>
-                                    <th>PAD</th>
-                                    <th>Liveness</th>
-                                    <th>Quality</th>
-                                    <th>C++</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="checkRows"></tbody>
-                        </table>
+                    <div class="generated-link-row">
+                        <input id="generatedCheckUrl" readonly>
+                        <button id="copyGeneratedCheck" class="button button-dark" type="button">Copiar</button>
                     </div>
-                </section>
-            </div>
+                </div>
+            </section>
+
+            <section class="history-section">
+                <div class="section-head">
+                    <div>
+                        <span class="eyebrow">HISTÓRICO</span>
+                        <h2>Biometrias realizadas</h2>
+                    </div>
+                    <select id="statusFilter" class="compact-select">
+                        <option value="">Todas</option>
+                        <option value="approved">Aprovadas</option>
+                        <option value="rejected">Rejeitadas</option>
+                        <option value="review">Em revisão</option>
+                        <option value="biometry_pending">Pendentes</option>
+                    </select>
+                </div>
+                <div id="verificationList" class="verification-list"></div>
+                <div id="lastUpdated" class="last-updated"></div>
+            </section>
         </main>
     </div>
 
-    <dialog id="editCheckDialog" class="edit-dialog">
-        <form id="editCheckForm">
-            <div class="dialog-header">
-                <div>
-                    <span class="eyebrow">CORRIGIR EXECUÇÃO</span>
-                    <h2 id="editCheckTitle">Editar verificação</h2>
-                </div>
-                <button id="closeEditCheck" type="button" class="icon-button" aria-label="Fechar">×</button>
-            </div>
-            <div class="edit-check-body">
-                <label>
-                    <span>Cenário</span>
-                    <select id="editCheckScenario" required>
-                        <option value="unknown">Sem classificação</option>
-                        <option value="genuine_live">Genuine live</option>
-                        <option value="impostor_live">Impostor live</option>
-                        <option value="printed_photo">Foto impressa</option>
-                        <option value="screen_photo">Foto em tela</option>
-                        <option value="replay_video">Replay de vídeo</option>
-                        <option value="remote_live_video">Vídeo remoto ao vivo</option>
-                    </select>
-                </label>
-                <label>
-                    <span>Campanha</span>
-                    <select id="editCheckCampaign">
-                        <option value="">Sem campanha</option>
-                    </select>
-                </label>
-                <label>
-                    <span>Resultado esperado</span>
-                    <select id="editCheckExpectedDecision">
-                        <option value="">Automático pelo cenário</option>
-                        <option value="approved">Aprovado</option>
-                        <option value="review">Review</option>
-                        <option value="rejected">Rejeitado</option>
-                    </select>
-                </label>
-                <p class="muted">A correção altera somente a classificação administrativa do teste. O resultado biométrico original não é modificado.</p>
-                <div class="edit-check-actions">
-                    <button id="cancelEditCheck" type="button" class="button button-secondary">Cancelar</button>
-                    <button id="saveEditCheck" type="submit" class="button button-primary">Salvar correção</button>
-                </div>
-            </div>
-        </form>
-    </dialog>
-
-    <dialog id="detailDialog">
-        <div class="dialog-header">
+    <dialog id="detailDialog" class="detail-dialog">
+        <div class="dialog-head">
             <div>
-                <span class="eyebrow">VERIFICAÇÃO</span>
-                <h2 id="detailTitle">Detalhes</h2>
+                <span class="eyebrow">DETALHES</span>
+                <h2 id="detailTitle">Verificação</h2>
             </div>
-            <button id="closeDetail" type="button" class="icon-button" aria-label="Fechar">×</button>
+            <button id="closeDetail" class="icon-button" type="button">×</button>
         </div>
         <div id="detailBody"></div>
     </dialog>
 
-    <script type="module" src="./app.js"></script>
+    <script src="./app.js" defer></script>
 </body>
 </html>
