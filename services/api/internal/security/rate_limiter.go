@@ -59,10 +59,7 @@ func (limiter *WindowLimiter) Allow(
 	}
 
 	if counter.Count >= limit {
-		retryAfter := time.Until(counter.ExpiresAt)
-		if !now.Equal(time.Now()) {
-			retryAfter = counter.ExpiresAt.Sub(now)
-		}
+		retryAfter := counter.ExpiresAt.Sub(now)
 		if retryAfter < 0 {
 			retryAfter = 0
 		}
