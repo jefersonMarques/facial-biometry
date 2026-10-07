@@ -43,6 +43,13 @@ export class BiometricClient {
         return this.identityRequest<IdentityCheckStatus>("/v1/identity/check", token, { method: "GET" });
     }
 
+    public async confirmIdentityView(token: string, visibleMs: number): Promise<void> {
+        await this.identityRequest<{ status: string }>("/v1/identity/view", token, {
+            method: "POST",
+            body: JSON.stringify({ visibleMs }),
+        });
+    }
+
     public async uploadIdentityDocument(
         token: string,
         file: Blob,
