@@ -30,6 +30,7 @@ const FIRST_CAPTURE_MAX_GUIDE_SAMPLES = 8;
 const NEAR_HOLD_SECONDS = 3;
 const LOCAL_GUIDE_MAX_AGE_MS = 650;
 const LOCAL_GUIDE_FALLBACK_AFTER_MS = 1_500;
+const CONFIRMED_VIEW_VISIBLE_MS = 3_000;
 
 type GuideTone = "red" | "yellow" | "green";
 
@@ -129,6 +130,10 @@ let currentBiometryPhase: GuidedCapturePhase = "far";
 let documentDetails: IdentityDocumentDetails | null = null;
 let latestLocalGuide: LocalFaceGuideMetrics | null = null;
 let bestCaptureObjectURL = "";
+let viewConfirmed = false;
+let accumulatedVisibleMS = 0;
+let visibleStartedAt: number | null = null;
+let viewConfirmationTimer: number | null = null;
 
 const handleLocalGuide = (event: Event): void => {
     const detail = (event as CustomEvent<{ guide?: LocalFaceGuideMetrics }>).detail;
@@ -170,6 +175,11 @@ startButton.addEventListener("click", () => {
 });
 window.addEventListener("beforeunload", () => {
     window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+    document.removeEventListener("visibilitychange", handleViewVisibilityChange);
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+        viewConfirmationTimer = null;
+    }
     if (bestCaptureObjectURL) {
         URL.revokeObjectURL(bestCaptureObjectURL);
     }
@@ -187,8 +197,99 @@ async function initialize(): Promise<void> {
     try {
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
+        startConfirmedViewTracking();
     } catch (error) {
         showFatal(errorMessage(error));
+    }
+}
+
+function startConfirmedViewTracking(): void {
+    if (viewConfirmed) {
+        return;
+    }
+
+    document.addEventListener("visibilitychange", handleViewVisibilityChange);
+    if (document.visibilityState === "visible") {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+    }
+}
+
+function handleViewVisibilityChange(): void {
+    if (viewConfirmed) {
+        return;
+    }
+
+    if (document.visibilityState === "visible") {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+        return;
+    }
+
+    accumulateVisibleTime();
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+        viewConfirmationTimer = null;
+    }
+}
+
+function accumulateVisibleTime(): void {
+    if (visibleStartedAt === null) {
+        return;
+    }
+    accumulatedVisibleMS += Math.max(0, performance.now() - visibleStartedAt);
+    visibleStartedAt = null;
+}
+
+function scheduleViewConfirmation(): void {
+    if (viewConfirmed || document.visibilityState !== "visible") {
+        return;
+    }
+
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+    }
+
+    const elapsedCurrent = visibleStartedAt === null
+        ? 0
+        : Math.max(0, performance.now() - visibleStartedAt);
+    const remaining = Math.max(
+        0,
+        CONFIRMED_VIEW_VISIBLE_MS - accumulatedVisibleMS - elapsedCurrent,
+    );
+
+    viewConfirmationTimer = window.setTimeout(() => {
+        void confirmVisibleView();
+    }, remaining);
+}
+
+async function confirmVisibleView(): Promise<void> {
+    viewConfirmationTimer = null;
+    if (viewConfirmed || document.visibilityState !== "visible") {
+        return;
+    }
+
+    accumulateVisibleTime();
+    if (accumulatedVisibleMS < CONFIRMED_VIEW_VISIBLE_MS) {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+        return;
+    }
+
+    try {
+        await client.confirmIdentityView(
+            identityToken,
+            Math.round(accumulatedVisibleMS),
+        );
+        viewConfirmed = true;
+        document.removeEventListener("visibilitychange", handleViewVisibilityChange);
+    } catch {
+        visibleStartedAt = performance.now();
+        window.setTimeout(() => {
+            if (!viewConfirmed && document.visibilityState === "visible") {
+                scheduleViewConfirmation();
+            }
+        }, 1_000);
     }
 }
 
