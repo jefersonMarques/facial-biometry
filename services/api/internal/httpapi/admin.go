@@ -22,13 +22,17 @@ type createAnalyticsCampaignRequest struct {
 }
 
 type createAdminIdentityCheckRequest struct {
-	CPF                 string `json:"cpf"`
-	MinimumDocumentDate string `json:"minimumDocumentDate"`
-	ExpiresInMinutes    int    `json:"expiresInMinutes,omitempty"`
-	CampaignID          string `json:"campaignId,omitempty"`
-	Scenario            string `json:"scenario,omitempty"`
-	ExpectedDecision    string `json:"expectedDecision,omitempty"`
-	PublicBaseURL       string `json:"publicBaseUrl,omitempty"`
+	FlowType              string `json:"flowType,omitempty"`
+	SubjectID             string `json:"subjectId,omitempty"`
+	DisplayName           string `json:"displayName,omitempty"`
+	ReferencePhotoDataURL string `json:"referencePhotoDataUrl,omitempty"`
+	CPF                   string `json:"cpf,omitempty"`
+	MinimumDocumentDate   string `json:"minimumDocumentDate,omitempty"`
+	ExpiresInMinutes      int    `json:"expiresInMinutes,omitempty"`
+	CampaignID            string `json:"campaignId,omitempty"`
+	Scenario              string `json:"scenario,omitempty"`
+	ExpectedDecision      string `json:"expectedDecision,omitempty"`
+	PublicBaseURL         string `json:"publicBaseUrl,omitempty"`
 }
 
 type updateAdminIdentityCheckRequest struct {
@@ -363,7 +367,7 @@ func (handler *Handler) getAdminSummary(writer http.ResponseWriter, request *htt
 
 func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, request *http.Request) {
 	var payload createAdminIdentityCheckRequest
-	if err := decodeJSON(request, &payload, 1<<20); err != nil {
+	if err := decodeJSON(request, &payload, 6<<20); err != nil {
 		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -376,14 +380,31 @@ func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, req
 		}
 	}
 
-	response, err := handler.createIdentityCheckRecord(request.Context(), "internal", 0, createIdentityCheckRequest{
-		CPF:                 payload.CPF,
-		MinimumDocumentDate: payload.MinimumDocumentDate,
-		ExpiresInMinutes:    payload.ExpiresInMinutes,
-		CampaignID:          payload.CampaignID,
-		Scenario:            payload.Scenario,
-		ExpectedDecision:    payload.ExpectedDecision,
-	})
+	flowType, validFlow := normalizeDemoFlowType(payload.FlowType)
+	if !validFlow {
+		handler.writeError(writer, http.StatusBadRequest, "invalid flowType")
+		return
+	}
+
+	var response createIdentityCheckResponse
+	var err error
+	if flowType == identity.FlowCNH {
+		response, err = handler.createIdentityCheckRecord(request.Context(), "internal", 0, createIdentityCheckRequest{
+			CPF:                 payload.CPF,
+			MinimumDocumentDate: payload.MinimumDocumentDate,
+			ExpiresInMinutes:    payload.ExpiresInMinutes,
+			CampaignID:          payload.CampaignID,
+			Scenario:            payload.Scenario,
+			ExpectedDecision:    payload.ExpectedDecision,
+		})
+		response.FlowType = identity.FlowCNH
+		response.DisplayName = strings.TrimSpace(payload.DisplayName)
+	} else {
+		response, err = handler.createDemoIdentityCheckRecord(
+			request.Context(),
+			payload,
+		)
+	}
 	if err != nil {
 		writeIdentityCreateError(handler, writer, err)
 		return
