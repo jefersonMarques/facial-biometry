@@ -103,7 +103,7 @@ func (handler *Handler) recordAnalyticsCheckCreated(ctx context.Context, check i
 	})
 }
 
-func (handler *Handler) recordAnalyticsLinkOpened(ctx context.Context, checkID string) {
+func (handler *Handler) recordAnalyticsLinkAccessed(ctx context.Context, checkID string) {
 	if handler.analytics == nil {
 		return
 	}
@@ -117,11 +117,34 @@ func (handler *Handler) recordAnalyticsLinkOpened(ctx context.Context, checkID s
 	if err := handler.analytics.RecordEventOnce(
 		eventContext,
 		checkID,
-		"link_opened",
-		"link_opened",
+		"link_accessed",
+		"link_accessed",
 		nil,
 	); err != nil {
-		handler.logAnalyticsError("record link opened", err)
+		handler.logAnalyticsError("record link accessed", err)
+	}
+}
+
+func (handler *Handler) recordAnalyticsViewConfirmed(
+	ctx context.Context,
+	checkID string,
+	visibleMS int,
+) {
+	if handler.analytics == nil {
+		return
+	}
+	operationContext, cancel := analyticsOperationContext(ctx)
+	defer cancel()
+	if err := handler.analytics.RecordEventOnce(
+		operationContext,
+		checkID,
+		"view_confirmed",
+		"view_confirmed",
+		map[string]any{
+			"visibleMs": visibleMS,
+		},
+	); err != nil {
+		handler.logAnalyticsError("record view confirmed", err)
 	}
 }
 
