@@ -90,6 +90,8 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Semântica de analytics separa `link_accessed` de `view_confirmed`.
    - ✅ `view_confirmed` exige pelo menos 3s acumulados com a página visível.
    - ✅ Acesso ao link não é tratado como leitura; “leitura realizada” não é inferida automaticamente.
+   - ✅ Semântica de analytics validada com `go test ./...`.
+   - ⏳ Validar compilação do Web SDK após o tracking de visibilidade.
    - ⏳ Rate limiting distribuído/gateway para múltiplas instâncias.
    - ✅ Registry de tenants com API keys armazenadas somente como SHA-256.
    - ✅ Checks criptografados vinculados a `TenantID`.
