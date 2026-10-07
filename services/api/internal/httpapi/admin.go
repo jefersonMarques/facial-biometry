@@ -228,6 +228,13 @@ func (handler *Handler) applyAuthoritativeCheckItem(
 	item.Status = string(check.Status)
 	item.Decision = check.Decision
 	item.CompletedAt = check.CompletedAt
+	item.FlowType = string(effectiveFlowType(check))
+	item.SubjectID = check.SubjectID
+	item.DisplayName = check.DisplayName
+	if handler.config.DemoMode && check.DemoArtifacts != nil {
+		item.ReferencePhotoDataURL = check.DemoArtifacts.ReferencePhotoDataURL
+		item.CapturedPhotoDataURL = check.DemoArtifacts.CapturedPhotoDataURL
+	}
 	if check.FaceSimilarity != 0 {
 		value := check.FaceSimilarity
 		item.FaceSimilarity = &value
