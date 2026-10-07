@@ -124,6 +124,17 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ⏳ Definir quota/faturamento transacional sem depender do analytics opcional.
    - ⏳ Gestão/rotação de segredos em KMS/HSM para produção.
    - ⏳ Perfil TLS/reverse proxy e limites de infraestrutura.
+     - ✅ `FACEPROOF_ENV=production` falha se a API tentar bind fora do loopback.
+     - ✅ Produção exige origem pública e URL de verificação em HTTPS.
+     - ✅ Produção exige Secure Core, Model Pack assinado e tenant registry.
+     - ✅ Web gateway de produção exige listener e upstream API em loopback.
+     - ✅ Gateway público bloqueia `/v1/admin/*`; gateway admin é papel separado.
+     - ✅ Caddyfile de produção termina TLS e encaminha somente para `127.0.0.1:5173`.
+     - ✅ API, web e admin possuem unidades systemd endurecidas e sem privilégios.
+     - ✅ Admin fica em `127.0.0.1:5174`, fora do proxy público.
+     - ✅ Validador de rede rejeita exposição de 5173/5174/8180 e presença da porta Python 8090.
+     - ✅ Guia de deploy Linux em `deploy/production/README.md`.
+     - ⏳ Validar `go test ./...`, build do gateway e perfil de listeners em runtime.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
