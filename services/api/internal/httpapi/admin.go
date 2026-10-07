@@ -350,7 +350,7 @@ func (handler *Handler) createAdminIdentityCheck(writer http.ResponseWriter, req
 		}
 	}
 
-	response, err := handler.createIdentityCheckRecord(request.Context(), createIdentityCheckRequest{
+	response, err := handler.createIdentityCheckRecord(request.Context(), "internal", createIdentityCheckRequest{
 		CPF:                 payload.CPF,
 		MinimumDocumentDate: payload.MinimumDocumentDate,
 		ExpiresInMinutes:    payload.ExpiresInMinutes,
