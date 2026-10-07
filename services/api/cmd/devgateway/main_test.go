@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -83,5 +84,77 @@ func TestDevelopmentGatewayKeepsCurrentFlexibility(t *testing.T) {
 		apiURL,
 	); err != nil {
 		t.Fatalf("development gateway unexpectedly rejected: %v", err)
+	}
+}
+
+func TestPublicGatewayBlocksAdminAPI(t *testing.T) {
+	t.Parallel()
+
+	proxyCalled := false
+	proxy := http.HandlerFunc(func(
+		writer http.ResponseWriter,
+		request *http.Request,
+	) {
+		proxyCalled = true
+		writer.WriteHeader(http.StatusOK)
+	})
+	static := http.HandlerFunc(func(
+		writer http.ResponseWriter,
+		request *http.Request,
+	) {
+		writer.WriteHeader(http.StatusOK)
+	})
+
+	handler := newGatewayHandler("public", proxy, static)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/admin/summary",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", recorder.Code)
+	}
+	if proxyCalled {
+		t.Fatal("public gateway must not proxy admin API")
+	}
+}
+
+func TestAdminGatewayProxiesAdminAPI(t *testing.T) {
+	t.Parallel()
+
+	proxyCalled := false
+	proxy := http.HandlerFunc(func(
+		writer http.ResponseWriter,
+		request *http.Request,
+	) {
+		proxyCalled = true
+		writer.WriteHeader(http.StatusUnauthorized)
+	})
+	static := http.HandlerFunc(func(
+		writer http.ResponseWriter,
+		request *http.Request,
+	) {
+		writer.WriteHeader(http.StatusOK)
+	})
+
+	handler := newGatewayHandler("admin", proxy, static)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/admin/summary",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", recorder.Code)
+	}
+	if !proxyCalled {
+		t.Fatal("admin gateway must proxy admin API")
 	}
 }
