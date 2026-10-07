@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -12,6 +15,7 @@ import (
 )
 
 type Config struct {
+	Environment             string
 	APIAddress              string
 	EngineURL               string
 	SecureCoreLibrary       string
@@ -83,7 +87,8 @@ func Load() (Config, error) {
 		return Config{}, errors.New("identity TTL and PDF size limits must be positive")
 	}
 
-	return Config{
+	configuration := Config{
+		Environment:             strings.ToLower(strings.TrimSpace(envString("FACEPROOF_ENV", "development"))),
 		APIAddress:              envString("FACEPROOF_API_ADDR", ":8180"),
 		EngineURL:               envString("FACEPROOF_ENGINE_URL", "http://127.0.0.1:8090"),
 		SecureCoreLibrary:       strings.TrimSpace(os.Getenv("FACEPROOF_SECURE_CORE_LIBRARY")),
@@ -123,7 +128,83 @@ func Load() (Config, error) {
 		PDFSigPath:              strings.TrimSpace(os.Getenv("FACEPROOF_PDFSIG_PATH")),
 		PDFInfoPath:             strings.TrimSpace(os.Getenv("FACEPROOF_PDFINFO_PATH")),
 		BPGDecoderPath:          strings.TrimSpace(os.Getenv("FACEPROOF_BPGDEC_PATH")),
-	}, nil
+	}
+	if err := validateProductionConfiguration(configuration); err != nil {
+		return Config{}, err
+	}
+	return configuration, nil
+}
+
+func validateProductionConfiguration(configuration Config) error {
+	if configuration.Environment != "production" {
+		return nil
+	}
+	if !isLoopbackListenAddress(configuration.APIAddress) {
+		return fmt.Errorf(
+			"FACEPROOF_API_ADDR must bind to loopback in production, got %q",
+			configuration.APIAddress,
+		)
+	}
+	if err := requireHTTPSURL(
+		"FACEPROOF_ALLOWED_ORIGIN",
+		configuration.AllowedOrigin,
+		false,
+	); err != nil {
+		return err
+	}
+	if err := requireHTTPSURL(
+		"FACEPROOF_IDENTITY_VERIFY_URL",
+		configuration.IdentityVerifyURL,
+		true,
+	); err != nil {
+		return err
+	}
+	if strings.TrimSpace(configuration.SecureCoreLibrary) == "" {
+		return errors.New(
+			"FACEPROOF_SECURE_CORE_LIBRARY is required in production",
+		)
+	}
+	if strings.TrimSpace(configuration.ModelPackPath) == "" ||
+		strings.TrimSpace(configuration.ModelPackPublicKey) == "" {
+		return errors.New(
+			"FACEPROOF_MODEL_PACK and FACEPROOF_MODEL_PACK_PUBLIC_KEY are required in production",
+		)
+	}
+	if strings.TrimSpace(configuration.TenantRegistryPath) == "" {
+		return errors.New(
+			"FACEPROOF_TENANT_REGISTRY is required in production",
+		)
+	}
+	return nil
+}
+
+func isLoopbackListenAddress(address string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return false
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func requireHTTPSURL(name string, value string, allowPath bool) error {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil ||
+		!strings.EqualFold(parsed.Scheme, "https") ||
+		parsed.Host == "" {
+		return fmt.Errorf("%s must be an absolute https URL in production", name)
+	}
+	if !allowPath && parsed.Path != "" && parsed.Path != "/" {
+		return fmt.Errorf("%s must be an origin without a path", name)
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("%s contains unsupported URL components", name)
+	}
+	return nil
 }
 
 func deriveIdentityStoreKey(master []byte) []byte {
