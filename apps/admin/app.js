@@ -172,7 +172,7 @@ async function loadDashboard() {
 }
 
 async function loadChecks() {
-    const params = new URLSearchParams({ limit: "250" });
+    const params = new URLSearchParams({ limit: "60" });
     if (statusFilter.value) params.set("status", statusFilter.value);
 
     const response = await api("/v1/admin/checks?" + params.toString());
