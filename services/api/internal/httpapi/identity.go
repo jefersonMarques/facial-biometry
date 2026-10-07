@@ -158,7 +158,7 @@ func (handler *Handler) getIdentityCheck(writer http.ResponseWriter, request *ht
 	if !ok {
 		return
 	}
-	handler.recordAnalyticsLinkOpened(request.Context(), check.ID)
+	handler.recordAnalyticsLinkAccessed(request.Context(), check.ID)
 	handler.writeJSON(writer, http.StatusOK, identityStatusResponse{
 		ID:               check.ID,
 		Status:           check.Status,
