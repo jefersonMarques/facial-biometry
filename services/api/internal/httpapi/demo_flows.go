@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"faceproof/services/api/internal/domain"
 	"faceproof/services/api/internal/identity"
 	"faceproof/services/api/internal/security"
 	templaterepository "faceproof/services/api/internal/template"
@@ -317,4 +319,181 @@ func (handler *Handler) createDemoIdentityCheckRecord(
 		SubjectID:        subjectID,
 		DisplayName:      displayName,
 	}, nil
+}
+
+
+func demoCapturedPhotoDataURL(
+	enabled bool,
+	frames []domain.GuidedCapturedFrame,
+	bestFrameIndex int,
+) string {
+	if !enabled ||
+		bestFrameIndex < 0 ||
+		bestFrameIndex >= len(frames) ||
+		len(frames[bestFrameIndex].ImageBytes) == 0 {
+		return ""
+	}
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(
+		frames[bestFrameIndex].ImageBytes,
+	)
+}
+
+func identityStatusFromDecision(decision string) identity.Status {
+	switch decision {
+	case "approved":
+		return identity.StatusApproved
+	case "review":
+		return identity.StatusReview
+	default:
+		return identity.StatusRejected
+	}
+}
+
+func (handler *Handler) completeDemoFaceEnrollment(
+	writer http.ResponseWriter,
+	request *http.Request,
+	token string,
+	check identity.Check,
+	payload identityCompleteRequest,
+	frames []domain.GuidedCapturedFrame,
+	result domain.EngineResult,
+) {
+	if effectiveFlowType(check) != identity.FlowFaceEnrollment {
+		handler.writeError(
+			writer,
+			http.StatusConflict,
+			"identity check is not a face enrollment",
+		)
+		return
+	}
+
+	passivePADAvailable := result.PassivePAD.Status == "available"
+	decision := handler.risk.EnrollmentDecision(
+		result.LivenessScore,
+		passivePADAvailable,
+	)
+	status := identityStatusFromDecision(decision)
+	capturedPhotoDataURL := demoCapturedPhotoDataURL(
+		handler.config.DemoMode,
+		frames,
+		result.BestFrameIndex,
+	)
+
+	templateStored := decision == "approved" ||
+		(decision == "review" && handler.config.AllowReviewEnrollment)
+	if templateStored {
+		if err := handler.templates.Save(domain.BiometricTemplate{
+			SubjectID:             check.SubjectID,
+			Embedding:             append([]float64(nil), result.Embedding...),
+			EmbeddingModel:        result.EmbeddingModel,
+			ReferencePhotoDataURL: capturedPhotoDataURL,
+			CreatedAt:             time.Now().UTC(),
+		}); err != nil {
+			_, _ = handler.identityChecks.Update(token, func(
+				current *identity.Check,
+			) error {
+				if current.CaptureSessionID == payload.SessionID {
+					current.CaptureSessionID = ""
+					current.LastErrorCode = "template_store_failed"
+				}
+				return nil
+			})
+			handler.writeError(
+				writer,
+				http.StatusInternalServerError,
+				"could not persist facial enrollment",
+			)
+			return
+		}
+	}
+
+	completedAt := time.Now().UTC()
+	updated, err := handler.identityChecks.Update(token, func(
+		current *identity.Check,
+	) error {
+		if current.Status != identity.StatusBiometryPending ||
+			current.CaptureSessionID != payload.SessionID {
+			return errIdentityInvalidState
+		}
+		if current.BiometricSessions >= maxIdentityBiometricSessions {
+			return errIdentityAttemptLimit
+		}
+
+		current.BiometricSessions++
+		current.Status = status
+		current.Decision = decision
+		current.LivenessScore = result.LivenessScore
+		current.FaceSimilarity = 0
+		current.CompletedAt = &completedAt
+		current.CaptureSessionID = ""
+		current.LastErrorCode = ""
+
+		runtimeCopy := payload.Runtime
+		current.RuntimeFingerprint = &runtimeCopy
+		protocolCopy := payload.CaptureProtocol
+		current.CaptureProtocol = &protocolCopy
+
+		if handler.config.DemoMode {
+			if current.DemoArtifacts == nil {
+				current.DemoArtifacts = &identity.DemoArtifacts{}
+			}
+			current.DemoArtifacts.ReferencePhotoDataURL =
+				capturedPhotoDataURL
+			current.DemoArtifacts.CapturedPhotoDataURL =
+				capturedPhotoDataURL
+		}
+		return nil
+	})
+	if err != nil {
+		handler.writeIdentityStateError(writer, err)
+		return
+	}
+
+	handler.recordAnalyticsAuthoritativeState(request.Context(), updated)
+	handler.recordAnalyticsEvent(
+		request.Context(),
+		updated.ID,
+		"face_enrollment_completed",
+		map[string]any{
+			"decision":       decision,
+			"templateStored": templateStored,
+			"subjectId":      updated.SubjectID,
+		},
+	)
+	handler.recordAnalyticsCompletion(
+		request.Context(),
+		updated,
+		result,
+		0,
+		nil,
+		payload.Geometry,
+	)
+
+	handler.writeJSON(writer, http.StatusOK, identityCompleteResponse{
+		ID:             updated.ID,
+		Status:         updated.Status,
+		Decision:       decision,
+		LivenessScore:  result.LivenessScore,
+		Similarity:     0,
+		BestFrameIndex: result.BestFrameIndex,
+		MatchThreshold: handler.config.MatchThreshold,
+		FlowType:       identity.FlowFaceEnrollment,
+		DisplayName:    updated.DisplayName,
+		TemplateStored: templateStored,
+		Signals: signalResponse{
+			PassivePAD:     result.PassivePAD,
+			TemporalMotion: result.TemporalMotion,
+			Illumination:   result.Illumination,
+			GuidedCapture:  result.GuidedCapture,
+		},
+		Quality:      result.Quality,
+		Diagnostics: handler.publicDiagnostics(
+			request,
+			result.Diagnostics,
+		),
+		NativeShadow: handler.publicNativeShadow(
+			request,
+			result.NativeShadow,
+		),
+	})
 }
