@@ -51,6 +51,14 @@ The API therefore remains authoritative for session state, challenge definition,
 - Hardware-backed key storage and governed secret rotation.
 - Certified PAD evaluation.
 
+## Tenant isolation
+
+Issuer authentication supports a tenant registry. Production tenant files store only SHA-256 hashes of tenant API keys; raw API keys are not persisted in the registry. Each newly created identity check is bound to a `TenantID` inside the encrypted transactional state.
+
+Issuer status queries require authentication as the same tenant that created the check. Cross-tenant lookups intentionally return `404` so the API does not reveal whether another tenant's check ID exists. The private super-admin surface remains separate from tenant issuer access.
+
+The legacy `FACEPROOF_IDENTITY_ISSUER_KEY` remains only as a development fallback mapped to the `default` tenant.
+
 ## Production direction
 
-Before high-assurance production use, add application/tenant authentication, distributed/edge rate limiting, KMS/HSM-backed runtime and signing keys, a governed attack dataset and independent PAD evaluation. Native mobile SDKs with device attestation remain the higher-assurance option for flows where browser camera provenance is insufficient.
+Before high-assurance production use, extend tenant isolation into analytics/billing/quotas, add distributed/edge rate limiting, KMS/HSM-backed runtime and signing keys, a governed attack dataset and independent PAD evaluation. Native mobile SDKs with device attestation remain the higher-assurance option for flows where browser camera provenance is insufficient.
