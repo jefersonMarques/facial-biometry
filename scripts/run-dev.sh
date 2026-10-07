@@ -83,6 +83,10 @@ if [ ! -f "$ROOT/.dev/admin-key" ]; then
     python3 -c 'import secrets; print(secrets.token_urlsafe(48))' > "$ROOT/.dev/admin-key"
     chmod 600 "$ROOT/.dev/admin-key"
 fi
+if [ ! -f "$ROOT/.dev/demo-password" ]; then
+    python3 -c 'import secrets; print(secrets.token_urlsafe(12))' > "$ROOT/.dev/demo-password"
+    chmod 600 "$ROOT/.dev/demo-password"
+fi
 
 DEV_TENANT_REGISTRY="$ROOT/.dev/tenants.json"
 if [ ! -f "$DEV_TENANT_REGISTRY" ]; then
@@ -109,6 +113,9 @@ export FACEPROOF_TEMPLATE_DIR="${FACEPROOF_TEMPLATE_DIR:-$ROOT/data/templates}"
 export FACEPROOF_IDENTITY_ISSUER_KEY="${FACEPROOF_IDENTITY_ISSUER_KEY:-$(cat "$ROOT/.dev/identity-issuer-key")}"
 export FACEPROOF_TENANT_REGISTRY="${FACEPROOF_TENANT_REGISTRY:-$DEV_TENANT_REGISTRY}"
 export FACEPROOF_ADMIN_KEY="${FACEPROOF_ADMIN_KEY:-$(cat "$ROOT/.dev/admin-key")}"
+export FACEPROOF_DEMO_MODE="${FACEPROOF_DEMO_MODE:-true}"
+export FACEPROOF_DEMO_USER="${FACEPROOF_DEMO_USER:-demo}"
+export FACEPROOF_DEMO_PASSWORD="${FACEPROOF_DEMO_PASSWORD:-$(cat "$ROOT/.dev/demo-password")}"
 export FACEPROOF_IDENTITY_DIR="${FACEPROOF_IDENTITY_DIR:-$ROOT/data/identity-checks}"
 export FACEPROOF_IDENTITY_VERIFY_URL="${FACEPROOF_IDENTITY_VERIFY_URL:-http://localhost:5173/verify.html}"
 export FACEPROOF_API_ADDR="${FACEPROOF_API_ADDR:-:8180}"
@@ -297,6 +304,7 @@ echo "Identity issuer key: $ROOT/.dev/identity-issuer-key"
 if [ "$ANALYTICS" = true ]; then
     echo "Analytics panel: http://localhost:5174"
     echo "Admin key: $ROOT/.dev/admin-key"
+    echo "Demo login: ${FACEPROOF_DEMO_USER} / password file $ROOT/.dev/demo-password"
 fi
 echo "Development mode: review enrollments are stored as provisional templates."
 if [ "$NATIVE_CORE" = true ]; then
