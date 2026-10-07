@@ -83,6 +83,9 @@ cd ~/faceproof/apps/web-sdk
 npm run typecheck
 npm run build
 npm run test:liveness-v2
+
+cd ~/faceproof
+node --check apps/admin/app.js
 ```
 
 Depois validar em runtime:
