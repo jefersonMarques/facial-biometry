@@ -139,7 +139,9 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ `scripts/validate-production-network.sh` validado com sucesso no runtime local.
      - ✅ Gateway público bloqueia `/v1/admin/*` com HTTP 404 mesmo com chave admin válida.
      - ✅ Gateway admin local encaminha `/v1/admin/*` e retornou HTTP 200 com chave válida.
-     - ⏳ Revalidar listener da API em produção: o processo atual foi observado em `*:8180`, indicando execução fora do perfil `FACEPROOF_ENV=production`.
+     - ✅ Perfil de produção confirmou CORS `https://faceproof.local` no runtime.
+     - ✅ Corrigida corrida de startup no validador: ele agora aguarda API/gateway ficarem prontos antes de capturar listeners.
+     - ⏳ Reexecutar o validador atualizado uma vez para fechar o perímetro local.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
