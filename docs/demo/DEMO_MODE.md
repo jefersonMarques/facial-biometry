@@ -96,3 +96,24 @@ Depois validar em runtime:
 - revalidação do mesmo cadastro;
 - validação por foto de referência;
 - referência ↔ captura no histórico.
+
+
+## Escala apresentada ao cliente
+
+A interface de demonstração não mostra o score cosseno bruto como métrica principal.
+
+A apresentação usa um índice normalizado:
+
+```text
+índice = ((score + 1) / 2) × 100
+```
+
+Exemplo:
+
+- score técnico `0.629` → similaridade visual `81%`;
+- limiar técnico `0.363` → mínimo visual `68%`.
+
+Essa porcentagem é apenas uma normalização da escala `[-1,+1]` para `[0,100]`.
+Ela não representa probabilidade, confiança estatística ou certeza de identidade.
+
+O score bruto, limiar e demais sinais permanecem disponíveis em **Detalhes técnicos**.
