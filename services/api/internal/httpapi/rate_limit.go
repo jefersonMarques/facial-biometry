@@ -24,6 +24,10 @@ var publicIdentityRateLimits = map[string]identityRateLimitPolicy{
 		Limit:  8,
 		Window: 10 * time.Minute,
 	},
+	http.MethodPost + " /v1/identity/view": {
+		Limit:  6,
+		Window: 10 * time.Minute,
+	},
 	http.MethodPost + " /v1/identity/guide": {
 		Limit:  240,
 		Window: time.Minute,
