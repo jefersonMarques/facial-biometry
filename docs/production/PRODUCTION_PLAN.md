@@ -73,8 +73,24 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Runtime inicializa o Secure Core somente após validação do Model Pack.
    - Próximo endurecimento comercial: chave de assinatura de produção offline/HSM e chave pública pinada no artefato de servidor.
 
-8. ⬜ **Hardening de segurança**
-   - Sessões curtas, single-use, runId server-generated, anti-replay, ordem/timing das fases, rate limiting, limites e isolamento por tenant.
+8. ⏳ **Hardening de segurança**
+   - ✅ Sessões curtas com expiração server-side.
+   - ✅ `runId` gerado no servidor e vinculado à sessão.
+   - ✅ Token HMAC-SHA256 vincula `sessionId + runId + expiração`.
+   - ✅ Consumo atômico single-use; teste concorrente garante um único consumidor.
+   - ✅ Replay da mesma sessão é rejeitado.
+   - ✅ Ordem `far → near → submit` validada.
+   - ✅ Duração máxima do protocolo validada.
+   - ✅ Tempo mínimo de captura também medido pelo relógio do servidor.
+   - ✅ Limites de corpo, multipart, quantidade de frames e tamanho JPEG.
+   - ✅ Runtime fingerprint fixa SDK/WASM/MediaPipe/modelo permitido.
+   - ✅ Rate limiting por hash do token público, sem armazenar o token em claro.
+   - ✅ `Retry-After` em respostas 429.
+   - ✅ Headers `no-store`, `nosniff`, `DENY` e `no-referrer`.
+   - ⏳ Rate limiting distribuído/gateway para múltiplas instâncias.
+   - ⏳ Isolamento/autenticação por tenant.
+   - ⏳ Gestão/rotação de segredos em KMS/HSM para produção.
+   - ⏳ Perfil TLS/reverse proxy e limites de infraestrutura.
 
 9. ⬜ **Separar SDK público do núcleo privado**
    - Browser filtra/coleta.
