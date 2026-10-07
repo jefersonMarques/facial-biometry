@@ -55,7 +55,8 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - ✅ API não permite ausência de comparação válida virar decisão `rejected`; retorna falha técnica e libera nova captura.
      - ✅ Telemetria registra somente contagens/dimensões dos embeddings quando o matching está indisponível.
      - ✅ Cliente nativo rejeita embeddings zerados/não-finitos antes da decisão.
-     - ⏳ Validar build do Secure Core, testes Go/Web SDK e nova captura real.
+     - ✅ Correção versionada como Secure Core 0.2.1, mantendo ABI v1.
+     - ⏳ Validar build do Secure Core 0.2.1, testes Go/Web SDK e nova captura real.
    - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
 6. ✅ **Retirar Python do runtime**
