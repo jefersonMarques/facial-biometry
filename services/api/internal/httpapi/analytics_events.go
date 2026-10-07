@@ -83,6 +83,7 @@ func (handler *Handler) recordAnalyticsCheckCreated(ctx context.Context, check i
 	defer cancel()
 	if err := handler.analytics.RecordCheckCreated(operationContext, analytics.CheckCreated{
 		CheckID:          check.ID,
+		TenantID:         check.TenantID,
 		SubjectCPF:       check.ExpectedCPF,
 		CampaignID:       check.CampaignID,
 		Scenario:         check.Scenario,
@@ -95,6 +96,7 @@ func (handler *Handler) recordAnalyticsCheckCreated(ctx context.Context, check i
 		return
 	}
 	handler.recordAnalyticsEvent(ctx, check.ID, "check_created", map[string]any{
+		"tenantId":         check.TenantID,
 		"scenario":         check.Scenario,
 		"expectedDecision": check.ExpectedDecision,
 		"campaignId":       check.CampaignID,
