@@ -5,47 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="referrer" content="no-referrer">
     <meta name="robots" content="noindex,nofollow,noarchive">
-    <title>Verificação de identidade · FaceProof</title>
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#10130f">
+    <title>FaceProof · Verificação facial</title>
     <link rel="stylesheet" href="./styles.css">
 </head>
-<body>
+<body class="faceproof-public">
     <div id="lightLayer" class="light-layer"></div>
 
-    <main class="page-shell identity-shell">
-        <section class="intro identity-intro">
-            <div class="eyebrow">FACEPROOF · IDENTITY CHECK</div>
-            <h1>Confirme sua identidade.</h1>
-            <p>Envie a CNH Digital original e conclua uma prova de vida pela câmera. O CPF esperado não é exibido durante o processo.</p>
-            <div class="verification-expiry">Link válido até <span id="expiresText">—</span></div>
+    <main class="page-shell identity-shell demo-public-shell">
+        <header class="demo-brand">
+            <span class="demo-brand-mark" aria-hidden="true"></span>
+            <span>FACEPROOF</span>
+        </header>
+
+        <section class="intro identity-intro demo-public-intro">
+            <div id="flowEyebrow" class="eyebrow">VERIFICAÇÃO FACIAL</div>
+            <h1 id="flowTitle">Confirme sua identidade</h1>
+            <p id="flowSubtitle">Siga as etapas para concluir a validação.</p>
+            <div class="verification-expiry">Válido até <span id="expiresText">—</span></div>
         </section>
 
-        <section id="documentPanel" class="identity-stage">
+        <section id="documentPanel" class="identity-stage demo-stage">
             <div class="stage-index">1</div>
             <div class="stage-content">
                 <h2>Envie sua CNH Digital</h2>
-                <p>Use o PDF original gerado pelo aplicativo oficial. Imagens, capturas de tela e PDFs reimpressos não são aceitos.</p>
+                <p>Selecione o PDF original da CNH Digital.</p>
                 <label class="file-drop" for="cnhFile">
                     <strong id="cnhFileTitle">Selecionar CNH Digital</strong>
                     <span id="cnhFileName">Arquivo PDF</span>
                     <input id="cnhFile" type="file" accept=".pdf,application/pdf">
                 </label>
-                <button id="uploadButton" class="button button-primary identity-action" type="button">Validar documento</button>
-                <div id="documentStatus" class="stage-status">A assinatura digital, QR VIO, CPF e data do PDF serão validados.</div>
+                <button id="uploadButton" class="button button-primary identity-action" type="button">Continuar</button>
+                <div id="documentStatus" class="stage-status">O documento será autenticado antes da biometria.</div>
             </div>
         </section>
 
-        <section id="biometryPanel" class="identity-stage" hidden>
-            <div class="stage-index">2</div>
+        <section id="biometryPanel" class="identity-stage demo-stage" hidden>
+            <div id="biometryStageIndex" class="stage-index">2</div>
             <div class="stage-content">
-                <h2>Biometria facial</h2>
-                <p>A câmera inicia automaticamente. Preencha o oval com o rosto e siga as orientações para as duas capturas.</p>
+                <h2 id="biometryTitle">Biometria facial</h2>
+                <p id="biometryIntro">Posicione o rosto no oval e siga as orientações.</p>
 
-                <div class="camera-card identity-camera">
+                <div class="camera-card identity-camera demo-camera">
                     <video id="camera" playsinline muted></video>
                     <div id="processingOverlay" class="processing-overlay" hidden aria-live="polite">
                         <div class="processing-spinner" aria-hidden="true"></div>
-                        <strong>Analisando seu rosto...</strong>
-                        <span>Captura concluída. Estamos validando prova de vida, qualidade e correspondência facial.</span>
+                        <strong>Analisando...</strong>
+                        <span id="processingText">Validando prova de vida e biometria facial.</span>
                     </div>
                     <div id="faceGuide" class="face-guide phase-far"></div>
                     <div id="captureFlash" class="capture-flash" aria-hidden="true"></div>
@@ -61,15 +68,15 @@
                 </div>
 
                 <button id="startBiometryButton" class="button button-primary identity-action" type="button" hidden>Estou pronto</button>
-                <div class="privacy-note">
+                <div class="privacy-note demo-privacy">
                     <strong>Privacidade</strong>
-                    <span>O PDF e a foto da CNH são processados para esta verificação e não são armazenados como arquivos pelo FaceProof.</span>
+                    <span id="privacyText">A captura é usada somente para esta validação.</span>
                 </div>
             </div>
         </section>
 
-        <section id="finalPanel" class="identity-stage" hidden>
-            <div class="stage-index">3</div>
+        <section id="finalPanel" class="identity-stage demo-stage" hidden>
+            <div id="finalStageIndex" class="stage-index">3</div>
             <div class="stage-content">
                 <h2>Resultado</h2>
                 <div id="identityResult" class="result-panel identity-result"></div>
