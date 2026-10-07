@@ -19,6 +19,7 @@ import (
 	"faceproof/services/api/internal/engine"
 	"faceproof/services/api/internal/httpapi"
 	"faceproof/services/api/internal/identity"
+	"faceproof/services/api/internal/modelpack"
 	"faceproof/services/api/internal/security"
 	"faceproof/services/api/internal/session"
 	templaterepository "faceproof/services/api/internal/template"
@@ -85,15 +86,40 @@ func main() {
 
 	engineClient := engine.NewClient(configuration.EngineURL)
 	if configuration.SecureCoreLibrary != "" {
+		if configuration.ModelPackPath == "" || configuration.ModelPackPublicKey == "" {
+			log.Fatal("FaceProof native runtime requires FACEPROOF_MODEL_PACK and FACEPROOF_MODEL_PACK_PUBLIC_KEY")
+		}
+
+		verifiedPack, packErr := modelpack.VerifyAndExtract(
+			configuration.ModelPackPath,
+			configuration.ModelPackPublicKey,
+			configuration.ModelPackCacheDirectory,
+		)
+		if packErr != nil {
+			log.Fatalf("FaceProof Model Pack verification failed: %v", packErr)
+		}
+		if packErr := modelpack.ValidateSecureCoreCompatibility(
+			verifiedPack.Manifest,
+			engine.CurrentSecureCoreVersion,
+		); packErr != nil {
+			log.Fatalf("FaceProof Model Pack is incompatible: %v", packErr)
+		}
+
 		if err := engineClient.EnableNativeIdentity(engine.NativeConfig{
 			LibraryPath:    configuration.SecureCoreLibrary,
-			YUNetModelPath: configuration.YUNetModelPath,
-			SFaceModelPath: configuration.SFaceModelPath,
-			MiniFASNetPath: configuration.MiniFASNetModelPath,
+			YUNetModelPath: verifiedPack.YUNetPath,
+			SFaceModelPath: verifiedPack.SFacePath,
+			MiniFASNetPath: verifiedPack.MiniFASNetPath,
 		}); err != nil {
 			log.Fatalf("FaceProof Secure Core could not start: %v", err)
 		}
 		defer engineClient.Close()
+		log.Printf(
+			"FaceProof Model Pack verified: %s %s manifest=%s",
+			verifiedPack.Manifest.PackID,
+			verifiedPack.Manifest.PackVersion,
+			verifiedPack.ManifestSHA256,
+		)
 		log.Printf("FaceProof Secure Core C++ authority enabled")
 	} else {
 		log.Printf("FaceProof identity engine: Python authority (development fallback)")
