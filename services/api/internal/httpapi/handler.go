@@ -37,6 +37,7 @@ type Handler struct {
 	cnhDocuments   *cnh.Service
 	analytics      *analytics.Repository
 	publicLimiter  *security.WindowLimiter
+	tenants        *tenant.Registry
 }
 
 type createSessionRequest struct {
@@ -100,6 +101,12 @@ func NewHandler(
 		analyticsRepository = analyticsRepositories[0]
 	}
 
+	legacyTenants, _ := tenant.FromLegacyKey(
+		"default",
+		"Default development tenant",
+		configuration.IdentityIssuerKey,
+	)
+
 	return &Handler{
 		config:         configuration,
 		sessions:       sessions,
@@ -110,6 +117,7 @@ func NewHandler(
 		cnhDocuments:   cnhDocuments,
 		analytics:      analyticsRepository,
 		publicLimiter:  security.NewWindowLimiter(8192),
+		tenants:        legacyTenants,
 		risk: risk.NewEngine(
 			configuration.LivenessThreshold,
 			configuration.ReviewLivenessThreshold,
@@ -117,6 +125,13 @@ func NewHandler(
 			configuration.RequirePassivePAD,
 		),
 	}
+}
+
+func (handler *Handler) SetTenantRegistry(registry *tenant.Registry) {
+	if registry == nil {
+		return
+	}
+	handler.tenants = registry
 }
 
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
