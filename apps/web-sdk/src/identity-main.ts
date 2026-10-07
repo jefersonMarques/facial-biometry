@@ -1324,24 +1324,24 @@ function renderVerificationResult(
             <div
                 class="match-scale"
                 style="--threshold-position: ${scorePosition(result.matchThreshold)}%"
-                aria-label="Posição do score facial em relação ao limiar técnico"
+                aria-label="Índice de similaridade facial em relação ao mínimo esperado"
             >
                 <div class="match-scale-track">
                     <div
                         class="match-scale-threshold"
                         style="left: ${scorePosition(result.matchThreshold)}%"
-                        title="Limiar técnico ${faceScore(result.matchThreshold)}"
+                        title="Mínimo esperado ${similarityPercent(result.matchThreshold)}"
                     ></div>
                     <div
                         class="match-scale-score match-scale-score-${match.tone}"
                         style="left: ${scorePosition(result.similarity)}%"
-                        title="Score biométrico ${faceScore(result.similarity)}"
+                        title="Similaridade facial ${similarityPercent(result.similarity)}"
                     ></div>
                 </div>
                 <div class="match-scale-labels">
-                    <span>-1</span>
-                    <span class="match-scale-threshold-label">Limiar ${faceScore(result.matchThreshold)}</span>
-                    <span>+1</span>
+                    <span>0%</span>
+                    <span class="match-scale-threshold-label">Mínimo ${similarityPercent(result.matchThreshold)}</span>
+                    <span>100%</span>
                 </div>
             </div>
         </section>
@@ -1373,7 +1373,7 @@ function renderVerificationResult(
         `}
 
         <div class="metrics-grid demo-metrics-grid">
-            ${metric("Score facial", faceScore(result.similarity))}
+            ${metric("Similaridade facial", similarityPercent(result.similarity))}
             ${metric("Prova de vida", percentage(result.livenessScore))}
             ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
             ${metric("Qualidade", percentage(result.quality.score))}
@@ -1413,8 +1413,10 @@ function technicalResultDetails(
                 ` : ""}
                 ${nativeShadowDetails(result.nativeShadow, result.diagnostics)}
                 <p>
-                    Scores biométricos são sinais técnicos e não representam
-                    porcentagem de certeza.
+                    O índice percentual exibido na interface é uma normalização
+                    linear do score cosseno de -1 a +1 para uma escala de 0 a 100.
+                    Ele facilita a leitura e não representa probabilidade ou certeza
+                    de identidade.
                 </p>
             </div>
         </details>
@@ -1438,7 +1440,7 @@ function faceMatchPresentation(similarity: number, threshold: number): FaceMatch
     if (similarity < threshold) {
         return {
             label: "ABAIXO DO LIMIAR",
-            summary: "O score facial não atingiu o limiar técnico configurado.",
+            summary: "A similaridade facial ficou abaixo do mínimo esperado.",
             tone: "below",
             margin,
             relativeMarginLabel: `${Math.abs(relativeMargin).toFixed(0)}% abaixo do limiar`,
@@ -1448,7 +1450,7 @@ function faceMatchPresentation(similarity: number, threshold: number): FaceMatch
     if (relativeMargin >= 25) {
         return {
             label: "ALTA CORRESPONDÊNCIA",
-            summary: "O score facial está confortavelmente acima do limiar técnico.",
+            summary: "A similaridade facial está confortavelmente acima do mínimo esperado.",
             tone: "high",
             margin,
             relativeMarginLabel: `${relativeMargin.toFixed(0)}% acima do limiar`,
@@ -1467,6 +1469,10 @@ function faceMatchPresentation(similarity: number, threshold: number): FaceMatch
 function scorePosition(value: number): number {
     const clamped = Math.max(-1, Math.min(1, value));
     return ((clamped + 1) / 2) * 100;
+}
+
+function similarityPercent(value: number): string {
+    return `${Math.round(scorePosition(value))}%`;
 }
 
 function signedFaceScore(value: number): string {
