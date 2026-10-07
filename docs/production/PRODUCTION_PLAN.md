@@ -48,6 +48,14 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Orquestração multi-frame portada para C++.
    - ✅ YuNet → quality → PAD → SFace → embeddings → fusion → scoring no Secure Core.
    - ✅ Seleção dos 3 melhores frames próximos e embedding combinado no C++.
+   - ⏳ Correção de integridade do matching referência × captura.
+     - ✅ Identificada causa-raiz do score sentinela `-1`: variantes de referência compactadas pelo tamanho real eram lidas com stride fixo da ABI.
+     - ✅ Secure Core converte explicitamente variantes packed → linhas ABI de 512 floats.
+     - ✅ Matching robusto não trata comparação inválida como cosine `-1`.
+     - ✅ API não permite ausência de comparação válida virar decisão `rejected`; retorna falha técnica e libera nova captura.
+     - ✅ Telemetria registra somente contagens/dimensões dos embeddings quando o matching está indisponível.
+     - ✅ Cliente nativo rejeita embeddings zerados/não-finitos antes da decisão.
+     - ⏳ Validar build do Secure Core, testes Go/Web SDK e nova captura real.
    - ⏳ Validar teste de paridade multi-frame da `.so` contra o baseline Python.
 
 6. ✅ **Retirar Python do runtime**
