@@ -231,6 +231,9 @@ func (handler *Handler) applyAuthoritativeCheckItem(
 	item.FlowType = string(effectiveFlowType(check))
 	item.SubjectID = check.SubjectID
 	item.DisplayName = check.DisplayName
+	if item.DisplayName == "" && check.Document != nil {
+		item.DisplayName = check.Document.Name
+	}
 	if handler.config.DemoMode && check.DemoArtifacts != nil {
 		item.ReferencePhotoDataURL = check.DemoArtifacts.ReferencePhotoDataURL
 		item.CapturedPhotoDataURL = check.DemoArtifacts.CapturedPhotoDataURL
