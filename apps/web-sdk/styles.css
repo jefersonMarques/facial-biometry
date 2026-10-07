@@ -590,3 +590,242 @@ h1 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.02; 
         grid-template-columns: 1fr;
     }
 }
+
+
+/* FaceProof Rododata demo theme */
+.faceproof-public {
+    --fp-accent: #b7ff32;
+    --fp-ink: #10130f;
+    --fp-paper: #f5f8ef;
+    --fp-muted: #687063;
+    --fp-line: rgba(16, 19, 15, 0.11);
+    background: var(--fp-paper);
+    color: var(--fp-ink);
+}
+
+.faceproof-public .demo-public-shell {
+    width: min(calc(100% - 28px), 680px);
+    max-width: 680px;
+    padding: 26px 0 56px;
+}
+
+.faceproof-public .demo-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 42px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .14em;
+}
+
+.faceproof-public .demo-brand-mark {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    background: var(--fp-accent);
+    box-shadow: 0 0 0 4px rgba(183, 255, 50, .18);
+}
+
+.faceproof-public .demo-public-intro {
+    margin-bottom: 18px;
+}
+
+.faceproof-public .demo-public-intro .eyebrow {
+    color: #587500;
+    letter-spacing: .13em;
+}
+
+.faceproof-public .demo-public-intro h1 {
+    max-width: 580px;
+    margin: 9px 0 10px;
+    color: var(--fp-ink);
+    font-size: clamp(32px, 8vw, 48px);
+    line-height: .98;
+    letter-spacing: -.055em;
+}
+
+.faceproof-public .demo-public-intro p {
+    max-width: 520px;
+    color: var(--fp-muted);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.faceproof-public .verification-expiry {
+    margin-top: 14px;
+    background: rgba(16, 19, 15, .055);
+    color: #646b60;
+}
+
+.faceproof-public .demo-stage {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 15px;
+    margin-top: 12px;
+    padding: 20px;
+    border-color: var(--fp-line);
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 18px 52px rgba(16, 19, 15, .065);
+}
+
+.faceproof-public .stage-index {
+    width: 34px;
+    height: 34px;
+    background: var(--fp-ink);
+    color: var(--fp-accent);
+    font-size: 13px;
+}
+
+.faceproof-public .stage-content h2 {
+    color: var(--fp-ink);
+    font-size: 22px;
+}
+
+.faceproof-public .stage-content > p,
+.faceproof-public .stage-status {
+    color: var(--fp-muted);
+}
+
+.faceproof-public .file-drop {
+    border-color: rgba(16, 19, 15, .22);
+    background: var(--fp-paper);
+}
+
+.faceproof-public .file-drop:hover,
+.faceproof-public .file-drop.file-selected {
+    border-color: #83ba19;
+    background: #f1fbdc;
+}
+
+.faceproof-public .button {
+    border-radius: 999px;
+    min-height: 48px;
+    font-size: 14px;
+}
+
+.faceproof-public .button-primary {
+    background: var(--fp-accent);
+    color: var(--fp-ink);
+    box-shadow: 0 8px 22px rgba(136, 188, 29, .18);
+}
+
+.faceproof-public .button-primary:focus-visible {
+    outline: 3px solid rgba(183, 255, 50, .34);
+    outline-offset: 2px;
+}
+
+.faceproof-public .demo-camera {
+    min-height: 520px;
+    border-radius: 22px;
+    background: var(--fp-ink);
+}
+
+.faceproof-public .identity-camera .face-guide.guide-ready {
+    border-color: var(--fp-accent);
+    box-shadow:
+        0 0 0 999px rgba(0, 0, 0, .18),
+        0 0 0 5px rgba(183, 255, 50, .16);
+}
+
+.faceproof-public .camera-dot,
+.faceproof-public .processing-spinner {
+    border-top-color: var(--fp-accent);
+}
+
+.faceproof-public .camera-dot {
+    background: var(--fp-accent);
+    box-shadow: 0 0 14px var(--fp-accent);
+}
+
+.faceproof-public .progress-bar.proximity-green {
+    background: var(--fp-accent);
+}
+
+.faceproof-public .demo-privacy {
+    background: var(--fp-paper);
+    color: var(--fp-muted);
+}
+
+.faceproof-public .demo-privacy strong {
+    color: var(--fp-ink);
+}
+
+.faceproof-public .result-approved {
+    background: #e9ffc1;
+    color: #273700;
+}
+
+.faceproof-public .match-strength-high,
+.faceproof-public .match-strength-pass {
+    background: #efffce;
+    border-color: #d3f48d;
+}
+
+.faceproof-public .match-strength-label {
+    color: #2d4200;
+}
+
+.faceproof-public .match-scale-score-high,
+.faceproof-public .match-scale-score-pass {
+    background: #7dae1d;
+}
+
+.faceproof-public .face-comparison-mark {
+    background: var(--fp-accent);
+    color: var(--fp-ink);
+}
+
+.faceproof-public .demo-capture-result {
+    width: min(220px, 62%);
+    margin: 16px auto 0;
+}
+
+.faceproof-public .demo-capture-result .face-photo-card {
+    border-color: var(--fp-line);
+}
+
+.faceproof-public .demo-result-name {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--fp-ink);
+}
+
+.faceproof-public .demo-metrics-grid .metric {
+    background: var(--fp-paper);
+}
+
+.faceproof-public .technical-details {
+    border-color: var(--fp-line);
+}
+
+@media (min-width: 900px) {
+    .faceproof-public .demo-public-shell {
+        width: min(calc(100% - 48px), 680px);
+        padding-top: 42px;
+    }
+}
+
+@media (max-width: 640px) {
+    .faceproof-public .demo-public-shell {
+        width: min(calc(100% - 20px), 680px);
+        padding-top: 20px;
+    }
+
+    .faceproof-public .demo-brand {
+        margin-bottom: 30px;
+    }
+
+    .faceproof-public .demo-stage {
+        grid-template-columns: 1fr;
+        padding: 16px;
+        border-radius: 20px;
+    }
+
+    .faceproof-public .demo-camera {
+        min-height: 62vh;
+        border-radius: 18px;
+    }
+}
