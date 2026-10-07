@@ -12,7 +12,10 @@ var captureRunIDPattern = regexp.MustCompile(
 	`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
 )
 
-const maxCaptureProtocolDuration = 10 * time.Minute
+const (
+	maxCaptureProtocolDuration = 10 * time.Minute
+	minimumServerCaptureAge    = 1200 * time.Millisecond
+)
 
 func validateCaptureProtocol(protocol domain.CaptureProtocolMetadata) error {
 	if protocol.Version != "1" {
@@ -52,6 +55,25 @@ func validateCaptureProtocolSession(
 	}
 	if protocol.Version != captureSession.CaptureProtocolVersion {
 		return errors.New("capture protocol version does not belong to this session")
+	}
+	return nil
+}
+
+func validateCaptureSessionServerTiming(
+	captureSession domain.CaptureSession,
+	now time.Time,
+) error {
+	if captureSession.CreatedAt.IsZero() || captureSession.ExpiresAt.IsZero() {
+		return errors.New("capture session timing is incomplete")
+	}
+	if now.Before(captureSession.CreatedAt) {
+		return errors.New("capture session server timing is invalid")
+	}
+	if now.Sub(captureSession.CreatedAt) < minimumServerCaptureAge {
+		return errors.New("capture session completed too quickly")
+	}
+	if now.After(captureSession.ExpiresAt) {
+		return errors.New("capture session expired")
 	}
 	return nil
 }
