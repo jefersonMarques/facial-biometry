@@ -23,6 +23,7 @@ func (failure *identityCreateError) Error() string {
 
 func (handler *Handler) createIdentityCheckRecord(
 	ctx context.Context,
+	tenantID string,
 	payload createIdentityCheckRequest,
 ) (createIdentityCheckResponse, error) {
 	if handler.identityChecks == nil || handler.cnhDocuments == nil {
@@ -114,6 +115,7 @@ func (handler *Handler) createIdentityCheckRecord(
 	now := time.Now().UTC()
 	check := identity.Check{
 		ID:                  "chk_" + idValue,
+		TenantID:            strings.TrimSpace(strings.ToLower(tenantID)),
 		ExpectedCPF:         expectedCPF,
 		MinimumDocumentDate: minimumDate.UTC(),
 		CampaignID:          campaignID,
