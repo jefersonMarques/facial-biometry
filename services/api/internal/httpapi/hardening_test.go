@@ -87,3 +87,59 @@ func assertHeader(
 		t.Fatalf("%s = %q, want %q", name, actual, expected)
 	}
 }
+
+func TestIssuerRateLimiterReturns429(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(
+		config.Config{
+			IdentityIssuerKey: []byte(
+				"issuer-key-with-at-least-thirty-two-characters",
+			),
+		},
+		session.NewStore(),
+		security.NewSigner(
+			[]byte("session-secret-with-at-least-thirty-two-characters"),
+		),
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	const authorization = "Bearer issuer-key-with-at-least-thirty-two-characters"
+	for attempt := 0; attempt < 60; attempt++ {
+		request := httptest.NewRequest(
+			http.MethodGet,
+			"/v1/identity/usage",
+			nil,
+		)
+		request.Header.Set("Authorization", authorization)
+		recorder := httptest.NewRecorder()
+
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code == http.StatusTooManyRequests {
+			t.Fatalf("issuer request %d was rate limited too early", attempt+1)
+		}
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/identity/usage",
+		nil,
+	)
+	request.Header.Set("Authorization", authorization)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusTooManyRequests {
+		t.Fatalf(
+			"status = %d, want %d",
+			recorder.Code,
+			http.StatusTooManyRequests,
+		)
+	}
+	if recorder.Header().Get("Retry-After") == "" {
+		t.Fatal("Retry-After header is missing")
+	}
+}
