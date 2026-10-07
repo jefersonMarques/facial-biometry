@@ -583,15 +583,25 @@ int fp_secure_core_reference_jpeg(
     *result = {};
     size_t embedding_size = 0;
     size_t variant_count = 0;
+
+    // The lower vision API returns reference variants tightly packed using
+    // the real embedding dimension. The public Secure Core ABI stores each
+    // variant in a fixed-capacity row, so copy through a packed buffer and
+    // explicitly expand it to the ABI stride after dimensions are known.
+    std::vector<float> packed_variants(
+        FP_SECURE_CORE_EMBEDDING_CAPACITY *
+        FP_SECURE_CORE_MAX_SELECTED_FRAMES,
+        0.0F
+    );
+
     const int code = fp_bio_vision_reference_jpeg(
         core->vision,
         jpeg_data,
         jpeg_size,
         result->embedding,
         FP_SECURE_CORE_EMBEDDING_CAPACITY,
-        &result->variants[0][0],
-        FP_SECURE_CORE_EMBEDDING_CAPACITY *
-            FP_SECURE_CORE_MAX_SELECTED_FRAMES,
+        packed_variants.data(),
+        packed_variants.size(),
         &embedding_size,
         &variant_count,
         &result->face,
@@ -608,10 +618,23 @@ int fp_secure_core_reference_jpeg(
         return code;
     }
 
-    if (embedding_size > FP_SECURE_CORE_EMBEDDING_CAPACITY ||
+    if (embedding_size == 0 ||
+        embedding_size > FP_SECURE_CORE_EMBEDDING_CAPACITY ||
+        variant_count == 0 ||
         variant_count > FP_SECURE_CORE_MAX_SELECTED_FRAMES) {
         set_last_error("reference embedding exceeds Secure Core ABI capacity");
         return -4;
+    }
+
+    for (size_t variant_index = 0;
+         variant_index < variant_count;
+         ++variant_index) {
+        const size_t packed_offset = variant_index * embedding_size;
+        std::copy_n(
+            packed_variants.begin() + packed_offset,
+            embedding_size,
+            result->variants[variant_index]
+        );
     }
 
     result->embedding_size = embedding_size;
