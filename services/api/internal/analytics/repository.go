@@ -156,7 +156,12 @@ type SummaryCheckRow struct {
 }
 
 type CheckListItem struct {
-	CheckID          string     `json:"checkId"`
+	CheckID               string     `json:"checkId"`
+	FlowType              string     `json:"flowType,omitempty"`
+	SubjectID             string     `json:"subjectId,omitempty"`
+	DisplayName           string     `json:"displayName,omitempty"`
+	ReferencePhotoDataURL string     `json:"referencePhotoDataUrl,omitempty"`
+	CapturedPhotoDataURL  string     `json:"capturedPhotoDataUrl,omitempty"`
 	TenantID         string     `json:"tenantId,omitempty"`
 	CampaignID       string     `json:"campaignId,omitempty"`
 	CampaignName     string     `json:"campaignName,omitempty"`
