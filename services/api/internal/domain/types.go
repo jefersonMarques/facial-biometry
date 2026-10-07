@@ -173,8 +173,9 @@ type ReferenceResult struct {
 }
 
 type BiometricTemplate struct {
-	SubjectID      string    `json:"subjectId"`
-	Embedding      []float64 `json:"embedding"`
-	EmbeddingModel string    `json:"embeddingModel"`
-	CreatedAt      time.Time `json:"createdAt"`
+	SubjectID             string    `json:"subjectId"`
+	Embedding             []float64 `json:"embedding"`
+	EmbeddingModel        string    `json:"embeddingModel"`
+	ReferencePhotoDataURL string    `json:"referencePhotoDataUrl,omitempty"`
+	CreatedAt             time.Time `json:"createdAt"`
 }
