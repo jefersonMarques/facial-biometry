@@ -84,10 +84,30 @@ if [ ! -f "$ROOT/.dev/admin-key" ]; then
     chmod 600 "$ROOT/.dev/admin-key"
 fi
 
+DEV_TENANT_REGISTRY="$ROOT/.dev/tenants.json"
+if [ ! -f "$DEV_TENANT_REGISTRY" ]; then
+    DEV_ISSUER_HASH="$(tr -d '\r\n' < "$ROOT/.dev/identity-issuer-key" | sha256sum | awk '{print $1}')"
+    cat > "$DEV_TENANT_REGISTRY" <<EOF
+{
+  "schemaVersion": 1,
+  "tenants": [
+    {
+      "id": "default",
+      "name": "FaceProof Development",
+      "apiKeySha256": "$DEV_ISSUER_HASH",
+      "enabled": true
+    }
+  ]
+}
+EOF
+    chmod 600 "$DEV_TENANT_REGISTRY"
+fi
+
 export FACEPROOF_SESSION_SECRET="${FACEPROOF_SESSION_SECRET:-$(cat "$ROOT/.dev/session-secret")}"
 export FACEPROOF_TEMPLATE_KEY="${FACEPROOF_TEMPLATE_KEY:-$(cat "$ROOT/.dev/template-key")}"
 export FACEPROOF_TEMPLATE_DIR="${FACEPROOF_TEMPLATE_DIR:-$ROOT/data/templates}"
 export FACEPROOF_IDENTITY_ISSUER_KEY="${FACEPROOF_IDENTITY_ISSUER_KEY:-$(cat "$ROOT/.dev/identity-issuer-key")}"
+export FACEPROOF_TENANT_REGISTRY="${FACEPROOF_TENANT_REGISTRY:-$DEV_TENANT_REGISTRY}"
 export FACEPROOF_ADMIN_KEY="${FACEPROOF_ADMIN_KEY:-$(cat "$ROOT/.dev/admin-key")}"
 export FACEPROOF_IDENTITY_DIR="${FACEPROOF_IDENTITY_DIR:-$ROOT/data/identity-checks}"
 export FACEPROOF_IDENTITY_VERIFY_URL="${FACEPROOF_IDENTITY_VERIFY_URL:-http://localhost:5173/verify.html}"
