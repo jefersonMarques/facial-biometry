@@ -121,7 +121,9 @@ O score bruto, limiar e demais sinais permanecem disponíveis em **Detalhes téc
 
 ## Segurança da captura
 
-⏳ A versão atual do modo demo utiliza **Capture Protocol v2**, aguardando validação runtime:
+✅ O build/teste automatizado do modo demo utiliza **Capture Protocol v2**.
+
+⏳ Ainda falta validar a captura real no navegador com o protocolo novo:
 
 - challenge único emitido pelo servidor;
 - marca visual dinâmica `FACEPROOF · XXXXXX`;
