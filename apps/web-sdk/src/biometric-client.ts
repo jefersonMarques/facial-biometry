@@ -119,13 +119,31 @@ export class BiometricClient {
             );
         });
 
-        return this.identityRequest<IdentityCompletionResponse>("/v1/identity/complete", token, {
+        const requestInit: RequestInit = {
             method: "POST",
             headers: {
                 "Idempotency-Key": session.captureRunId,
             },
             body: form,
-        });
+        };
+
+        try {
+            return await this.identityRequest<IdentityCompletionResponse>(
+                "/v1/identity/complete",
+                token,
+                requestInit,
+            );
+        } catch (error) {
+            if (!(error instanceof TypeError)) {
+                throw error;
+            }
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 300));
+            return this.identityRequest<IdentityCompletionResponse>(
+                "/v1/identity/complete",
+                token,
+                requestInit,
+            );
+        }
     }
 
     private async identityRequest<T>(path: string, token: string, init: RequestInit): Promise<T> {
