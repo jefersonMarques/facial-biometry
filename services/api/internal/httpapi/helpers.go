@@ -28,7 +28,8 @@ func (handler *Handler) setSecurityHeaders(writer http.ResponseWriter) {
 
 func (handler *Handler) setCORS(writer http.ResponseWriter) {
 	writer.Header().Set("Access-Control-Allow-Origin", handler.config.AllowedOrigin)
-	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-FaceProof-Identity-Token, Idempotency-Key")
+	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-FaceProof-Identity-Token, X-FaceProof-Upload-SHA256, Idempotency-Key")
+	writer.Header().Set("Access-Control-Expose-Headers", "X-FaceProof-Idempotency-Replayed")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	writer.Header().Set("Vary", "Origin")
 }
