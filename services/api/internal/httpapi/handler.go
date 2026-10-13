@@ -51,6 +51,8 @@ type createSessionResponse struct {
 	Kind                   string    `json:"kind"`
 	CaptureRunID           string    `json:"captureRunId"`
 	CaptureProtocolVersion string    `json:"captureProtocolVersion"`
+	CaptureChallenge       string    `json:"captureChallenge"`
+	WatermarkToken         string    `json:"watermarkToken"`
 	ExpiresAt              time.Time `json:"expiresAt"`
 	CaptureDurationMS    int       `json:"captureDurationMs"`
 	SampleIntervalMS     int       `json:"sampleIntervalMs"`
