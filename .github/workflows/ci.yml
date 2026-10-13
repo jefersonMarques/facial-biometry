@@ -7,7 +7,6 @@ on:
       - main
       - feature/browser-first-capture-v2
       - feature/identity-check-cnh
-      - feature/liveness-core-cpp
   pull_request:
     branches:
       - main
@@ -193,4 +192,6 @@ jobs:
       - name: Verify admin JavaScript syntax
         run: node --check apps/admin/app.js
       - name: Verify committed web bundle
-        run: git diff --exit-code -- apps/web-sdk/dist
+        run: |
+          git diff --exit-code -- apps/web-sdk/dist
+          test -z "$(git ls-files --others --exclude-standard apps/web-sdk/dist)"
