@@ -117,3 +117,17 @@ Essa porcentagem é apenas uma normalização da escala `[-1,+1]` para `[0,100]`
 Ela não representa probabilidade, confiança estatística ou certeza de identidade.
 
 O score bruto, limiar e demais sinais permanecem disponíveis em **Detalhes técnicos**.
+
+
+## Segurança da captura
+
+⏳ A versão atual do modo demo utiliza **Capture Protocol v2**, aguardando validação runtime:
+
+- challenge único emitido pelo servidor;
+- marca visual dinâmica `FACEPROOF · XXXXXX`;
+- marca gravada nos JPEGs de captura;
+- `Capture Seal` SHA-256 encadeado dos frames;
+- sessão single-use;
+- `Idempotency-Key` para retry seguro da conclusão.
+
+A marca visual e o seal são camadas complementares. O navegador não é tratado como raiz de confiança; a decisão continua no FaceProof Server + Secure Core C++.
