@@ -6,7 +6,14 @@ The FaceProof core is biometric capture, liveness, enrollment and 1:1 re-verific
 
 The current repository also includes a Brazilian CNH Digital Identity module that authenticates the signed PDF and VIO payload, extracts an official biometric reference portrait and compares it against a live capture.
 
-See `docs/BROWSER_FIRST_ROADMAP.md` for the SDK, licensing, Control Plane and Go + HTMX Console direction.
+The product is organized around four integration surfaces:
+
+- **FaceProof Server** — Go API, encrypted repositories and the private C++ Secure Core;
+- **FaceProof Web SDK** — browser capture, guidance, WASM evidence and Capture Protocol;
+- **FaceProof Console** — links, verification history and future tenant/API configuration;
+- **Reference Flows** — facial enrollment/re-verification, CNH + face and operator-prepared reference flows.
+
+See `docs/production/PRODUCT_STRUCTURE.md` for the product contract and `docs/BROWSER_FIRST_ROADMAP.md` for the longer SDK/licensing/Control Plane direction.
 
 ## Optional CNH Digital Identity Check
 
@@ -60,7 +67,10 @@ See `docs/IDENTITY_CHECK.md` for the protocol and endpoints.
 - passive PAD plus far/near temporal and scale evidence;
 - multi-frame SFace live embedding;
 - randomized illumination challenge remains available for the legacy enrollment/verification demo, not the Identity Check flow;
-- single-use biometric sessions and server-side challenge reconstruction;
+- single-use biometric sessions and server-issued Capture Protocol v2 challenge;
+- dynamic per-session capture watermark embedded into submitted JPEGs;
+- SHA-256 Capture Seal binding frame bytes, order and phase to the session challenge;
+- persisted completion receipt and Idempotency-Key handling for safe transport retries;
 - YuNet detection, SFace embeddings and MiniFASNet V2 passive PAD;
 - passive PAD fail-closed mode by default;
 - encrypted identity-check/template storage;
@@ -180,6 +190,9 @@ web gateway/API on loopback and keeps the admin gateway off the public route.
 - `docs/IDENTITY_CHECK.md`
 - `docs/ARCHITECTURE.md`
 - `docs/SECURITY.md`
+- `docs/production/CAPTURE_SECURITY.md`
+- `docs/production/PRODUCT_STRUCTURE.md`
+- `docs/production/PRODUCTION_PLAN.md`
 - `docs/BROWSER_FIRST_ROADMAP.md`
 - `THIRD_PARTY_NOTICES.md`
 
@@ -222,7 +235,7 @@ Identity Check now treats the two biometric phases differently:
 - the signed CNH portrait produces a small reference ensemble using mild luminance normalization;
 - each live frame is compared against the reference ensemble and the final similarity is the mean of those quality-selected frame scores.
 
-The UI shows the raw SFace score and configured threshold rather than presenting cosine similarity as a probability.
+The client-facing UI shows a normalized 0–100 similarity index for readability. The raw SFace score and configured threshold remain available under technical details; the normalized percentage is not presented as a probability or certainty of identity.
 
 For the MVP result screen, the browser also shows:
 - basic signed CNH data: name, masked CPF, birth date, category, validity and issuing state when available;
