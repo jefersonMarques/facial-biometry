@@ -49,13 +49,16 @@ export async function buildCaptureSeal(
     };
 }
 
-async function sha256Hex(data: BufferSource): Promise<string> {
+async function sha256Hex(data: ArrayBuffer): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", data);
     return Array.from(new Uint8Array(digest))
         .map((value) => value.toString(16).padStart(2, "0"))
         .join("");
 }
 
-function utf8(value: string): Uint8Array {
-    return new TextEncoder().encode(value);
+function utf8(value: string): ArrayBuffer {
+    const encoded = new TextEncoder().encode(value);
+    const copy = new Uint8Array(encoded.byteLength);
+    copy.set(encoded);
+    return copy.buffer;
 }
