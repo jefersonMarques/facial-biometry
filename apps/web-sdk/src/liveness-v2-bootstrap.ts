@@ -1,5 +1,6 @@
 import {
     CAPTURE_LIFECYCLE_EVENT,
+    CAPTURE_PROTOCOL_VERSION,
     type CaptureLifecycleEventDetail,
     type CaptureLifecycleState,
 } from "./capture-lifecycle.js";
@@ -133,7 +134,7 @@ if (video && biometryPanel) {
     };
 
     const applyLifecycle = (detail: CaptureLifecycleEventDetail): void => {
-        if (detail.protocolVersion !== "1" || !detail.runId) {
+        if (detail.protocolVersion !== CAPTURE_PROTOCOL_VERSION || !detail.runId) {
             return;
         }
         if (
