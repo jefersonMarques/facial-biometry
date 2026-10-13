@@ -17,6 +17,7 @@ const FIRST_CAPTURE_MAX_GUIDE_SAMPLES = 8;
 const NEAR_HOLD_SECONDS = 3;
 const LOCAL_GUIDE_MAX_AGE_MS = 650;
 const LOCAL_GUIDE_FALLBACK_AFTER_MS = 1_500;
+const CONFIRMED_VIEW_VISIBLE_MS = 3_000;
 const SERVER_PHASE_GUIDE = {
     far: {
         idealMin: 0.31,
@@ -70,10 +71,22 @@ const faceGuide = requiredElement("faceGuide");
 const guidePhaseText = requiredElement("guidePhaseText");
 const captureFlash = requiredElement("captureFlash");
 const processingOverlay = requiredElement("processingOverlay");
+const flowEyebrow = requiredElement("flowEyebrow");
+const flowTitle = requiredElement("flowTitle");
+const flowSubtitle = requiredElement("flowSubtitle");
+const biometryStageIndex = requiredElement("biometryStageIndex");
+const finalStageIndex = requiredElement("finalStageIndex");
+const biometryTitle = requiredElement("biometryTitle");
+const biometryIntro = requiredElement("biometryIntro");
+const privacyText = requiredElement("privacyText");
+const processingText = requiredElement("processingText");
+const captureSealMark = requiredElement("captureSealMark");
 const camera = new CameraCapture(video);
 const localCaptureGate = new LocalCaptureGate();
 const captureLifecycle = new CaptureLifecycle();
 let identityToken = "";
+let currentFlow = "cnh";
+let currentDisplayName = "";
 let busy = false;
 let autoBiometryScheduled = false;
 let manualReadyResolver = null;
@@ -81,6 +94,11 @@ let currentBiometryPhase = "far";
 let documentDetails = null;
 let latestLocalGuide = null;
 let bestCaptureObjectURL = "";
+let viewConfirmed = false;
+let accumulatedVisibleMS = 0;
+let visibleStartedAt = null;
+let viewConfirmationTimer = null;
+let currentCaptureWatermark = "";
 const handleLocalGuide = (event) => {
     const detail = event.detail;
     if (detail?.guide) {
@@ -116,6 +134,11 @@ startButton.addEventListener("click", () => {
 });
 window.addEventListener("beforeunload", () => {
     window.removeEventListener("faceproof:local-guide", handleLocalGuide);
+    document.removeEventListener("visibilitychange", handleViewVisibilityChange);
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+        viewConfirmationTimer = null;
+    }
     if (bestCaptureObjectURL) {
         URL.revokeObjectURL(bestCaptureObjectURL);
     }
@@ -131,9 +154,82 @@ async function initialize() {
     try {
         const status = await client.getIdentityCheck(identityToken);
         renderStatus(status);
+        startConfirmedViewTracking();
     }
     catch (error) {
         showFatal(errorMessage(error));
+    }
+}
+function startConfirmedViewTracking() {
+    if (viewConfirmed) {
+        return;
+    }
+    document.addEventListener("visibilitychange", handleViewVisibilityChange);
+    if (document.visibilityState === "visible") {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+    }
+}
+function handleViewVisibilityChange() {
+    if (viewConfirmed) {
+        return;
+    }
+    if (document.visibilityState === "visible") {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+        return;
+    }
+    accumulateVisibleTime();
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+        viewConfirmationTimer = null;
+    }
+}
+function accumulateVisibleTime() {
+    if (visibleStartedAt === null) {
+        return;
+    }
+    accumulatedVisibleMS += Math.max(0, performance.now() - visibleStartedAt);
+    visibleStartedAt = null;
+}
+function scheduleViewConfirmation() {
+    if (viewConfirmed || document.visibilityState !== "visible") {
+        return;
+    }
+    if (viewConfirmationTimer !== null) {
+        window.clearTimeout(viewConfirmationTimer);
+    }
+    const elapsedCurrent = visibleStartedAt === null
+        ? 0
+        : Math.max(0, performance.now() - visibleStartedAt);
+    const remaining = Math.max(0, CONFIRMED_VIEW_VISIBLE_MS - accumulatedVisibleMS - elapsedCurrent);
+    viewConfirmationTimer = window.setTimeout(() => {
+        void confirmVisibleView();
+    }, remaining);
+}
+async function confirmVisibleView() {
+    viewConfirmationTimer = null;
+    if (viewConfirmed || document.visibilityState !== "visible") {
+        return;
+    }
+    accumulateVisibleTime();
+    if (accumulatedVisibleMS < CONFIRMED_VIEW_VISIBLE_MS) {
+        visibleStartedAt = performance.now();
+        scheduleViewConfirmation();
+        return;
+    }
+    try {
+        await client.confirmIdentityView(identityToken, Math.round(accumulatedVisibleMS));
+        viewConfirmed = true;
+        document.removeEventListener("visibilitychange", handleViewVisibilityChange);
+    }
+    catch {
+        visibleStartedAt = performance.now();
+        window.setTimeout(() => {
+            if (!viewConfirmed && document.visibilityState === "visible") {
+                scheduleViewConfirmation();
+            }
+        }, 1_000);
     }
 }
 async function uploadDocument() {
@@ -263,6 +359,11 @@ async function runBiometry() {
         biometricStatus.textContent = "Posicione o rosto dentro do oval.";
         while (!completed) {
             const session = await client.createIdentitySession(identityToken);
+            currentCaptureWatermark = session.watermarkToken
+                ? `FACEPROOF · ${session.watermarkToken}`
+                : "FACEPROOF";
+            captureSealMark.textContent = currentCaptureWatermark;
+            captureSealMark.hidden = false;
             captureLifecycle.begin(session.captureRunId, session.captureProtocolVersion);
             localCaptureGate.reset();
             currentBiometryPhase = "far";
@@ -322,6 +423,8 @@ async function runBiometry() {
     finally {
         if (completed) {
             camera.stop();
+            captureSealMark.hidden = true;
+            currentCaptureWatermark = "";
         }
         busy = false;
     }
@@ -550,7 +653,7 @@ async function capturePhase(phase, relaxedQuality = false) {
             relaxedQuality = await waitForFacePhase(phase);
             continue;
         }
-        const snapshot = await camera.captureBlob(captureWidth, captureJPEGQuality);
+        const snapshot = await camera.captureBlob(captureWidth, captureJPEGQuality, currentCaptureWatermark);
         frames.push({
             imageBlob: snapshot.imageBlob,
             phase,
@@ -815,12 +918,80 @@ async function waitForManualReady() {
     startButton.hidden = true;
     startButton.disabled = true;
 }
+function configurePublicFlow(status) {
+    currentFlow = status.flowType || "cnh";
+    currentDisplayName = status.displayName?.trim() ?? "";
+    const isCNH = currentFlow === "cnh";
+    const isEnrollment = currentFlow === "face_enrollment";
+    document.body.dataset.flow = currentFlow;
+    biometryStageIndex.textContent = isCNH ? "2" : "1";
+    finalStageIndex.textContent = isCNH ? "3" : "2";
+    switch (currentFlow) {
+        case "face_enrollment":
+            flowEyebrow.textContent = "CADASTRO FACIAL";
+            flowTitle.textContent = currentDisplayName
+                ? `Cadastre seu rosto, ${currentDisplayName}`
+                : "Cadastre seu rosto";
+            flowSubtitle.textContent = "Duas capturas rápidas para criar sua referência facial.";
+            biometryTitle.textContent = "Cadastro facial";
+            biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+            processingText.textContent = "Validando prova de vida e criando sua referência facial.";
+            privacyText.textContent = "O cadastro salva um template biométrico criptografado.";
+            documentDetails = null;
+            sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+            break;
+        case "face_verification":
+            flowEyebrow.textContent = "VALIDAÇÃO FACIAL";
+            flowTitle.textContent = currentDisplayName
+                ? `Olá, ${currentDisplayName}`
+                : "Confirme sua identidade";
+            flowSubtitle.textContent = "Vamos comparar sua captura com o cadastro facial existente.";
+            biometryTitle.textContent = "Confirme seu rosto";
+            biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+            processingText.textContent = "Validando prova de vida e correspondência facial.";
+            privacyText.textContent = "A captura é usada para validar o cadastro facial selecionado.";
+            documentDetails = null;
+            sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+            break;
+        case "photo_verification":
+            flowEyebrow.textContent = "FOTO DE REFERÊNCIA";
+            flowTitle.textContent = currentDisplayName
+                ? `Confirme sua identidade, ${currentDisplayName}`
+                : "Confirme sua identidade";
+            flowSubtitle.textContent = "Vamos comparar sua captura com a foto de referência.";
+            biometryTitle.textContent = "Biometria facial";
+            biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+            processingText.textContent = "Validando prova de vida e correspondência facial.";
+            privacyText.textContent = "A captura é usada somente para esta validação.";
+            documentDetails = null;
+            sessionStorage.removeItem(DOCUMENT_PREVIEW_STORAGE_KEY);
+            break;
+        case "cnh":
+        default:
+            flowEyebrow.textContent = "CNH + BIOMETRIA";
+            flowTitle.textContent = "Confirme sua identidade";
+            flowSubtitle.textContent = "Envie sua CNH Digital e conclua a biometria facial.";
+            biometryTitle.textContent = "Biometria facial";
+            biometryIntro.textContent = "Posicione o rosto no oval e siga as orientações.";
+            processingText.textContent = "Validando prova de vida e correspondência com a CNH.";
+            privacyText.textContent = "O documento e a captura são usados para esta verificação.";
+            break;
+    }
+    if (!isCNH && isEnrollment) {
+        documentPanel.hidden = true;
+    }
+}
 function renderStatus(status) {
+    configurePublicFlow(status);
     expiresText.textContent = formatExpiration(status.expiresAt);
     processingOverlay.hidden = true;
     switch (status.status) {
         case "pending_document":
         case "processing_document":
+            if (currentFlow !== "cnh") {
+                showFatal("Este link biométrico está em um estado inválido.");
+                return;
+            }
             documentPanel.hidden = false;
             biometryPanel.hidden = true;
             finalPanel.hidden = true;
@@ -854,6 +1025,52 @@ function renderIdentityResult(result, capturedFrames) {
     documentPanel.hidden = true;
     biometryPanel.hidden = true;
     finalPanel.hidden = false;
+    currentFlow = result.flowType || currentFlow;
+    currentDisplayName = result.displayName?.trim() || currentDisplayName;
+    if (bestCaptureObjectURL) {
+        URL.revokeObjectURL(bestCaptureObjectURL);
+        bestCaptureObjectURL = "";
+    }
+    const bestCaptureBlob = capturedFrames[result.bestFrameIndex]?.imageBlob;
+    if (bestCaptureBlob) {
+        bestCaptureObjectURL = URL.createObjectURL(bestCaptureBlob);
+    }
+    if (currentFlow === "face_enrollment") {
+        renderEnrollmentResult(result, bestCaptureObjectURL);
+        return;
+    }
+    renderVerificationResult(result, bestCaptureObjectURL);
+}
+function renderEnrollmentResult(result, bestCapture) {
+    const decisionLabel = {
+        approved: "ROSTO CADASTRADO",
+        review: "CADASTRO EM REVISÃO",
+        rejected: "CADASTRO NÃO CONCLUÍDO",
+    }[result.decision];
+    resultPanel.innerHTML = `
+        <div class="result-header result-${escapeHtml(result.decision)}">
+            <span>${escapeHtml(decisionLabel)}</span>
+        </div>
+
+        ${currentDisplayName
+        ? `<div class="demo-result-name">${escapeHtml(currentDisplayName)}</div>`
+        : ""}
+
+        <div class="demo-capture-result">
+            ${photoCard("Captura cadastrada", bestCapture)}
+        </div>
+
+        <div class="metrics-grid demo-metrics-grid">
+            ${metric("Prova de vida", percentage(result.livenessScore))}
+            ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
+            ${metric("Qualidade", percentage(result.quality.score))}
+            ${metric("Template", result.templateStored ? "SALVO" : "NÃO SALVO")}
+        </div>
+
+        ${technicalResultDetails(result, false)}
+    `;
+}
+function renderVerificationResult(result, bestCapture) {
     const decisionLabel = {
         approved: "IDENTIDADE CONFIRMADA",
         review: result.similarity >= result.matchThreshold
@@ -865,21 +1082,19 @@ function renderIdentityResult(result, capturedFrames) {
         ...result.document,
         ...(documentDetails ?? {}),
     };
-    if (bestCaptureObjectURL) {
-        URL.revokeObjectURL(bestCaptureObjectURL);
-        bestCaptureObjectURL = "";
-    }
-    const bestCaptureBlob = capturedFrames[result.bestFrameIndex]?.imageBlob;
-    if (bestCaptureBlob) {
-        bestCaptureObjectURL = URL.createObjectURL(bestCaptureBlob);
-    }
-    const bestCapture = bestCaptureObjectURL;
-    const referencePhoto = documentDetails?.referencePhotoDataUrl ?? "";
+    const isCNH = currentFlow === "cnh";
+    const referencePhoto = isCNH
+        ? documentDetails?.referencePhotoDataUrl ?? ""
+        : "";
     const match = faceMatchPresentation(result.similarity, result.matchThreshold);
     resultPanel.innerHTML = `
         <div class="result-header result-${escapeHtml(result.decision)}">
             <span>${escapeHtml(decisionLabel)}</span>
         </div>
+
+        ${currentDisplayName
+        ? `<div class="demo-result-name">${escapeHtml(currentDisplayName)}</div>`
+        : ""}
 
         <section class="match-strength match-strength-${match.tone}">
             <span class="match-strength-eyebrow">Correspondência facial</span>
@@ -891,96 +1106,98 @@ function renderIdentityResult(result, capturedFrames) {
             <div
                 class="match-scale"
                 style="--threshold-position: ${scorePosition(result.matchThreshold)}%"
-                aria-label="Posição do score facial em relação ao limiar técnico"
+                aria-label="Índice de similaridade facial em relação ao mínimo esperado"
             >
                 <div class="match-scale-track">
                     <div
                         class="match-scale-threshold"
                         style="left: ${scorePosition(result.matchThreshold)}%"
-                        title="Limiar técnico ${faceScore(result.matchThreshold)}"
+                        title="Mínimo esperado ${similarityPercent(result.matchThreshold)}"
                     ></div>
                     <div
                         class="match-scale-score match-scale-score-${match.tone}"
                         style="left: ${scorePosition(result.similarity)}%"
-                        title="Score biométrico ${faceScore(result.similarity)}"
+                        title="Similaridade facial ${similarityPercent(result.similarity)}"
                     ></div>
                 </div>
                 <div class="match-scale-labels">
-                    <span>-1</span>
-                    <span class="match-scale-threshold-label">Limiar ${faceScore(result.matchThreshold)}</span>
-                    <span>+1</span>
-                </div>
-            </div>
-
-            <div class="match-margin-grid">
-                <div>
-                    <span>Margem sobre o limiar</span>
-                    <strong>${signedFaceScore(match.margin)}</strong>
-                </div>
-                <div>
-                    <span>Distância relativa</span>
-                    <strong>${escapeHtml(match.relativeMarginLabel)}</strong>
+                    <span>0%</span>
+                    <span class="match-scale-threshold-label">Mínimo ${similarityPercent(result.matchThreshold)}</span>
+                    <span>100%</span>
                 </div>
             </div>
         </section>
 
-        <div class="identity-profile">
-            <div class="identity-summary">
-                <h3>Dados da CNH</h3>
-                <div class="identity-data-grid">
-                    ${dataLine("Nome", details.name)}
-                    ${dataLine("CPF", details.cpf)}
-                    ${dataLine("Nascimento", details.birthDate)}
-                    ${dataLine("Categoria", details.category)}
-                    ${dataLine("Validade", details.expiryDate)}
-                    ${dataLine("UF de emissão", details.issuingUf)}
+        ${isCNH ? `
+            <div class="identity-profile">
+                <div class="identity-summary">
+                    <h3>Dados da CNH</h3>
+                    <div class="identity-data-grid">
+                        ${dataLine("Nome", details.name)}
+                        ${dataLine("CPF", details.cpf)}
+                        ${dataLine("Nascimento", details.birthDate)}
+                        ${dataLine("Categoria", details.category)}
+                        ${dataLine("Validade", details.expiryDate)}
+                        ${dataLine("UF de emissão", details.issuingUf)}
+                    </div>
+                </div>
+
+                <div class="face-comparison">
+                    ${photoCard("Foto da CNH", referencePhoto)}
+                    <div class="face-comparison-mark" aria-hidden="true">↔</div>
+                    ${photoCard("Melhor captura", bestCapture)}
                 </div>
             </div>
-
-            <div class="face-comparison">
-                ${photoCard("Foto da CNH", referencePhoto)}
-                <div class="face-comparison-mark" aria-hidden="true">↔</div>
+        ` : `
+            <div class="demo-capture-result">
                 ${photoCard("Melhor captura", bestCapture)}
             </div>
-        </div>
+        `}
 
-        <div class="metrics-grid">
+        <div class="metrics-grid demo-metrics-grid">
+            ${metric("Similaridade facial", similarityPercent(result.similarity))}
             ${metric("Prova de vida", percentage(result.livenessScore))}
             ${metric("Passive PAD", percentage(result.signals.passivePad.score))}
             ${metric("Qualidade", percentage(result.quality.score))}
-            ${metric("Captura guiada", percentage(result.signals.guidedCapture.score))}
         </div>
 
+        ${technicalResultDetails(result, true)}
+
+        ${isCNH ? `
+            <div class="identity-checks">
+                ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
+                ${checkLine("Assinatura VIO", result.document.vioSignatureValid)}
+                ${checkLine("CPF esperado", result.document.cpfMatch)}
+                ${checkLine("Data mínima do documento", result.document.freshnessValid)}
+            </div>
+        ` : ""}
+    `;
+}
+function technicalResultDetails(result, includeMatch) {
+    return `
         <details class="technical-details">
             <summary>Detalhes técnicos</summary>
             <div class="technical-details-body">
-                <div class="technical-row">
-                    <span>Score biométrico bruto</span>
-                    <strong>${faceScore(result.similarity)}</strong>
-                </div>
-                <div class="technical-row">
-                    <span>Limiar configurado</span>
-                    <strong>${faceScore(result.matchThreshold)}</strong>
-                </div>
-                <div class="technical-row">
-                    <span>Margem</span>
-                    <strong>${signedFaceScore(match.margin)}</strong>
-                </div>
-                ${frameScoreLine(result.frameSimilarities)}
+                ${includeMatch ? `
+                    <div class="technical-row">
+                        <span>Score biométrico bruto</span>
+                        <strong>${faceScore(result.similarity)}</strong>
+                    </div>
+                    <div class="technical-row">
+                        <span>Limiar configurado</span>
+                        <strong>${faceScore(result.matchThreshold)}</strong>
+                    </div>
+                    ${frameScoreLine(result.frameSimilarities)}
+                ` : ""}
                 ${nativeShadowDetails(result.nativeShadow, result.diagnostics)}
                 <p>
-                    O score facial é uma similaridade cosseno do modelo biométrico.
-                    Ele não representa uma porcentagem de certeza ou probabilidade.
+                    O índice percentual exibido na interface é uma normalização
+                    linear do score cosseno de -1 a +1 para uma escala de 0 a 100.
+                    Ele facilita a leitura e não representa probabilidade ou certeza
+                    de identidade.
                 </p>
             </div>
         </details>
-
-        <div class="identity-checks">
-            ${checkLine("Assinatura digital do PDF", result.document.signatureValid)}
-            ${checkLine("Assinatura VIO", result.document.vioSignatureValid)}
-            ${checkLine("CPF esperado", result.document.cpfMatch)}
-            ${checkLine("Data mínima do documento", result.document.freshnessValid)}
-        </div>
     `;
 }
 function faceMatchPresentation(similarity, threshold) {
@@ -991,7 +1208,7 @@ function faceMatchPresentation(similarity, threshold) {
     if (similarity < threshold) {
         return {
             label: "ABAIXO DO LIMIAR",
-            summary: "O score facial não atingiu o limiar técnico configurado.",
+            summary: "A similaridade facial ficou abaixo do mínimo esperado.",
             tone: "below",
             margin,
             relativeMarginLabel: `${Math.abs(relativeMargin).toFixed(0)}% abaixo do limiar`,
@@ -1000,7 +1217,7 @@ function faceMatchPresentation(similarity, threshold) {
     if (relativeMargin >= 25) {
         return {
             label: "ALTA CORRESPONDÊNCIA",
-            summary: "O score facial está confortavelmente acima do limiar técnico.",
+            summary: "A similaridade facial está confortavelmente acima do mínimo esperado.",
             tone: "high",
             margin,
             relativeMarginLabel: `${relativeMargin.toFixed(0)}% acima do limiar`,
@@ -1017,6 +1234,9 @@ function faceMatchPresentation(similarity, threshold) {
 function scorePosition(value) {
     const clamped = Math.max(-1, Math.min(1, value));
     return ((clamped + 1) / 2) * 100;
+}
+function similarityPercent(value) {
+    return `${Math.round(scorePosition(value))}%`;
 }
 function signedFaceScore(value) {
     const prefix = value >= 0 ? "+" : "";
@@ -1046,12 +1266,20 @@ function nativeShadowDetails(shadow, diagnostics) {
     if (!shadow) {
         return nativeShadowDiagnosticFallback(diagnostics);
     }
+    const errors = shadow.errors?.length
+        ? `<div class="technical-row"><span>Secure Core warnings</span><strong>${escapeHtml(shadow.errors.join(" · "))}</strong></div>`
+        : "";
+    if (shadow.status.toLowerCase() === "authority") {
+        return `
+            <div class="technical-row"><span>Secure Core C++</span><strong>AUTHORITY</strong></div>
+            <div class="technical-row"><span>Frames processados nativamente</span><strong>${shadow.nativeFrames}</strong></div>
+            <div class="technical-row"><span>Comparação Python</span><strong>desativada</strong></div>
+            ${errors}
+        `;
+    }
     const padValue = shadow.padComparedFrames > 0
         ? `${shadow.padComparedFrames} frames · Δ máx. ${shadowDelta(shadow.passivePadMaxDelta)}`
         : "não comparado";
-    const errors = shadow.errors?.length
-        ? `<div class="technical-row"><span>Shadow warnings</span><strong>${escapeHtml(shadow.errors.join(" · "))}</strong></div>`
-        : "";
     return `
         <div class="technical-row"><span>Secure Core C++ shadow</span><strong>${escapeHtml(shadow.status.toUpperCase())}</strong></div>
         <div class="technical-row"><span>Frames Python × C++</span><strong>${shadow.pythonFrames} × ${shadow.nativeFrames}</strong></div>
@@ -1099,12 +1327,24 @@ function faceScore(value) {
     return value.toFixed(3);
 }
 function renderFinalStatus(status) {
-    const labels = {
+    const enrollmentLabels = {
+        approved: "Rosto cadastrado.",
+        review: "Cadastro em revisão.",
+        rejected: "Cadastro não concluído.",
+    };
+    const verificationLabels = {
         approved: "Identidade confirmada.",
         review: "A verificação será analisada.",
         rejected: "Não foi possível confirmar a identidade.",
     };
-    resultPanel.innerHTML = `<div class="result-header result-${status}"><span>${labels[status]}</span></div>`;
+    const labels = currentFlow === "face_enrollment"
+        ? enrollmentLabels
+        : verificationLabels;
+    resultPanel.innerHTML = `
+        <div class="result-header result-${status}">
+            <span>${labels[status]}</span>
+        </div>
+    `;
 }
 function showFatal(message) {
     camera.stop();
@@ -1164,6 +1404,9 @@ function friendlyDocumentError(message) {
     return generic;
 }
 function friendlyBiometryError(message) {
+    if (message.includes("biometric comparison unavailable")) {
+        return "A comparação facial não pôde ser concluída. Tente novamente.";
+    }
     if (isInfrastructureBiometryError(message)) {
         return "A análise demorou mais que o esperado ou a conexão com o servidor foi interrompida. Tente novamente.";
     }
@@ -1185,7 +1428,8 @@ function isInfrastructureBiometryError(message) {
     return message.includes("HTTP 502") ||
         message.includes("HTTP 503") ||
         message.includes("FaceProof API unavailable") ||
-        message.includes("biometric engine failed");
+        message.includes("biometric engine failed") ||
+        message.includes("biometric comparison unavailable");
 }
 function formatExpiration(value) {
     const date = new Date(value);
