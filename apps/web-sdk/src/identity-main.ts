@@ -128,6 +128,7 @@ const biometryTitle = requiredElement<HTMLElement>("biometryTitle");
 const biometryIntro = requiredElement<HTMLElement>("biometryIntro");
 const privacyText = requiredElement<HTMLElement>("privacyText");
 const processingText = requiredElement<HTMLElement>("processingText");
+const captureSealMark = requiredElement<HTMLElement>("captureSealMark");
 
 const camera = new CameraCapture(video);
 const localCaptureGate = new LocalCaptureGate();
@@ -146,6 +147,7 @@ let viewConfirmed = false;
 let accumulatedVisibleMS = 0;
 let visibleStartedAt: number | null = null;
 let viewConfirmationTimer: number | null = null;
+let currentCaptureWatermark = "";
 
 const handleLocalGuide = (event: Event): void => {
     const detail = (event as CustomEvent<{ guide?: LocalFaceGuideMetrics }>).detail;
@@ -460,6 +462,11 @@ async function runBiometry(): Promise<void> {
 
         while (!completed) {
             const session = await client.createIdentitySession(identityToken);
+            currentCaptureWatermark = session.watermarkToken
+                ? `FACEPROOF · ${session.watermarkToken}`
+                : "FACEPROOF";
+            captureSealMark.textContent = currentCaptureWatermark;
+            captureSealMark.hidden = false;
             captureLifecycle.begin(
                 session.captureRunId,
                 session.captureProtocolVersion,
@@ -530,6 +537,8 @@ async function runBiometry(): Promise<void> {
     } finally {
         if (completed) {
             camera.stop();
+            captureSealMark.hidden = true;
+            currentCaptureWatermark = "";
         }
         busy = false;
     }
@@ -797,7 +806,11 @@ async function capturePhase(
             continue;
         }
 
-        const snapshot = await camera.captureBlob(captureWidth, captureJPEGQuality);
+        const snapshot = await camera.captureBlob(
+            captureWidth,
+            captureJPEGQuality,
+            currentCaptureWatermark,
+        );
         frames.push({
             imageBlob: snapshot.imageBlob,
             phase,
