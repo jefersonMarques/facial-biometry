@@ -376,18 +376,36 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 	if !ok {
 		return
 	}
+
+	payload, err := decodeIdentityCompleteRequest(writer, request)
+	if err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	idempotencyKey, err := identityCompletionIdempotencyKey(request, payload)
+	if err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	requestSHA256, err := identityCompletionRequestSHA256(payload)
+	if err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	if handler.replayIdentityCompletionIfAvailable(
+		writer,
+		check,
+		idempotencyKey,
+		requestSHA256,
+	) {
+		return
+	}
 	if time.Now().After(check.ExpiresAt) {
 		handler.writeError(writer, http.StatusGone, "identity check expired")
 		return
 	}
 	if check.Status != identity.StatusBiometryPending {
 		handler.writeError(writer, http.StatusConflict, "identity check is not awaiting biometrics")
-		return
-	}
-
-	payload, err := decodeIdentityCompleteRequest(writer, request)
-	if err != nil {
-		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 	if payload.SessionID == "" || payload.SessionID != check.CaptureSessionID {
@@ -502,6 +520,8 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			payload,
 			normalizedGuidedFrames,
 			result,
+			idempotencyKey,
+			requestSHA256,
 		)
 		return
 	}
