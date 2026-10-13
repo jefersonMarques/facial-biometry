@@ -1,4 +1,4 @@
-import { CAPTURE_LIFECYCLE_EVENT, } from "./capture-lifecycle.js";
+import { CAPTURE_LIFECYCLE_EVENT, CAPTURE_PROTOCOL_VERSION, } from "./capture-lifecycle.js";
 import { ExperimentalGeometryLiveness, } from "./liveness-v2.js";
 const video = document.getElementById("camera");
 const biometryPanel = document.getElementById("biometryPanel");
@@ -66,7 +66,7 @@ if (video && biometryPanel) {
         renderFinalDiagnostics(resultPanel, finalPanel, summary, runtime, wasm, latestServerGuide, localGuideHistory);
     };
     const applyLifecycle = (detail) => {
-        if (detail.protocolVersion !== "1" || !detail.runId) {
+        if (detail.protocolVersion !== CAPTURE_PROTOCOL_VERSION || !detail.runId) {
             return;
         }
         if (detail.runId === runtime.lifecycleRunId &&
