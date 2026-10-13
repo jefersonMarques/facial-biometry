@@ -16,6 +16,8 @@ type CaptureSession struct {
 	Kind                   SessionKind
 	CaptureRunID           string
 	CaptureProtocolVersion string
+	CaptureChallenge       string
+	WatermarkToken         string
 	IlluminationPattern  []float64
 	CaptureDurationMS    int
 	SampleIntervalMS     int
@@ -32,6 +34,13 @@ type CaptureProtocolMetadata struct {
 	FarStartedAtUnixMS  int64  `json:"farStartedAtUnixMs"`
 	NearStartedAtUnixMS int64  `json:"nearStartedAtUnixMs"`
 	SubmittingAtUnixMS  int64  `json:"submittingAtUnixMs"`
+}
+
+type CaptureSeal struct {
+	Version       string   `json:"version"`
+	Challenge     string   `json:"challenge"`
+	FrameSHA256   []string `json:"frameSha256"`
+	ChainSHA256   string   `json:"chainSha256"`
 }
 
 type RuntimeFingerprint struct {
