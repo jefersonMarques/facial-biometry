@@ -20,7 +20,9 @@ export interface SessionResponse {
     sessionToken: string;
     kind: SessionKind;
     captureRunId: string;
-    captureProtocolVersion: "1";
+    captureProtocolVersion: "1" | "2";
+    captureChallenge: string;
+    watermarkToken: string;
     expiresAt: string;
     captureDurationMs: number;
     sampleIntervalMs: number;
@@ -29,12 +31,19 @@ export interface SessionResponse {
 }
 
 export interface CaptureProtocolMetadata {
-    version: "1";
+    version: "1" | "2";
     runId: string;
     startedAtUnixMs: number;
     farStartedAtUnixMs: number;
     nearStartedAtUnixMs: number;
     submittingAtUnixMs: number;
+}
+
+export interface CaptureSeal {
+    version: "1";
+    challenge: string;
+    frameSha256: string[];
+    chainSha256: string;
 }
 
 export interface RuntimeFingerprint {
