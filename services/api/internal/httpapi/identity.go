@@ -614,6 +614,40 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		normalizedGuidedFrames,
 		result.BestFrameIndex,
 	)
+
+	response := identityCompleteResponse{
+		ID:                check.ID,
+		Status:            status,
+		Decision:          decision,
+		LivenessScore:     result.LivenessScore,
+		FlowType:          effectiveFlowType(check),
+		DisplayName:       check.DisplayName,
+		Similarity:        similarity,
+		FrameSimilarities: append([]float64(nil), frameSimilarities...),
+		BestFrameIndex:    result.BestFrameIndex,
+		MatchThreshold:    handler.config.MatchThreshold,
+		Signals: signalResponse{
+			PassivePAD:     result.PassivePAD,
+			TemporalMotion: result.TemporalMotion,
+			Illumination:   result.Illumination,
+			GuidedCapture:  result.GuidedCapture,
+		},
+		Quality:       result.Quality,
+		Diagnostics:   handler.publicDiagnostics(request, result.Diagnostics),
+		NativeShadow:  handler.publicNativeShadow(request, result.NativeShadow),
+		Document:      identityDocumentDetailsFromEvidence(check.Document, check.ExpectedCPF),
+	}
+	receipt, err := newIdentityCompletionReceipt(
+		payload.SessionID,
+		idempotencyKey,
+		requestSHA256,
+		response,
+	)
+	if err != nil {
+		handler.writeError(writer, http.StatusInternalServerError, "could not persist completion receipt")
+		return
+	}
+
 	updated, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
 		if current.Status != identity.StatusBiometryPending || current.CaptureSessionID != payload.SessionID {
 			return errIdentityInvalidState
@@ -628,10 +662,12 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		current.FaceSimilarity = similarity
 		current.CompletedAt = &completedAt
 		current.CaptureSessionID = ""
+		current.LastErrorCode = ""
 		runtimeCopy := payload.Runtime
 		current.RuntimeFingerprint = &runtimeCopy
 		protocolCopy := payload.CaptureProtocol
 		current.CaptureProtocol = &protocolCopy
+		current.CompletionReceipt = receipt
 		if handler.config.DemoMode {
 			if current.DemoArtifacts == nil {
 				current.DemoArtifacts = &identity.DemoArtifacts{}
@@ -662,28 +698,6 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		payload.Geometry,
 	)
 
-	response := identityCompleteResponse{
-		ID:             updated.ID,
-		Status:         updated.Status,
-		Decision:       decision,
-		LivenessScore:  result.LivenessScore,
-		FlowType:       effectiveFlowType(updated),
-		DisplayName:    updated.DisplayName,
-		Similarity:        similarity,
-		FrameSimilarities: append([]float64(nil), frameSimilarities...),
-		BestFrameIndex:    result.BestFrameIndex,
-		MatchThreshold:    handler.config.MatchThreshold,
-		Signals: signalResponse{
-			PassivePAD:     result.PassivePAD,
-			TemporalMotion: result.TemporalMotion,
-			Illumination:   result.Illumination,
-			GuidedCapture:  result.GuidedCapture,
-		},
-		Quality:      result.Quality,
-		Diagnostics:  handler.publicDiagnostics(request, result.Diagnostics),
-		NativeShadow: handler.publicNativeShadow(request, result.NativeShadow),
-	}
-	response.Document = identityDocumentDetailsFromEvidence(updated.Document, updated.ExpectedCPF)
 	handler.writeJSON(writer, http.StatusOK, response)
 }
 
