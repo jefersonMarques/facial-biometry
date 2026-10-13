@@ -515,4 +515,4 @@ func (handler *Handler) completeDemoFaceEnrollment(
 	)
 
 	handler.writeJSON(writer, http.StatusOK, response)
-}}
+}
