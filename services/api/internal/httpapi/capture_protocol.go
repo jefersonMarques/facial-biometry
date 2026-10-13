@@ -18,7 +18,7 @@ const (
 )
 
 func validateCaptureProtocol(protocol domain.CaptureProtocolMetadata) error {
-	if protocol.Version != "1" {
+	if protocol.Version != "1" && protocol.Version != "2" {
 		return errors.New("unsupported capture protocol version")
 	}
 	if !captureRunIDPattern.MatchString(protocol.RunID) {
