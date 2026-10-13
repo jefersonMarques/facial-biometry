@@ -357,6 +357,8 @@ func (handler *Handler) completeDemoFaceEnrollment(
 	payload identityCompleteRequest,
 	frames []domain.GuidedCapturedFrame,
 	result domain.EngineResult,
+	idempotencyKey string,
+	requestSHA256 string,
 ) {
 	if effectiveFlowType(check) != identity.FlowFaceEnrollment {
 		handler.writeError(
@@ -408,6 +410,48 @@ func (handler *Handler) completeDemoFaceEnrollment(
 	}
 
 	completedAt := time.Now().UTC()
+	response := identityCompleteResponse{
+		ID:             check.ID,
+		Status:         status,
+		Decision:       decision,
+		LivenessScore:  result.LivenessScore,
+		Similarity:     0,
+		BestFrameIndex: result.BestFrameIndex,
+		MatchThreshold: handler.config.MatchThreshold,
+		FlowType:       identity.FlowFaceEnrollment,
+		DisplayName:    check.DisplayName,
+		TemplateStored: templateStored,
+		Signals: signalResponse{
+			PassivePAD:     result.PassivePAD,
+			TemporalMotion: result.TemporalMotion,
+			Illumination:   result.Illumination,
+			GuidedCapture:  result.GuidedCapture,
+		},
+		Quality:      result.Quality,
+		Diagnostics: handler.publicDiagnostics(
+			request,
+			result.Diagnostics,
+		),
+		NativeShadow: handler.publicNativeShadow(
+			request,
+			result.NativeShadow,
+		),
+	}
+	receipt, err := newIdentityCompletionReceipt(
+		payload.SessionID,
+		idempotencyKey,
+		requestSHA256,
+		response,
+	)
+	if err != nil {
+		handler.writeError(
+			writer,
+			http.StatusInternalServerError,
+			"could not persist completion receipt",
+		)
+		return
+	}
+
 	updated, err := handler.identityChecks.Update(token, func(
 		current *identity.Check,
 	) error {
@@ -427,6 +471,7 @@ func (handler *Handler) completeDemoFaceEnrollment(
 		current.CompletedAt = &completedAt
 		current.CaptureSessionID = ""
 		current.LastErrorCode = ""
+		current.CompletionReceipt = receipt
 
 		runtimeCopy := payload.Runtime
 		current.RuntimeFingerprint = &runtimeCopy
@@ -469,31 +514,5 @@ func (handler *Handler) completeDemoFaceEnrollment(
 		payload.Geometry,
 	)
 
-	handler.writeJSON(writer, http.StatusOK, identityCompleteResponse{
-		ID:             updated.ID,
-		Status:         updated.Status,
-		Decision:       decision,
-		LivenessScore:  result.LivenessScore,
-		Similarity:     0,
-		BestFrameIndex: result.BestFrameIndex,
-		MatchThreshold: handler.config.MatchThreshold,
-		FlowType:       identity.FlowFaceEnrollment,
-		DisplayName:    updated.DisplayName,
-		TemplateStored: templateStored,
-		Signals: signalResponse{
-			PassivePAD:     result.PassivePAD,
-			TemporalMotion: result.TemporalMotion,
-			Illumination:   result.Illumination,
-			GuidedCapture:  result.GuidedCapture,
-		},
-		Quality:      result.Quality,
-		Diagnostics: handler.publicDiagnostics(
-			request,
-			result.Diagnostics,
-		),
-		NativeShadow: handler.publicNativeShadow(
-			request,
-			result.NativeShadow,
-		),
-	})
-}
+	handler.writeJSON(writer, http.StatusOK, response)
+}}
