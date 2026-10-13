@@ -89,6 +89,7 @@ type identityCompleteRequest struct {
 	Metadata        *domain.CaptureMetadata        `json:"metadata,omitempty"`
 	Runtime         domain.RuntimeFingerprint      `json:"runtime"`
 	CaptureProtocol domain.CaptureProtocolMetadata `json:"captureProtocol"`
+	CaptureSeal     *domain.CaptureSeal             `json:"captureSeal,omitempty"`
 	Geometry        *domain.GeometryTelemetry       `json:"geometry,omitempty"`
 }
 
@@ -425,6 +426,14 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		payload.CaptureProtocol.RunID,
 	); err != nil {
 		handler.writeError(writer, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if err := validateCaptureSeal(
+		payload.CaptureSeal,
+		captureSession,
+		payload.GuidedFrames,
+	); err != nil {
+		handler.writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 
