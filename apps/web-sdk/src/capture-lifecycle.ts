@@ -4,7 +4,7 @@ import type {
 } from "./types.js";
 
 export const CAPTURE_LIFECYCLE_EVENT = "faceproof:capture-lifecycle";
-export const CAPTURE_PROTOCOL_VERSION = "1";
+export const CAPTURE_PROTOCOL_VERSION = "2";
 
 export type CaptureLifecycleState =
     | "idle"
