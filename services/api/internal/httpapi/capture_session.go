@@ -17,6 +17,10 @@ func (handler *Handler) issueCaptureSession(subjectID string, kind domain.Sessio
 	if err != nil {
 		return createSessionResponse{}, err
 	}
+	captureChallenge, err := security.RandomID(24)
+	if err != nil {
+		return createSessionResponse{}, err
+	}
 	illuminationPattern, err := randomIlluminationPattern(illuminationSteps)
 	if err != nil {
 		return createSessionResponse{}, err
@@ -28,7 +32,9 @@ func (handler *Handler) issueCaptureSession(subjectID string, kind domain.Sessio
 		SubjectID:              subjectID,
 		Kind:                   kind,
 		CaptureRunID:           captureRunID,
-		CaptureProtocolVersion: "1",
+		CaptureProtocolVersion: "2",
+		CaptureChallenge:       captureChallenge,
+		WatermarkToken:         captureWatermarkToken(captureChallenge),
 		IlluminationPattern:  illuminationPattern,
 		CaptureDurationMS:    captureDurationMS,
 		SampleIntervalMS:     sampleIntervalMS,
@@ -53,6 +59,8 @@ func (handler *Handler) issueCaptureSession(subjectID string, kind domain.Sessio
 		Kind:                   string(captureSession.Kind),
 		CaptureRunID:           captureSession.CaptureRunID,
 		CaptureProtocolVersion: captureSession.CaptureProtocolVersion,
+		CaptureChallenge:       captureSession.CaptureChallenge,
+		WatermarkToken:         captureSession.WatermarkToken,
 		ExpiresAt:            captureSession.ExpiresAt,
 		CaptureDurationMS:    captureSession.CaptureDurationMS,
 		SampleIntervalMS:     captureSession.SampleIntervalMS,
