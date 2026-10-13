@@ -1,6 +1,6 @@
 # FaceProof Capture Security
 
-Estado: **implementado, aguardando validação de build/runtime**
+Estado: **implementação e testes automatizados ✅ · validação runtime real ⏳**
 
 Este documento descreve as proteções do protocolo de captura. O navegador ajuda a produzir evidência; a decisão continua no servidor.
 
@@ -120,3 +120,19 @@ evidência assinada
 ```
 
 Isso é especialmente relevante para o modo offline.
+
+
+## Validação
+
+- ✅ Go API e testes de Capture Seal/idempotência.
+- ✅ Secure Core C++ e testes nativos.
+- ✅ WASM build.
+- ✅ Web SDK TypeScript typecheck.
+- ✅ Web SDK build.
+- ✅ testes de captura/lifecycle.
+- ✅ sintaxe do console admin.
+- ⏳ captura real com watermark + PAD + face match.
+- ⏳ retry real após perda de resposta.
+- ⏳ tentativa real de replay/tamper contra a API.
+
+Existe ainda uma pequena janela de falha entre o consumo da sessão e a persistência do estado terminal: se o processo cair exatamente nesse intervalo, a política segura é exigir nova captura, não reutilizar silenciosamente a sessão consumida.
