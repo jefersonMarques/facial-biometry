@@ -55,6 +55,14 @@ type DemoArtifacts struct {
 	CapturedPhotoDataURL  string `json:"capturedPhotoDataUrl,omitempty"`
 }
 
+type CompletionReceipt struct {
+	SessionID        string    `json:"sessionId"`
+	IdempotencyKey   string    `json:"idempotencyKey"`
+	RequestSHA256    string    `json:"requestSha256"`
+	ResponseJSON     string    `json:"responseJson"`
+	CreatedAt        time.Time `json:"createdAt"`
+}
+
 type Check struct {
 	ID                     string            `json:"id"`
 	FlowType               FlowType          `json:"flowType,omitempty"`
@@ -85,4 +93,5 @@ type Check struct {
 	LastErrorCode          string                     `json:"lastErrorCode,omitempty"`
 	RuntimeFingerprint     *domain.RuntimeFingerprint      `json:"runtimeFingerprint,omitempty"`
 	CaptureProtocol        *domain.CaptureProtocolMetadata `json:"captureProtocol,omitempty"`
+	CompletionReceipt      *CompletionReceipt               `json:"completionReceipt,omitempty"`
 }
