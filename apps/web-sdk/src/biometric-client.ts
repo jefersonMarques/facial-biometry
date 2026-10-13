@@ -1,3 +1,4 @@
+import { buildCaptureSeal } from "./capture-seal.js";
 import type {
     BiometricSessionKind,
     CapturePackage,
@@ -95,12 +96,14 @@ export class BiometricClient {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
         }
+        const captureSeal = await buildCaptureSeal(session, guidedFrames);
         const form = new FormData();
         form.append("sessionId", session.sessionId);
         form.append("sessionToken", session.sessionToken);
         form.append("manifest", JSON.stringify({
             runtime,
             captureProtocol,
+            captureSeal,
             geometry,
             guidedFrames: guidedFrames.map((frame) => ({
                 phase: frame.phase,
@@ -118,6 +121,9 @@ export class BiometricClient {
 
         return this.identityRequest<IdentityCompletionResponse>("/v1/identity/complete", token, {
             method: "POST",
+            headers: {
+                "Idempotency-Key": session.captureRunId,
+            },
             body: form,
         });
     }
