@@ -1,3 +1,4 @@
+import { buildCaptureSeal } from "./capture-seal.js";
 export class BiometricClient {
     baseUrl;
     constructor(baseUrl) {
@@ -27,6 +28,12 @@ export class BiometricClient {
     async getIdentityCheck(token) {
         return this.identityRequest("/v1/identity/check", token, { method: "GET" });
     }
+    async confirmIdentityView(token, visibleMs) {
+        await this.identityRequest("/v1/identity/view", token, {
+            method: "POST",
+            body: JSON.stringify({ visibleMs }),
+        });
+    }
     async uploadIdentityDocument(token, file, fileName, sha256) {
         const form = new FormData();
         form.append("file", file, fileName);
@@ -55,12 +62,14 @@ export class BiometricClient {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
         }
+        const captureSeal = await buildCaptureSeal(session, guidedFrames);
         const form = new FormData();
         form.append("sessionId", session.sessionId);
         form.append("sessionToken", session.sessionToken);
         form.append("manifest", JSON.stringify({
             runtime,
             captureProtocol,
+            captureSeal,
             geometry,
             guidedFrames: guidedFrames.map((frame) => ({
                 phase: frame.phase,
@@ -70,10 +79,23 @@ export class BiometricClient {
         guidedFrames.forEach((frame, index) => {
             form.append("frame", frame.imageBlob, `${String(index).padStart(2, "0")}-${frame.phase}.jpg`);
         });
-        return this.identityRequest("/v1/identity/complete", token, {
+        const requestInit = {
             method: "POST",
+            headers: {
+                "Idempotency-Key": session.captureRunId,
+            },
             body: form,
-        });
+        };
+        try {
+            return await this.identityRequest("/v1/identity/complete", token, requestInit);
+        }
+        catch (error) {
+            if (!(error instanceof TypeError)) {
+                throw error;
+            }
+            await new Promise((resolve) => window.setTimeout(resolve, 300));
+            return this.identityRequest("/v1/identity/complete", token, requestInit);
+        }
     }
     async identityRequest(path, token, init) {
         const headers = new Headers(init.headers);
