@@ -91,7 +91,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
    - ✅ Token HMAC-SHA256 vincula `sessionId + runId + expiração`.
    - ✅ Consumo atômico single-use; teste concorrente garante um único consumidor.
    - ✅ Replay da mesma sessão é rejeitado.
-   - ⏳ **Capture Protocol v2** implementado, aguardando validação de build/runtime:
+   - ✅ **Capture Protocol v2 — implementação e testes automatizados**:
      - challenge aleatório gerado no servidor por sessão;
      - marca visual dinâmica `FACEPROOF · XXXXXX`;
      - marca gravada nos JPEGs finais enviados;
@@ -99,13 +99,19 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
      - cadeia `Capture Seal` vinculada a `sessionId + runId + challenge + ordem + fase + bytes`;
      - servidor recalcula o seal antes de consumir a sessão;
      - não existe chave secreta fixa dentro do WASM.
-   - ⏳ **Idempotência durável da conclusão** implementada, aguardando validação de build/runtime:
+   - ✅ **Idempotência persistida da conclusão — implementação e testes automatizados**:
      - `Idempotency-Key` por `captureRunId`;
      - digest canônico inclui sessão, runtime, protocolo, seal, geometria, fase, qualidade e SHA-256 dos frames;
      - mesma chave + mesmo conteúdo retorna o resultado persistido sem reprocessar a biometria;
      - mesma chave + conteúdo diferente retorna conflito;
      - receipt da conclusão fica junto ao check no repositório criptografado;
      - SDK repete uma única vez apenas em falha de transporte.
+   - ⏳ **Validação runtime do Capture Protocol v2**:
+     - captura real com watermark sem degradar PAD/match;
+     - replay exato retorna o receipt sem reprocessar;
+     - payload/frame alterado é rejeitado;
+     - challenge de sessão anterior é rejeitado;
+     - confirmar comportamento após perda de resposta de rede.
    - ✅ Ordem `far → near → submit` validada.
    - ✅ Duração máxima do protocolo validada.
    - ✅ Tempo mínimo de captura também medido pelo relógio do servidor.
