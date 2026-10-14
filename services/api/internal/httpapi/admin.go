@@ -89,6 +89,8 @@ func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Re
 	switch {
 	case request.URL.Path == "/v1/admin/summary" && request.Method == http.MethodGet:
 		handler.getAdminSummary(writer, request)
+	case request.URL.Path == "/v1/admin/calibration" && request.Method == http.MethodGet:
+		handler.getAdminCalibration(writer, request)
 	case request.URL.Path == "/v1/admin/checks" && request.Method == http.MethodGet:
 		handler.listAdminChecks(writer, request)
 	case request.URL.Path == "/v1/admin/checks" && request.Method == http.MethodPost:
@@ -101,6 +103,13 @@ func (handler *Handler) handleAdmin(writer http.ResponseWriter, request *http.Re
 		handler.createAdminCampaign(writer, request)
 	default:
 		segments := splitPath(request.URL.Path)
+		if len(segments) == 5 &&
+			segments[0] == "v1" && segments[1] == "admin" &&
+			segments[2] == "checks" && segments[4] == "truth" &&
+			request.Method == http.MethodPatch {
+			handler.updateAdminCalibrationTruth(writer, request, segments[3])
+			break
+		}
 		if len(segments) == 4 &&
 			segments[0] == "v1" &&
 			segments[1] == "admin" &&
@@ -518,6 +527,9 @@ func (handler *Handler) getAdminCheck(
 	}
 	item := detail.CheckListItem
 	handler.applyAuthoritativeCheckItem(&item)
+	if truth, source, truthErr := handler.analytics.CalibrationTruth(request.Context(), checkID); truthErr == nil {
+		item.TruthLabel, item.TruthSource = truth, source
+	}
 	if handler.config.DemoMode && handler.config.CNHDualPortraitShadow &&
 		handler.identityChecks != nil {
 		if check, loadErr := handler.identityChecks.LoadByID(checkID); loadErr == nil {
