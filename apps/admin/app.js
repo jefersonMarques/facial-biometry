@@ -374,17 +374,38 @@ function renderDetail(detail) {
     ];
 
     return `
-        <div class="detail-face-pair">
-            <div class="detail-face">
-                ${detail.referencePhotoDataUrl
-                    ? `<img src="${escapeAttribute(detail.referencePhotoDataUrl)}" alt="Foto esperada">`
-                    : '<div class="face-placeholder">Referência</div>'}
+
+        <div class="detail-face-pair ${flowType === "cnh" ? "detail-face-triple" : ""}">
+            <div class="detail-face-column">
+                <div class="detail-face">
+                    ${detail.referencePhotoDataUrl
+                        ? `<img src="${escapeAttribute(detail.referencePhotoDataUrl)}" alt="Retrato da CNH PDF">`
+                        : '<div class="face-placeholder">Referência</div>'}
+                </div>
+                <span>CNH PDF</span>
             </div>
-            <div class="detail-arrow">→</div>
-            <div class="detail-face">
-                ${detail.capturedPhotoDataUrl
-                    ? `<img src="${escapeAttribute(detail.capturedPhotoDataUrl)}" alt="Captura realizada">`
-                    : '<div class="face-placeholder">Captura</div>'}
+            <div class="detail-arrow">↔</div>
+            ${flowType === "cnh" ? `
+                <div class="detail-face-column">
+                    <div class="detail-face detail-face-vio">
+                        ${detail.vioPhotoDataUrl
+                            ? `<img src="${escapeAttribute(detail.vioPhotoDataUrl)}" alt="Retrato VIO original decodificado, baixa resolução">`
+                            : '<div class="face-placeholder">VIO indisponível</div>'}
+                    </div>
+                    <span>VIO original</span>
+                    ${detail.vioPhotoDataUrl
+                        ? `<a class="vio-save" download="faceproof-vio-original.png" href="${escapeAttribute(detail.vioPhotoDataUrl)}">Salvar VIO</a>`
+                        : '<small>Novas verificações em modo de demonstração</small>'}
+                </div>
+                <div class="detail-arrow">↔</div>
+            ` : ""}
+            <div class="detail-face-column">
+                <div class="detail-face">
+                    ${detail.capturedPhotoDataUrl
+                        ? `<img src="${escapeAttribute(detail.capturedPhotoDataUrl)}" alt="Melhor captura biométrica">`
+                        : '<div class="face-placeholder">Captura</div>'}
+                </div>
+                <span>Biometria</span>
             </div>
         </div>
 
