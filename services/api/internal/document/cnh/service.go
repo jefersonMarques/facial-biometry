@@ -53,6 +53,26 @@ type Document struct {
 	PhotoSHA256           string
 	PhotoWidth            int
 	PhotoHeight           int
+	DualPortrait          DualPortrait
+}
+
+const (
+	DualPortraitReady            = "ready"
+	DualPortraitCompared         = "compared"
+	DualPortraitNotApplicable    = "not_applicable"
+	DualPortraitUnavailable      = "portrait_unavailable"
+	DualPortraitDecoderMissing   = "decoder_unavailable"
+	DualPortraitAnalysisFailed   = "analysis_failed"
+)
+
+type DualPortrait struct {
+	Status           string
+	PhotoPresent     bool
+	Photo            []byte
+	MIME             string
+	Width            int
+	Height           int
+	DecodeDurationMS int64
 }
 
 func NewService(vio *decoder.Service, preview *imagepreview.Service) *Service {
@@ -60,6 +80,16 @@ func NewService(vio *decoder.Service, preview *imagepreview.Service) *Service {
 }
 
 func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF string, minimumDocumentDate time.Time) (Document, error) {
+	return service.ProcessWithDualPortrait(ctx, pdf, expectedCPF, minimumDocumentDate, false)
+}
+
+func (service *Service) ProcessWithDualPortrait(
+	ctx context.Context,
+	pdf []byte,
+	expectedCPF string,
+	minimumDocumentDate time.Time,
+	shadowEnabled bool,
+) (Document, error) {
 	expectedCPF = NormalizeCPF(expectedCPF)
 	if !ValidCPF(expectedCPF) {
 		return Document{}, ErrDocumentMismatch
@@ -173,6 +203,11 @@ func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF str
 		return Document{}, err
 	}
 
+	var dualPortrait DualPortrait
+	if shadowEnabled {
+		dualPortrait = service.collectDualPortrait(&result, photoEvidence.Source)
+	}
+
 	return Document{
 		PDFSHA256:             analysis.Integrity.SHA256,
 		PDFSigningTime:        signingTime,
@@ -198,6 +233,7 @@ func (service *Service) Process(ctx context.Context, pdf []byte, expectedCPF str
 		PhotoSHA256:           photoEvidence.SHA256,
 		PhotoWidth:            photoEvidence.Width,
 		PhotoHeight:           photoEvidence.Height,
+		DualPortrait:          dualPortrait,
 	}, nil
 }
 
@@ -248,6 +284,47 @@ func (service *Service) referencePhoto(
 	}
 
 	return nil, photoEvidence{}, fmt.Errorf("%w: signed PDF portrait unavailable and VIO portrait fallback unavailable", ErrPhotoUnavailable)
+}
+
+func (service *Service) collectDualPortrait(result *decoder.Result, referenceSource string) DualPortrait {
+	if referenceSource != "signed_pdf_visual" {
+		return DualPortrait{Status: DualPortraitNotApplicable}
+	}
+	if result == nil || !result.SignatureValid {
+		return DualPortrait{Status: DualPortraitAnalysisFailed}
+	}
+	if len(result.Image) == 0 {
+		return DualPortrait{Status: DualPortraitUnavailable}
+	}
+
+	evidence := DualPortrait{PhotoPresent: true}
+	if service.preview == nil {
+		evidence.Status = DualPortraitDecoderMissing
+		return evidence
+	}
+
+	started := time.Now()
+	err := service.preview.Attach(result)
+	evidence.DecodeDurationMS = time.Since(started).Milliseconds()
+	if errors.Is(err, imagepreview.ErrDecoderUnavailable) {
+		evidence.Status = DualPortraitDecoderMissing
+		return evidence
+	}
+	if err != nil {
+		evidence.Status = DualPortraitAnalysisFailed
+		return evidence
+	}
+	if len(result.PreviewImage) == 0 || result.PreviewMIME == "" {
+		evidence.Status = DualPortraitUnavailable
+		return evidence
+	}
+
+	evidence.Status = DualPortraitReady
+	evidence.Photo = append([]byte(nil), result.PreviewImage...)
+	evidence.MIME = result.PreviewMIME
+	evidence.Width = result.Technical.PreviewWidth
+	evidence.Height = result.Technical.PreviewHeight
+	return evidence
 }
 
 func forensicRejectionReason(analysis pdfanalysis.Result) string {
