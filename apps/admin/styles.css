@@ -612,3 +612,23 @@ input:focus, select:focus {
 @media (min-width: 1000px) {
     .console, .topbar { max-width: 920px; }
 }
+
+/* Tabela local de diagnóstico; os scores não participam da decisão biométrica. */
+.benchmark-table {
+    width: 100%;
+    min-width: 660px;
+    border-collapse: collapse;
+    font-size: .86rem;
+}
+.benchmark-table th,
+.benchmark-table td {
+    padding: 11px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.benchmark-table th {
+    background: var(--soft);
+    color: var(--muted);
+    font-weight: 600;
+}
