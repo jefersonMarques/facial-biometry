@@ -189,6 +189,32 @@ func (handler *Handler) recordAnalyticsDualPortrait(
 	})
 }
 
+func (handler *Handler) recordAnalyticsTriplePortrait(
+	ctx context.Context,
+	checkID string,
+	evidence *identity.DualPortraitEvidence,
+) {
+	if evidence == nil {
+		return
+	}
+	handler.recordAnalyticsEvent(ctx, checkID, "cnh_tri_portrait_shadow", map[string]any{
+		"pdf_vio":             evidence.PDFVIO,
+		"vio_live":            evidence.VIOLive,
+		"pdf_live":            evidence.PDFLive,
+		"pdf_quality":         evidence.PDFQuality,
+		"vio_quality":         evidence.VIOQuality,
+		"vio_photo_width":     evidence.VIOPhotoWidth,
+		"vio_photo_height":    evidence.VIOPhotoHeight,
+		"vio_face_size":       evidence.VIOFaceSize,
+		"vio_sharpness":       evidence.VIOSharpness,
+		"vio_brightness":      evidence.VIOBrightness,
+		"pdf_face_size":       evidence.PDFFaceSize,
+		"pdf_sharpness":       evidence.PDFSharpness,
+		"pdf_brightness":      evidence.PDFBrightness,
+		"consistency_status":  evidence.Status,
+	})
+}
+
 func (handler *Handler) recordAnalyticsDocumentAccepted(ctx context.Context, check identity.Check) {
 	if handler.analytics == nil || check.Document == nil {
 		return
