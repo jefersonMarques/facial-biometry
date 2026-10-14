@@ -309,7 +309,6 @@ fi
 echo "Development mode: review enrollments are stored as provisional templates."
 if [ "$NATIVE_CORE" = true ]; then
     echo "Runtime authority: FaceProof Secure Core C++"
-    echo "Python biometric runtime: DISABLED"
 else
     echo "Runtime authority: Python development/R&D engine"
 fi
