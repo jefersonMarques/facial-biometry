@@ -25,6 +25,10 @@ type CalibrationReport struct {
     UnknownTruth int64 `json:"unknownTruth"`
     ConfirmedGenuine int64 `json:"confirmedGenuine"`
     ConfirmedImpostor int64 `json:"confirmedImpostor"`
+    AvgQuality *float64 `json:"avgQuality,omitempty"`
+    AvgLiveness *float64 `json:"avgLiveness,omitempty"`
+    AvgPassivePAD *float64 `json:"avgPassivePad,omitempty"`
+    Errors []CalibrationError `json:"errors"`
     Series []CalibrationSeries `json:"series"`
     MethodHealth []CalibrationMethod `json:"methodHealth"`
     Runtimes []CalibrationRuntime `json:"runtimes"`
@@ -45,6 +49,12 @@ type CalibrationMethod struct {
     Compared int64 `json:"compared"`
     Failed int64 `json:"failed"`
     AvgDurationMS float64 `json:"avgDurationMs"`
+    AvgQuality *float64 `json:"avgQuality,omitempty"`
+}
+type CalibrationError struct {
+    Method string `json:"method"`
+    Code string `json:"code"`
+    Count int64 `json:"count"`
 }
 type CalibrationRuntime struct {
     RuntimeID string `json:"runtimeId"`
@@ -94,10 +104,11 @@ func (r *Repository) Calibration(ctx context.Context, from,to time.Time, runtime
     report:=CalibrationReport{
         From:from,To:to,RuntimeFilter:runtime,
         Series:make([]CalibrationSeries,0),MethodHealth:make([]CalibrationMethod,0),
-        Runtimes:make([]CalibrationRuntime,0),
+        Runtimes:make([]CalibrationRuntime,0),Errors:make([]CalibrationError,0),
     }
     const counts=`WITH checks AS (
-        SELECT c.check_id,c.actual_decision,c.truth_label
+        SELECT c.check_id,c.actual_decision,c.truth_label,
+            c.quality_score,c.liveness_score,c.passive_pad_score
         FROM faceproof_checks c
         WHERE c.document IS NOT NULL AND c.completed_at >= $1::TIMESTAMPTZ
         AND c.completed_at < $2::TIMESTAMPTZ
@@ -111,12 +122,17 @@ func (r *Repository) Calibration(ctx context.Context, from,to time.Time, runtime
       COUNT(*) FILTER(WHERE truth_label='genuine_confirmed'),
       COUNT(*) FILTER(WHERE truth_label='impostor_confirmed'),
       COUNT(*) FILTER(WHERE EXISTS (SELECT 1 FROM faceproof_events e
-          WHERE e.check_id=checks.check_id AND e.event_type='cnh_low_resolution_shadow'))
+          WHERE e.check_id=checks.check_id AND e.event_type='cnh_low_resolution_shadow')),
+      AVG(quality_score),AVG(liveness_score),AVG(passive_pad_score)
     FROM checks`
+    var quality,liveness,pad sql.NullFloat64
     if err:=r.db.QueryRowContext(ctx,counts,from,to,runtime).Scan(
         &report.CompletedCNH,&report.Approved,&report.Rejected,&report.Review,
         &report.UnknownTruth,&report.ConfirmedGenuine,&report.ConfirmedImpostor,
-        &report.WithBenchmark);err!=nil{return CalibrationReport{},err}
+        &report.WithBenchmark,&quality,&liveness,&pad);err!=nil{return CalibrationReport{},err}
+    report.AvgQuality=calibrationNullable(quality)
+    report.AvgLiveness=calibrationNullable(liveness)
+    report.AvgPassivePAD=calibrationNullable(pad)
 
     const versions=`SELECT COALESCE(runtime->>'runtimeId','unknown'), embedding_model,COUNT(*)
         FROM faceproof_checks WHERE document IS NOT NULL
@@ -223,18 +239,42 @@ func (r *Repository) Calibration(ctx context.Context, from,to time.Time, runtime
        COUNT(*) FILTER (WHERE item->>'status'='compared'),
        COUNT(*) FILTER (WHERE item->>'status' IS DISTINCT FROM 'compared'),
        COALESCE(AVG(CASE WHEN jsonb_typeof(item->'durationMs')='number'
-       THEN (item->>'durationMs')::DOUBLE PRECISION END),0)
+       THEN (item->>'durationMs')::DOUBLE PRECISION END),0),
+       AVG(CASE WHEN jsonb_typeof(item->'quality')='number'
+           THEN (item->>'quality')::DOUBLE PRECISION END)
        FROM variants GROUP BY method ORDER BY method`
     rows,err=r.db.QueryContext(ctx,methods,from,to,runtime)
     if err!=nil{return CalibrationReport{},err}
     for rows.Next(){
         var x CalibrationMethod
-        if err=rows.Scan(&x.Method,&x.Attempts,&x.Compared,&x.Failed,&x.AvgDurationMS);err!=nil{break}
+        var score sql.NullFloat64
+        if err=rows.Scan(&x.Method,&x.Attempts,&x.Compared,&x.Failed,&x.AvgDurationMS,&score);err!=nil{break}
+        x.AvgQuality=calibrationNullable(score)
         report.MethodHealth=append(report.MethodHealth,x)
     }
     if err==nil{err=rows.Err()}
     rows.Close()
+    if err!=nil{return CalibrationReport{},err}
+    const failures=samples+` SELECT method,
+        COALESCE(NULLIF(item->>'errorCode',''),'unknown') AS code,COUNT(*)
+        FROM variants WHERE item->>'status' IS DISTINCT FROM 'compared'
+        GROUP BY method,code ORDER BY method,code`
+    rows,err=r.db.QueryContext(ctx,failures,from,to,runtime)
+    if err!=nil{return CalibrationReport{},err}
+    for rows.Next(){
+        var x CalibrationError
+        if err=rows.Scan(&x.Method,&x.Code,&x.Count);err!=nil{break}
+        report.Errors=append(report.Errors,x)
+    }
+    if err==nil{err=rows.Err()}
+    rows.Close()
     return report,err
+}
+
+func calibrationNullable(value sql.NullFloat64) *float64 {
+    if !value.Valid || math.IsNaN(value.Float64) || math.IsInf(value.Float64,0) {return nil}
+    number:=value.Float64
+    return &number
 }
 
 func (r *Repository) CalibrationTruth(ctx context.Context,id string) (string,string,error) {
