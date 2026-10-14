@@ -54,6 +54,7 @@ type Config struct {
 	IdentityVerifyURL       string
 	IdentityLinkTTL         time.Duration
 	IdentityMaxPDFBytes     int64
+	CNHDualPortraitShadow   bool
 	AdminKey                []byte
 	AnalyticsDatabaseURL    string
 	AnalyticsSubjectKey     []byte
@@ -128,6 +129,7 @@ func Load() (Config, error) {
 		IdentityVerifyURL:       envString("FACEPROOF_IDENTITY_VERIFY_URL", "http://localhost:5173/verify.html"),
 		IdentityLinkTTL:         time.Duration(identityTTLMinutes) * time.Minute,
 		IdentityMaxPDFBytes:     int64(identityMaxPDFMB) << 20,
+		CNHDualPortraitShadow:   envBool("FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW", false),
 		AdminKey:                adminKey,
 		AnalyticsDatabaseURL:    strings.TrimSpace(os.Getenv("FACEPROOF_ANALYTICS_DATABASE_URL")),
 		AnalyticsSubjectKey:     deriveAnalyticsSubjectKey(templateKey),
