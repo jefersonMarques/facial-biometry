@@ -10,30 +10,13 @@ const GUIDE_SAMPLE_MS = 260;
 const GUIDE_READY_SAMPLES = 2;
 const PHASE_CAPTURE_FRAMES = 4;
 const PHASE_CAPTURE_SAMPLE_MS = 140;
-const GUIDE_MAX_NETWORK_FAILURES = 5;
 const AUTO_CAMERA_DELAY_MS = 250;
 const QUALITY_FALLBACK_SAMPLES = 5;
 const FIRST_CAPTURE_MAX_GUIDE_SAMPLES = 8;
 const NEAR_HOLD_SECONDS = 3;
 const LOCAL_GUIDE_MAX_AGE_MS = 650;
-const LOCAL_GUIDE_FALLBACK_AFTER_MS = 1_500;
+const LOCAL_GUIDE_START_TIMEOUT_MS = 5_000;
 const CONFIRMED_VIEW_VISIBLE_MS = 3_000;
-const SERVER_PHASE_GUIDE = {
-    far: {
-        idealMin: 0.31,
-        idealMax: 0.46,
-        captureMin: 0.27,
-        captureMax: 0.50,
-        target: 0.385,
-    },
-    near: {
-        idealMin: 0.51,
-        idealMax: 0.69,
-        captureMin: 0.47,
-        captureMax: 0.73,
-        target: 0.60,
-    },
-};
 const LOCAL_PHASE_GUIDE = {
     far: {
         idealMin: 0.25,
@@ -431,7 +414,6 @@ async function runBiometry() {
 }
 async function waitForFacePhase(phase) {
     let stableSamples = 0;
-    let networkFailures = 0;
     let qualityLimitedSamples = 0;
     let guideSamples = 0;
     const phaseStartedAt = performance.now();
@@ -446,26 +428,13 @@ async function waitForFacePhase(phase) {
         const quality = camera.qualityForGuide();
         let guide = getFreshLocalGuide(phaseStartedAt);
         if (!guide) {
-            if (performance.now() - phaseStartedAt < LOCAL_GUIDE_FALLBACK_AFTER_MS) {
-                cameraState.textContent = "Analisando rosto";
-                biometricStatus.textContent = "Preparando análise local...";
-                await sleep(GUIDE_SAMPLE_MS);
-                continue;
+            cameraState.textContent = "Analisando rosto";
+            biometricStatus.textContent = "Preparando análise local...";
+            if (performance.now() - phaseStartedAt >= LOCAL_GUIDE_START_TIMEOUT_MS) {
+                throw new Error("local face guide unavailable");
             }
-            try {
-                guide = await requestServerGuideFallback(quality);
-                networkFailures = 0;
-            }
-            catch (error) {
-                networkFailures++;
-                if (networkFailures >= GUIDE_MAX_NETWORK_FAILURES) {
-                    throw error;
-                }
-                cameraState.textContent = "Analisando rosto";
-                biometricStatus.textContent = "Ajustando o enquadramento...";
-                await sleep(GUIDE_SAMPLE_MS);
-                continue;
-            }
+            await sleep(GUIDE_SAMPLE_MS);
+            continue;
         }
         guideSamples++;
         const assessment = assessGuide(guide, phase);
@@ -587,7 +556,7 @@ async function holdStillForAutomaticCapture(phase) {
         }
         let guide;
         try {
-            guide = await resolveGuideWithFallback(quality);
+            guide = await resolveLocalGuide(quality);
         }
         catch {
             return false;
@@ -624,7 +593,7 @@ async function capturePhase(phase, relaxedQuality = false) {
         const guideQuality = camera.qualityForGuide();
         let guide;
         try {
-            guide = await resolveGuideWithFallback(guideQuality);
+            guide = await resolveLocalGuide(guideQuality);
         }
         catch {
             relaxedQuality = await waitForFacePhase(phase);
@@ -682,10 +651,8 @@ async function showCaptureSuccess(message) {
     await sleep(280);
 }
 function assessGuide(guide, phase) {
-    const config = guide.source === "local"
-        ? LOCAL_PHASE_GUIDE[phase]
-        : SERVER_PHASE_GUIDE[phase];
-    const centerTargetY = guide.source === "local" ? 0.50 : 0.46;
+    const config = LOCAL_PHASE_GUIDE[phase];
+    const centerTargetY = 0.50;
     if (!guide.faceDetected) {
         return {
             ready: false,
@@ -799,29 +766,12 @@ function getFreshLocalGuide(minTimestampMs = 0) {
         rollDegrees: guide.rollDegrees,
     };
 }
-async function resolveGuideWithFallback(clientQuality) {
-    return getFreshLocalGuide() ?? requestServerGuideFallback(clientQuality);
-}
-async function requestServerGuideFallback(clientQuality) {
-    const snapshot = camera.snapshotForGuide();
-    const requestTimestampMs = performance.now();
-    const guide = await client.guideIdentityFace(identityToken, snapshot.imageBase64);
-    window.dispatchEvent(new CustomEvent("faceproof:server-guide", {
-        detail: {
-            timestampMs: requestTimestampMs,
-            guide,
-            clientQuality,
-        },
-    }));
-    return {
-        source: "server",
-        faceDetected: guide.faceDetected && guide.confidence >= 0.72,
-        centerX: guide.centerX,
-        centerY: guide.centerY,
-        widthRatio: guide.widthRatio,
-        heightRatio: guide.heightRatio,
-        rollDegrees: guide.rollDegrees,
-    };
+async function resolveLocalGuide(_clientQuality) {
+    const guide = getFreshLocalGuide();
+    if (!guide) {
+        throw new Error("local face guide unavailable");
+    }
+    return guide;
 }
 function isClientQualityUsable(quality) {
     return quality.brightness >= 0.04 &&
