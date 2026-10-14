@@ -74,6 +74,15 @@ if(FACEPROOF_BIOMETRIC_WITH_OPENCV)
             PRIVATE
                 faceproof_biometric_vision
         )
+
+        add_executable(faceproof_low_resolution_benchmark
+            tools/low_resolution_benchmark_cli.cpp
+        )
+        target_link_libraries(
+            faceproof_low_resolution_benchmark
+            PRIVATE
+                faceproof_biometric_vision
+        )
     endif()
 endif()
 
