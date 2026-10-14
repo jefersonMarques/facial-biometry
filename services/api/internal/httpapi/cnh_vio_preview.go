@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 
 	"faceproof/services/api/internal/document/cnh"
+	"faceproof/services/api/internal/identity"
+	"strings"
 )
 
 const maxDemoVIOPreviewBytes = 4 << 20
@@ -22,4 +24,18 @@ func demoVIOPhotoDataURL(authorized bool, portrait cnh.DualPortrait) string {
 	}
 	return "data:" + portrait.MIME + ";base64," +
 		base64.StdEncoding.EncodeToString(portrait.Photo)
+}
+
+func demoVIOPreviewForAdmin(check identity.Check, demoMode, shadowEnabled bool) string {
+	if !demoMode || !shadowEnabled || check.TenantID != "internal" ||
+		check.DemoArtifacts == nil {
+		return ""
+	}
+	preview := check.DemoArtifacts.VIOPhotoDataURL
+	if len(preview) > 6<<20 ||
+		(!strings.HasPrefix(preview, "data:image/png;base64,") &&
+			!strings.HasPrefix(preview, "data:image/jpeg;base64,")) {
+		return ""
+	}
+	return preview
 }
