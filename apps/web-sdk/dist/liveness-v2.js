@@ -113,10 +113,7 @@ export class ExperimentalGeometryLiveness {
         catch {
             this.landmarker = await create("CPU");
         }
-        const wasmShadow = new GeometryWasmShadow((diagnostics) => {
-            if (diagnostics.guide) {
-                dispatchLocalGuide(diagnostics.guide);
-            }
+        const wasmShadow = new GeometryWasmShadow(() => {
             this.onUpdate?.(this.summarize());
         });
         this.wasmShadow = wasmShadow;
@@ -145,6 +142,7 @@ export class ExperimentalGeometryLiveness {
                 }
                 const result = this.landmarker.detectForVideo(analysisFrame, timestampMs);
                 const landmarks = result.faceLandmarks?.[0];
+                dispatchLocalGuide(analyzeLocalFaceGuide(landmarks ?? [], timestampMs));
                 if (landmarks) {
                     this.wasmShadow?.push(this.phase, timestampMs, landmarks);
                     const observation = extractGeometryObservation(landmarks, this.phase, timestampMs);
@@ -179,6 +177,65 @@ export class ExperimentalGeometryLiveness {
         this.analysisContext.drawImage(video, 0, 0, width, height);
         return this.analysisCanvas;
     }
+}
+export function analyzeLocalFaceGuide(landmarks, timestampMs) {
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let finiteCount = 0;
+    for (const landmark of landmarks) {
+        if (![landmark.x, landmark.y, landmark.z].every(Number.isFinite)) {
+            continue;
+        }
+        minX = Math.min(minX, landmark.x);
+        minY = Math.min(minY, landmark.y);
+        maxX = Math.max(maxX, landmark.x);
+        maxY = Math.max(maxY, landmark.y);
+        finiteCount++;
+    }
+    const width = maxX - minX;
+    const height = maxY - minY;
+    if (finiteCount < 50 ||
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width < 0.02 ||
+        height < 0.02) {
+        return {
+            timestampMs,
+            faceDetected: false,
+            centerX: 0,
+            centerY: 0,
+            widthRatio: 0,
+            heightRatio: 0,
+            rollDegrees: 0,
+            faceSizeScore: 0,
+        };
+    }
+    let rollDegrees = 0;
+    const leftEye = landmarkAt(landmarks, 33);
+    const rightEye = landmarkAt(landmarks, 263);
+    if (leftEye && rightEye) {
+        rollDegrees = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * (180 / Math.PI);
+    }
+    const areaRatio = width * height;
+    let faceSizeScore = 1;
+    if (areaRatio < 0.07) {
+        faceSizeScore = clamp01(areaRatio / 0.07);
+    }
+    else if (areaRatio > 0.62) {
+        faceSizeScore = clamp01(1 - ((areaRatio - 0.62) / 0.30));
+    }
+    return {
+        timestampMs,
+        faceDetected: true,
+        centerX: clamp01(minX + width / 2),
+        centerY: clamp01(minY + height / 2),
+        widthRatio: clamp01(width),
+        heightRatio: clamp01(height),
+        rollDegrees,
+        faceSizeScore,
+    };
 }
 export function extractGeometryObservation(landmarks, phase, timestampMs) {
     const leftCheek = landmarkAt(landmarks, 234);
