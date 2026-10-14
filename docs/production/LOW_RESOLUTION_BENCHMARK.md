@@ -8,9 +8,14 @@ Medir, sem alterar o fluxo de decisão do FaceProof, o impacto da ampliação
 da foto VIO de baixa resolução (um teste observou **45 × 61 px**) sobre
 a extração YuNet/SFace e três pares de similaridade facial.
 
-O benchmark **não** é usado pelo servidor, pela API nem pelo Web SDK.
-Não altera modelo, Secure Core de produção, ABI, limiar biométrico ou decisão.
-O CLI não exporta fotografias, caminhos de origem nem embeddings no JSON.
+O benchmark é executado **automaticamente em shadow mode na API**
+quando `FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW=true`, usando a foto do VIO
+decodificada durante o processamento normal da CNH e os embeddings
+capturados na biometria da mesma verificação. Não muda o modelo,
+o Secure Core de produção, a ABI, limiares ou decisões.
+O CLI offline permanece como instrumento separado para experimentos
+reprodutíveis. Nenhuma das duas implementações exporta fotografias
+ou embeddings em eventos/relatórios de métricas.
 
 ## Implementação
 
