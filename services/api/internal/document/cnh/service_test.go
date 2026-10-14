@@ -163,6 +163,12 @@ func TestCollectDualPortraitUnavailableDoesNotFailDocument(t *testing.T) {
 			source:     "signed_pdf_visual",
 			wantStatus: DualPortraitDecoderMissing,
 		},
+		{
+			name:       "malformed PNG",
+			result:     decoder.Result{SignatureValid: true, Image: []byte{1, 2, 3}, ImageFormat: "PNG"},
+			source:     "signed_pdf_visual",
+			wantStatus: DualPortraitAnalysisFailed,
+		},
 	}
 
 	for _, test := range cases {
@@ -176,5 +182,27 @@ func TestCollectDualPortraitUnavailableDoesNotFailDocument(t *testing.T) {
 				t.Fatal("unavailable portrait must not expose image bytes")
 			}
 		})
+	}
+}
+
+func TestCollectDualPortraitRejectsOversizedDimensions(t *testing.T) {
+	var encoded bytes.Buffer
+	largeImage := image.NewRGBA(image.Rect(0, 0, maxDualPortraitDimension+1, 3))
+	if err := png.Encode(&encoded, largeImage); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(nil, imagepreview.NewService(nil))
+	result := decoder.Result{
+		SignatureValid: true,
+		Image:          encoded.Bytes(),
+		ImageFormat:    "PNG",
+	}
+	evidence := service.collectDualPortrait(&result, "signed_pdf_visual")
+	if evidence.Status != DualPortraitAnalysisFailed {
+		t.Fatalf("status = %q, want analysis_failed", evidence.Status)
+	}
+	if len(evidence.Photo) != 0 {
+		t.Fatal("oversized portrait must not reach native inference")
 	}
 }
