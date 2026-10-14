@@ -26,6 +26,21 @@ const (
 	StatusExpired            Status = "expired"
 )
 
+type DualPortraitEvidence struct {
+	Status             string   `json:"status"`
+	Similarity         *float64 `json:"similarity,omitempty"`
+	PDFQuality         float64  `json:"pdfQuality"`
+	VIOQuality         *float64 `json:"vioQuality,omitempty"`
+	VIOPhotoPresent    bool     `json:"vioPhotoPresent"`
+	VIOPhotoValidated  bool     `json:"vioPhotoValidated"`
+	VIOPhotoWidth      int      `json:"vioPhotoWidth,omitempty"`
+	VIOPhotoHeight     int      `json:"vioPhotoHeight,omitempty"`
+	DecodeDurationMS   int64    `json:"decodeDurationMs"`
+	AnalysisDurationMS int64    `json:"analysisDurationMs"`
+	EmbeddingModel     string   `json:"embeddingModel,omitempty"`
+	ErrorCode          string   `json:"errorCode,omitempty"`
+}
+
 type DocumentEvidence struct {
 	PDFSHA256             string    `json:"pdfSha256"`
 	PDFSigningTime        time.Time `json:"pdfSigningTime"`
@@ -40,6 +55,7 @@ type DocumentEvidence struct {
 	ReferencePhotoSHA256     string    `json:"referencePhotoSha256,omitempty"`
 	ReferencePhotoWidth      int       `json:"referencePhotoWidth,omitempty"`
 	ReferencePhotoHeight     int       `json:"referencePhotoHeight,omitempty"`
+	DualPortrait             *DualPortraitEvidence `json:"dualPortrait,omitempty"`
 	VIOTemplateID          uint16    `json:"vioTemplateId"`
 	VIOCreatedAt           time.Time `json:"vioCreatedAt"`
 	VIOSignatureAlgorithm  string    `json:"vioSignatureAlgorithm"`
