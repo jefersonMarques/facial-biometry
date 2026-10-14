@@ -177,6 +177,8 @@ type CheckListItem struct {
 	PassivePADScore  *float64   `json:"passivePadScore,omitempty"`
 	QualityScore     *float64   `json:"qualityScore,omitempty"`
 	NativeStatus     string     `json:"nativeStatus,omitempty"`
+	TruthLabel       string     `json:"truthLabel,omitempty"`
+	TruthSource      string     `json:"truthSource,omitempty"`
 }
 
 type CheckDetail struct {
@@ -331,6 +333,15 @@ CREATE TABLE IF NOT EXISTS faceproof_checks (
 ALTER TABLE faceproof_checks
     ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'legacy';
 
+ALTER TABLE faceproof_checks
+    ADD COLUMN IF NOT EXISTS truth_label TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE faceproof_checks
+    ADD COLUMN IF NOT EXISTS truth_source TEXT NOT NULL DEFAULT '';
+ALTER TABLE faceproof_checks
+    ADD COLUMN IF NOT EXISTS truth_updated_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS faceproof_checks_calibration_window_idx
+    ON faceproof_checks(completed_at DESC) WHERE document IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS faceproof_checks_created_at_idx
     ON faceproof_checks(created_at DESC);
 CREATE INDEX IF NOT EXISTS faceproof_checks_tenant_created_idx
@@ -353,6 +364,9 @@ CREATE TABLE IF NOT EXISTS faceproof_events (
 
 CREATE INDEX IF NOT EXISTS faceproof_events_check_idx
     ON faceproof_events(check_id, occurred_at, id);
+CREATE INDEX IF NOT EXISTS faceproof_events_calibration_idx
+    ON faceproof_events(check_id, id DESC)
+    WHERE event_type = 'cnh_low_resolution_shadow';
 CREATE UNIQUE INDEX IF NOT EXISTS faceproof_events_dedupe_idx
     ON faceproof_events(check_id, dedupe_key)
     WHERE dedupe_key IS NOT NULL;
