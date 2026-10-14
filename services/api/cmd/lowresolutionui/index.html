@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FaceProof · Diagnóstico local</title></head>
+<body>
+<main style="max-width:820px;margin:35px auto;font-family:system-ui">
+<h1>FaceProof · Benchmark local</h1>
+<p>Ferramenta de desenvolvimento no localhost. Os arquivos serão excluídos ao final do processamento. Use apenas retratos autorizados em PNG/JPEG, não documentos completos.</p>
+<p>Foto da CNH <input id="pdf" type="file" accept="image/png,image/jpeg"></p>
+<p>Foto do VIO <input id="vio" type="file" accept="image/png,image/jpeg"></p>
+<p>Foto da captura facial <input id="live" type="file" accept="image/png,image/jpeg"></p>
+<button id="execute" type="button">Comparar quatro métodos</button>
+<p id="status"></p>
+<pre id="result" style="overflow:auto;white-space:pre-wrap"></pre>
+<button id="copy" type="button">Copiar resultado</button>
+<p>Scores são experimentais e não alteram decisões biométricas. O JSON não contém retratos nem embeddings.</p>
+</main>
+<script nonce="__NONCE__">
+(function(){
+  const item=id=>document.getElementById(id);
+  item("execute").onclick=async function(){
+    const data=new FormData();
+    for(const key of ["pdf","vio","live"]){
+      if(!item(key).files.length){item("status").textContent="Selecione as três imagens.";return;}
+      data.append(key,item(key).files[0]);
+    }
+    item("status").textContent="Processando...";
+    item("execute").disabled=true;
+    try{
+      const response=await fetch("/benchmark",{method:"POST",body:data,headers:{"X-FaceProof-Benchmark-Token":"__TOKEN__"},cache:"no-store"});
+      const report=await response.json();
+      if(!response.ok)throw new Error(report.error||"Falha");
+      item("result").textContent=JSON.stringify(report,null,2);
+      item("status").textContent="Resultado pronto para análise.";
+    }catch(error){item("status").textContent=error.message;}
+    finally{item("execute").disabled=false;}
+  };
+  item("copy").onclick=async function(){await navigator.clipboard.writeText(item("result").textContent);};
+})();
+</script></body></html>
