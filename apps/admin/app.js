@@ -295,6 +295,12 @@ function renderCalibration(report) {
         ["Verdade desconhecida", report.unknownTruth],
         ["Titulares confirmados", report.confirmedGenuine],
         ["Impostores confirmados", report.confirmedImpostor],
+        ["Qualidade média", report.avgQuality === null || report.avgQuality === undefined
+            ? "—" : calibrationNumber(report.avgQuality * 100, 1) + "%"],
+        ["Liveness médio", report.avgLiveness === null || report.avgLiveness === undefined
+            ? "—" : calibrationNumber(report.avgLiveness * 100, 1) + "%"],
+        ["PAD médio", report.avgPassivePad === null || report.avgPassivePad === undefined
+            ? "—" : calibrationNumber(report.avgPassivePad * 100, 1) + "%"],
     ];
     for (const [label, value] of summaries) {
         const card = document.createElement("div");
@@ -302,7 +308,7 @@ function renderCalibration(report) {
         const title = document.createElement("span");
         title.textContent = label;
         const amount = document.createElement("strong");
-        amount.textContent = integer(value);
+        amount.textContent = typeof value === "string" ? value : integer(value);
         card.append(title, amount);
         calibrationCounts.append(card);
     }
@@ -358,7 +364,7 @@ function renderCalibration(report) {
     calibrationHealth.append(head);
     const table = document.createElement("table");
     table.className = "benchmark-table";
-    const captions = ["Método", "Tentativas", "Comparadas", "Falhas", "Duração média adicional"];
+    const captions = ["Método", "Tentativas", "Comparadas", "Falhas", "Qualidade média", "Duração média adicional"];
     const tr = table.createTHead().insertRow();
     captions.forEach(value => {
         const th = document.createElement("th");
@@ -373,6 +379,8 @@ function renderCalibration(report) {
             integer(item.attempts),
             integer(item.compared),
             integer(item.failed),
+            item.avgQuality === null || item.avgQuality === undefined
+                ? "—" : calibrationNumber(item.avgQuality * 100, 1) + "%",
             item.method === "production_cubic" ? "Reutilizada" :
                 calibrationNumber(item.avgDurationMs, 0) + " ms",
         ].forEach(value => {
@@ -381,6 +389,19 @@ function renderCalibration(report) {
         });
     }
     calibrationHealth.append(table);
+    if ((report.errors || []).length) {
+        const heading = document.createElement("p");
+        heading.className = "calibration-series-label";
+        heading.textContent = "Falhas técnicas por método:";
+        calibrationHealth.append(heading);
+        const faults = document.createElement("p");
+        faults.className = "calibration-notice";
+        faults.textContent = report.errors.map(item =>
+            (calibrationMethods[item.method] || item.method) + " · " +
+            item.code + " (" + integer(item.count) + ")"
+        ).join("  |  ");
+        calibrationHealth.append(faults);
+    }
 }
 
 function renderChecks(items) {
