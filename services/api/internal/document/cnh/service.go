@@ -57,6 +57,9 @@ type Document struct {
 }
 
 const (
+	maxDualPortraitImageBytes = 4 << 20
+	maxDualPortraitDimension  = 2048
+
 	DualPortraitReady            = "ready"
 	DualPortraitCompared         = "compared"
 	DualPortraitNotApplicable    = "not_applicable"
@@ -316,6 +319,14 @@ func (service *Service) collectDualPortrait(result *decoder.Result, referenceSou
 	}
 	if len(result.PreviewImage) == 0 || result.PreviewMIME == "" {
 		evidence.Status = DualPortraitUnavailable
+		return evidence
+	}
+	if len(result.PreviewImage) > maxDualPortraitImageBytes ||
+		result.Technical.PreviewWidth <= 0 ||
+		result.Technical.PreviewHeight <= 0 ||
+		result.Technical.PreviewWidth > maxDualPortraitDimension ||
+		result.Technical.PreviewHeight > maxDualPortraitDimension {
+		evidence.Status = DualPortraitAnalysisFailed
 		return evidence
 	}
 
