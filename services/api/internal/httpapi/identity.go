@@ -316,14 +316,12 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		return
 	}
 	handler.recordAnalyticsDocumentAccepted(request.Context(), updatedDocumentCheck)
-	if dualPortrait != nil {
-		handler.recordAnalyticsEvent(
-			request.Context(),
-			updatedDocumentCheck.ID,
-			"cnh_dual_portrait_shadow",
-			dualPortrait,
-		)
-	}
+	handler.recordAnalyticsDualPortrait(
+		request.Context(),
+		updatedDocumentCheck.ID,
+		document,
+		dualPortrait,
+	)
 
 	response := identityDocumentResponse{
 		Status: identity.StatusBiometryPending,
