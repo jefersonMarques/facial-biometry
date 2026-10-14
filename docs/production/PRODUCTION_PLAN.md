@@ -210,12 +210,16 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
 
 ## Evolução em andamento — consistência documental CNH × VIO
 
-- ⏳ **CNH Dual Portrait Consistency (shadow mode)**:
-  - Código de coleta da segunda imagem VIO assinado, com decoder BPG quando disponível.
-  - Comparação PDF × VIO reutilizando Secure Core C++/SFace e cosine similarity, sem novo limiar.
+- ⏳ **CNH Tri Portrait Consistency (shadow mode)**:
+  - Código de coleta da fotografia VIO autenticada, com decoder BPG quando disponível.
+  - Comparações PDF × VIO, VIO × biometria e PDF × biometria, com scores combinados e robustos multi-variantes.
+  - O match CNH × biometria já existente permanece a única comparação facial com poder de decisão.
   - Flag `FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW` desabilitada por padrão.
-  - Registro de status, score, qualidade e latência sem armazenar segunda imagem ou embedding.
-  - ⏳ Confirmar CI, testes completos, assinaturas VIO dos diferentes formatos e funcionamento em ambiente Linux real.
+  - Registros de qualidade e scores sem persistência da segunda imagem.
+  - Embedding VIO conservado temporariamente no check criptografado e limpo na conclusão, reset ou expiração processada.
+  - ✅ Integração Go e testes automatizados com PostgreSQL aprovados no CI.
+  - ⏳ Validar execução real das três comparações, o descarte dos embeddings e o contrato de retenção de checks inativos.
+  - ⏳ Confirmar cobertura de assinatura VIO dos diferentes formatos em corpus representativo.
   - ⏳ Medir latência e calibrar scores em CNHs legítimas de diferentes versões e adulterações controladas.
   - ⏳ Validar o comportamento de shadow mode sem alterar aprovações ou falsos negativos.
   - Documentação técnica: [CNH_DUAL_PORTRAIT.md](CNH_DUAL_PORTRAIT.md).
