@@ -400,6 +400,7 @@ function renderDetail(detail) {
         ${detailSection("Geometria", detail.geometry)}
         ${detailSection("Runtime", detail.runtime)}
         ${detailSection("Diagnósticos", detail.diagnostics)}
+        ${renderLowResolutionComparison(detail.events || [])}
 
         <section class="detail-section">
             <h3>Timeline</h3>
@@ -421,6 +422,56 @@ function detailSection(title, value) {
         <section class="detail-section">
             <h3>${escapeHtml(title)}</h3>
             <pre>${escapeHtml(prettyJSON(normalized))}</pre>
+        </section>
+    `;
+}
+
+function renderLowResolutionComparison(events) {
+    const event = events.find((item) => item.eventType === "cnh_low_resolution_shadow");
+    if (!event) return "";
+    const payload = objectValue(event.payload);
+    if (!payload || !Array.isArray(payload.variants)) return "";
+
+    const cosine = (pair) => {
+        const raw = pair?.robustCosine;
+        return raw === null || raw === undefined || !Number.isFinite(Number(raw))
+            ? "—"
+            : Number(raw).toFixed(4);
+    };
+    const labels = {
+        production_cubic: "Bicúbica (atual)",
+        nearest: "Nearest Neighbor",
+        linear: "Bilinear",
+        lanczos4: "Lanczos4",
+    };
+
+    return `
+        <section class="detail-section">
+            <h3>Benchmark VIO — baixa resolução</h3>
+            <p>Diagnóstico automático, não utilizado para aprovar ou reprovar.
+                Scores cosseno brutos, sem interpretação como probabilidade de identidade.</p>
+            <div style="overflow-x:auto">
+                <table class="benchmark-table">
+                    <thead><tr>
+                        <th>Interpolação</th><th>CNH × VIO</th>
+                        <th>VIO × Face</th><th>CNH × Face</th><th>Escala</th><th>Estado</th>
+                    </tr></thead>
+                    <tbody>
+                        ${payload.variants.map((item) => `
+                            <tr>
+                                <td>${escapeHtml(labels[item.method] || item.method)}</td>
+                                <td>${cosine(item.pdfVio)}</td>
+                                <td>${cosine(item.vioLive)}</td>
+                                <td>${cosine(payload.pdf_live)}</td>
+                                <td>${Number.isFinite(Number(item.scaleX)) ? Number(item.scaleX).toFixed(2) + "×" : "—"}</td>
+                                <td>${escapeHtml(item.status || "indisponível")}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+            <p>A foto VIO é de baixa resolução. Valores maiores não são necessariamente
+                melhores sem medir também o comportamento com impostores.</p>
         </section>
     `;
 }
