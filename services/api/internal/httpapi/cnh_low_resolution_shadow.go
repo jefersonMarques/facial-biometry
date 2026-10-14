@@ -260,3 +260,36 @@ func normalizedPixel(value float64) uint8 {
 	return uint8(math.Round(math.Max(0, math.Min(255, value))))
 }
 
+
+func finishCNHLowResolution(
+	check identity.Check,
+	live domain.EngineResult,
+	liveEmbeddings [][]float64,
+) []identity.LowResolutionEvidence {
+	if check.Document == nil || len(check.Document.LowResolutionBenchmark) == 0 {
+		return nil
+	}
+	completed := append([]identity.LowResolutionEvidence(nil), check.Document.LowResolutionBenchmark...)
+	liveReference := portraitEmbeddingSet(live.EmbeddingModel, live.Embedding, liveEmbeddings)
+	for i := range completed {
+		if completed[i].Status != "compared" {
+			continue
+		}
+		var reference *identity.LowResolutionReference
+		for index := range check.LowResolutionReferences {
+			if check.LowResolutionReferences[index].Method == completed[i].Method {
+				reference = &check.LowResolutionReferences[index]
+				break
+			}
+		}
+		if reference == nil {
+			completed[i].VIOLive = &identity.PortraitPairEvidence{Status: "unavailable"}
+			continue
+		}
+		completed[i].VIOLive = comparePortraitPair(
+			portraitEmbeddingSet(reference.EmbeddingModel, reference.Embedding, reference.Embeddings),
+			liveReference,
+		)
+	}
+	return completed
+}
