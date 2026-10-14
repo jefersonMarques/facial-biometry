@@ -325,6 +325,11 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 				current.DemoArtifacts = &identity.DemoArtifacts{}
 			}
 			current.DemoArtifacts.ReferencePhotoDataURL = referenceImage
+			current.DemoArtifacts.VIOPhotoDataURL = demoVIOPhotoDataURL(
+				handler.config.DemoMode && handler.config.CNHDualPortraitShadow &&
+					current.TenantID == "internal",
+				document.DualPortrait,
+			)
 		}
 		current.Status = identity.StatusBiometryPending
 		current.LastErrorCode = ""
@@ -844,6 +849,9 @@ func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error
 		check.VIOReferenceEmbeddings = nil
 		check.VIOReferenceEmbeddingModel = ""
 		check.LowResolutionReferences = nil
+		if check.DemoArtifacts != nil {
+			check.DemoArtifacts.VIOPhotoDataURL = ""
+		}
 		check.Document = nil
 		check.LastErrorCode = failure.Error()
 		if check.DocumentAttempts >= maxIdentityDocumentAttempts {
