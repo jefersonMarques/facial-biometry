@@ -113,8 +113,17 @@ func TestCalibrationAggregatesRealPostgresEvents(t *testing.T) {
         }
         if !found {t.Fatalf("missing cohort %q",tc.truth)}
     }
-    if len(report.MethodHealth)!=2 || report.MethodHealth[1].Failed!=3 {
-        t.Fatalf("nearest extraction failures not counted: %+v",report.MethodHealth)
+    foundNearest:=false
+    for _,method:=range report.MethodHealth {
+        if method.Method=="nearest" {
+            foundNearest=true
+            if method.Attempts!=3 || method.Failed!=3 || method.Compared!=0 {
+                t.Fatalf("nearest extraction failures not counted: %+v",method)
+            }
+        }
+    }
+    if len(report.MethodHealth)!=2 || !foundNearest {
+        t.Fatalf("missing interpolation diagnostics: %+v",report.MethodHealth)
     }
     filtered,err:=r.Calibration(ctx,now.Add(-time.Hour),now.Add(time.Hour),"r1")
     if err!=nil {t.Fatal(err)}
