@@ -26,6 +26,16 @@ const (
 	StatusExpired            Status = "expired"
 )
 
+type PortraitPairEvidence struct {
+	Status            string   `json:"status"`
+	CombinedCosine    *float64 `json:"combinedCosine,omitempty"`
+	RobustCosine      *float64 `json:"robustCosine,omitempty"`
+	ReferenceVariants int      `json:"referenceVariants"`
+	TargetVariants    int      `json:"targetVariants"`
+	FrameComparisons  int      `json:"frameComparisons"`
+	ErrorCode         string   `json:"errorCode,omitempty"`
+}
+
 type DualPortraitEvidence struct {
 	Status             string   `json:"status"`
 	Similarity         *float64 `json:"similarity,omitempty"`
@@ -38,6 +48,15 @@ type DualPortraitEvidence struct {
 	DecodeDurationMS   int64    `json:"decodeDurationMs"`
 	AnalysisDurationMS int64    `json:"analysisDurationMs"`
 	EmbeddingModel     string   `json:"embeddingModel,omitempty"`
+	PDFVIO             *PortraitPairEvidence `json:"pdfVio,omitempty"`
+	PDFLive            *PortraitPairEvidence `json:"pdfLive,omitempty"`
+	VIOLive            *PortraitPairEvidence `json:"vioLive,omitempty"`
+	VIOFaceSize        *float64 `json:"vioFaceSize,omitempty"`
+	VIOSharpness       *float64 `json:"vioSharpness,omitempty"`
+	VIOBrightness      *float64 `json:"vioBrightness,omitempty"`
+	PDFFaceSize        *float64 `json:"pdfFaceSize,omitempty"`
+	PDFSharpness       *float64 `json:"pdfSharpness,omitempty"`
+	PDFBrightness      *float64 `json:"pdfBrightness,omitempty"`
 	ErrorCode          string   `json:"errorCode,omitempty"`
 }
 
@@ -101,6 +120,9 @@ type Check struct {
 	ReferenceEmbedding      []float64         `json:"referenceEmbedding,omitempty"`
 	ReferenceEmbeddings     [][]float64       `json:"referenceEmbeddings,omitempty"`
 	ReferenceEmbeddingModel string            `json:"referenceEmbeddingModel,omitempty"`
+	VIOReferenceEmbedding      []float64      `json:"vioReferenceEmbedding,omitempty"`
+	VIOReferenceEmbeddings     [][]float64    `json:"vioReferenceEmbeddings,omitempty"`
+	VIOReferenceEmbeddingModel string         `json:"vioReferenceEmbeddingModel,omitempty"`
 	Document               *DocumentEvidence `json:"document,omitempty"`
 	Decision               string            `json:"decision,omitempty"`
 	LivenessScore          float64           `json:"livenessScore,omitempty"`
