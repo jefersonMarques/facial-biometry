@@ -263,8 +263,9 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 	}
 
 	var dualPortrait *identity.DualPortraitEvidence
+	var vioReference domain.ReferenceResult
 	if handler.config.CNHDualPortraitShadow {
-		dualPortrait = handler.analyzeCNHDualPortrait(request.Context(), document, reference)
+		dualPortrait, vioReference = handler.analyzeCNHDualPortrait(request.Context(), document, reference)
 	}
 
 	updatedDocumentCheck, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
@@ -301,6 +302,15 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 			current.ReferenceEmbeddings = [][]float64{append([]float64(nil), current.ReferenceEmbedding...)}
 		}
 		current.ReferenceEmbeddingModel = reference.EmbeddingModel
+		current.VIOReferenceEmbedding = nil
+		current.VIOReferenceEmbeddings = nil
+		current.VIOReferenceEmbeddingModel = ""
+		if dualPortrait != nil && dualPortrait.Status == cnh.DualPortraitCompared &&
+			len(vioReference.Embedding) > 0 {
+			current.VIOReferenceEmbedding = append([]float64(nil), vioReference.Embedding...)
+			current.VIOReferenceEmbeddings = cloneEmbeddings(vioReference.Embeddings)
+			current.VIOReferenceEmbeddingModel = vioReference.EmbeddingModel
+		}
 		if handler.config.DemoMode {
 			if current.DemoArtifacts == nil {
 				current.DemoArtifacts = &identity.DemoArtifacts{}
@@ -616,6 +626,28 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		return
 	}
 
+	var triplePortrait *identity.DualPortraitEvidence
+	if handler.config.CNHDualPortraitShadow && check.Document != nil && check.Document.DualPortrait != nil {
+		evidence := *check.Document.DualPortrait
+		evidence.PDFLive = comparePortraitPair(
+			portraitEmbeddingSet(check.ReferenceEmbeddingModel, check.ReferenceEmbedding, referenceEmbeddings),
+			portraitEmbeddingSet(result.EmbeddingModel, result.Embedding, liveEmbeddings),
+		)
+		vioEmbeddings := check.VIOReferenceEmbeddings
+		if len(vioEmbeddings) == 0 && len(check.VIOReferenceEmbedding) > 0 {
+			vioEmbeddings = [][]float64{check.VIOReferenceEmbedding}
+		}
+		if len(check.VIOReferenceEmbedding) > 0 {
+			evidence.VIOLive = comparePortraitPair(
+				portraitEmbeddingSet(check.VIOReferenceEmbeddingModel, check.VIOReferenceEmbedding, vioEmbeddings),
+				portraitEmbeddingSet(result.EmbeddingModel, result.Embedding, liveEmbeddings),
+			)
+		} else {
+			evidence.VIOLive = &identity.PortraitPairEvidence{Status: "unavailable"}
+		}
+		triplePortrait = &evidence
+	}
+
 	passivePADAvailable := result.PassivePAD.Status == "available"
 	decision := handler.risk.VerificationDecision(result.LivenessScore, similarity, passivePADAvailable)
 	status := identity.StatusRejected
@@ -692,9 +724,15 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 			}
 			current.DemoArtifacts.CapturedPhotoDataURL = capturedPhotoDataURL
 		}
+		if triplePortrait != nil && current.Document != nil {
+			current.Document.DualPortrait = triplePortrait
+		}
 		current.ReferenceEmbedding = nil
 		current.ReferenceEmbeddings = nil
 		current.ReferenceEmbeddingModel = ""
+		current.VIOReferenceEmbedding = nil
+		current.VIOReferenceEmbeddings = nil
+		current.VIOReferenceEmbeddingModel = ""
 		return nil
 	})
 	if err != nil {
@@ -715,6 +753,9 @@ func (handler *Handler) completeIdentityCheck(writer http.ResponseWriter, reques
 		frameSimilarities,
 		payload.Geometry,
 	)
+	if triplePortrait != nil {
+		handler.recordAnalyticsTriplePortrait(request.Context(), updated.ID, triplePortrait)
+	}
 
 	handler.writeJSON(writer, http.StatusOK, response)
 }
@@ -777,6 +818,9 @@ func (handler *Handler) resetIdentityDocumentAttempt(token string, failure error
 		check.ReferenceEmbedding = nil
 		check.ReferenceEmbeddings = nil
 		check.ReferenceEmbeddingModel = ""
+		check.VIOReferenceEmbedding = nil
+		check.VIOReferenceEmbeddings = nil
+		check.VIOReferenceEmbeddingModel = ""
 		check.Document = nil
 		check.LastErrorCode = failure.Error()
 		if check.DocumentAttempts >= maxIdentityDocumentAttempts {
@@ -970,5 +1014,8 @@ func expireIdentityCheck(check *identity.Check) error {
 	check.ReferenceEmbedding = nil
 	check.ReferenceEmbeddings = nil
 	check.ReferenceEmbeddingModel = ""
+	check.VIOReferenceEmbedding = nil
+	check.VIOReferenceEmbeddings = nil
+	check.VIOReferenceEmbeddingModel = ""
 	return nil
 }
