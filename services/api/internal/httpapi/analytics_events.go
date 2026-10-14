@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"faceproof/services/api/internal/analytics"
+	"faceproof/services/api/internal/document/cnh"
 	"faceproof/services/api/internal/domain"
 	"faceproof/services/api/internal/identity"
 )
@@ -162,6 +163,30 @@ func (handler *Handler) recordAnalyticsEvent(
 	if err := handler.analytics.RecordEvent(operationContext, checkID, eventType, payload); err != nil {
 		handler.logAnalyticsError("record "+eventType, err)
 	}
+}
+
+func (handler *Handler) recordAnalyticsDualPortrait(
+	ctx context.Context,
+	checkID string,
+	document cnh.Document,
+	evidence *identity.DualPortraitEvidence,
+) {
+	if evidence == nil {
+		return
+	}
+	handler.recordAnalyticsEvent(ctx, checkID, "cnh_dual_portrait_shadow", map[string]any{
+		"pdf_photo_source":       document.PhotoSource,
+		"vio_photo_present":      evidence.VIOPhotoPresent,
+		"vio_photo_validated":    evidence.VIOPhotoValidated,
+		"dual_portrait_score":    evidence.Similarity,
+		"quality_a":              evidence.PDFQuality,
+		"quality_b":              evidence.VIOQuality,
+		"consistency_status":     evidence.Status,
+		"decode_duration_ms":     evidence.DecodeDurationMS,
+		"analysis_duration_ms":   evidence.AnalysisDurationMS,
+		"embedding_model":        evidence.EmbeddingModel,
+		"error_code":             evidence.ErrorCode,
+	})
 }
 
 func (handler *Handler) recordAnalyticsDocumentAccepted(ctx context.Context, check identity.Check) {
