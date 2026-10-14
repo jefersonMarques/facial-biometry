@@ -203,8 +203,8 @@ void print_variant(
 ) {
     std::cout << "{\"method\":\"" << name << "\""
               << ",\"status\":\"" << (vio.valid ? "analyzed" : "analysis_failed") << "\""
-              << ",\"inputWidth\":" << input_size.width
-              << ",\"inputHeight\":" << input_size.height
+              << ",\"preparedWidth\":" << input_size.width
+              << ",\"preparedHeight\":" << input_size.height
               << ",\"sourceWidth\":" << source_size.width
               << ",\"sourceHeight\":" << source_size.height
               << ",\"scaleX\":" << static_cast<double>(input_size.width) / source_size.width
