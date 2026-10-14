@@ -79,3 +79,38 @@ The raw cosine similarity is **not** the probability that an identity is genuine
 Do not mark this component ✅ until integration, runtime and representative
 document tests pass. No external production deployment is authorized by this
 document.
+
+## Optional BPG decoder on Linux
+
+If the signed VIO QR payload contains a BPG portrait, the shadow analysis
+requires the external `bpgdec` executable. Without it the event will report
+`decoder_unavailable` and the original CNH-to-live comparison will continue.
+
+For controlled WSL/Linux development, source the decoder from the original
+upstream project (<https://bellard.org/bpg/>, version 0.9.8). Build `bpgdec`
+from reviewed, pinned source rather than downloading an arbitrary binary.
+The upstream BPG distribution is old and must be treated as a native parser
+of untrusted document bytes.
+
+After placing a reviewed executable at a controlled absolute path, verify it
+is executable and configure the FaceProof API process:
+
+```bash
+export FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW=true
+export FACEPROOF_BPGDEC_PATH="/absolute/path/to/bpgdec"
+./scripts/run-dev.sh --analytics
+```
+
+Before enabling for production: review the decoder's origin, build artifacts
+and known vulnerabilities; isolate the process with limited privileges and
+resource limits. The current application limits the decoder runtime to 5 s
+and the decoded PNG to 4 MiB; these limits are not a substitute for OS sandboxing.
+
+## Related analytics diagnosis (October 2026)
+
+A real WSL test confirmed `decoder_unavailable` while CNH validation and live
+biometrics succeeded. During the same test, PostgreSQL analytics reported
+parameter-inference failures in authoritative reconciliation and completion.
+The analytics SQL now explicitly casts floating-point parameters, and CI runs
+a PostgreSQL-backed regression test. Repeat the WSL run after pulling these
+changes to confirm the deployed external database is healthy.
