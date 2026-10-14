@@ -1,10 +1,14 @@
 package cnh
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"testing"
 
 	"faceproof/services/api/internal/document/pdfanalysis"
 	"faceproof/services/api/internal/document/vio/decoder"
+	"faceproof/services/api/internal/document/vio/imagepreview"
 )
 
 func TestValidCPF(t *testing.T) {
@@ -91,5 +95,86 @@ func TestReferencePhotoPrefersCryptographicallyIntactSignedPDF(t *testing.T) {
 		evidence.Width != 250 ||
 		evidence.Height != 337 {
 		t.Fatalf("unexpected photo evidence: %#v", evidence)
+	}
+}
+
+func TestCollectDualPortraitSignedPNG(t *testing.T) {
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 18, 24))); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(nil, imagepreview.NewService(nil))
+	result := decoder.Result{
+		SignatureValid: true,
+		Image:          encoded.Bytes(),
+		ImageFormat:    "PNG",
+	}
+	evidence := service.collectDualPortrait(&result, "signed_pdf_visual")
+	if evidence.Status != DualPortraitReady {
+		t.Fatalf("status = %q, want ready", evidence.Status)
+	}
+	if !evidence.PhotoPresent || evidence.MIME != "image/png" {
+		t.Fatalf("unexpected portrait evidence: %+v", evidence)
+	}
+	if evidence.Width != 18 || evidence.Height != 24 {
+		t.Fatalf("unexpected portrait dimensions: %dx%d", evidence.Width, evidence.Height)
+	}
+	if !bytes.Equal(evidence.Photo, encoded.Bytes()) {
+		t.Fatal("decoded portrait differs from signed VIO image")
+	}
+}
+
+func TestCollectDualPortraitUnavailableDoesNotFailDocument(t *testing.T) {
+	service := NewService(nil, imagepreview.NewService(nil))
+	cases := []struct {
+		name       string
+		result     decoder.Result
+		source     string
+		wantStatus string
+	}{
+		{
+			name:       "missing image",
+			result:     decoder.Result{SignatureValid: true},
+			source:     "signed_pdf_visual",
+			wantStatus: DualPortraitUnavailable,
+		},
+		{
+			name:       "VIO reference already selected",
+			result:     decoder.Result{SignatureValid: true},
+			source:     "signed_vio_qr",
+			wantStatus: DualPortraitNotApplicable,
+		},
+		{
+			name:       "unvalidated signature",
+			result:     decoder.Result{Image: []byte{1}, ImageFormat: "PNG"},
+			source:     "signed_pdf_visual",
+			wantStatus: DualPortraitAnalysisFailed,
+		},
+		{
+			name:       "unsupported image format",
+			result:     decoder.Result{SignatureValid: true, Image: []byte{1}, ImageFormat: "raw"},
+			source:     "signed_pdf_visual",
+			wantStatus: DualPortraitAnalysisFailed,
+		},
+		{
+			name:       "missing BPG decoder",
+			result:     decoder.Result{SignatureValid: true, Image: []byte{1, 2, 3}, ImageFormat: "BPG"},
+			source:     "signed_pdf_visual",
+			wantStatus: DualPortraitDecoderMissing,
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			result := test.result
+			evidence := service.collectDualPortrait(&result, test.source)
+			if evidence.Status != test.wantStatus {
+				t.Fatalf("status = %q, want %q", evidence.Status, test.wantStatus)
+			}
+			if len(evidence.Photo) != 0 {
+				t.Fatal("unavailable portrait must not expose image bytes")
+			}
+		})
 	}
 }
