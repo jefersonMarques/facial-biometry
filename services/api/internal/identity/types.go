@@ -29,7 +29,7 @@ const (
 type DualPortraitEvidence struct {
 	Status             string   `json:"status"`
 	Similarity         *float64 `json:"similarity,omitempty"`
-	PDFQuality         float64  `json:"pdfQuality"`
+	PDFQuality         *float64 `json:"pdfQuality,omitempty"`
 	VIOQuality         *float64 `json:"vioQuality,omitempty"`
 	VIOPhotoPresent    bool     `json:"vioPhotoPresent"`
 	VIOPhotoValidated  bool     `json:"vioPhotoValidated"`
