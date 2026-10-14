@@ -2,6 +2,7 @@ package analytics
 
 import (
     "context"
+    "database/sql"
     "errors"
     "math"
     "sort"
@@ -218,4 +219,13 @@ func (r *Repository) Calibration(ctx context.Context, from,to time.Time, runtime
     if err==nil{err=rows.Err()}
     rows.Close()
     return report,err
+}
+
+func (r *Repository) CalibrationTruth(ctx context.Context,id string) (string,string,error) {
+    var label,source string
+    err:=r.db.QueryRowContext(ctx,
+        "SELECT truth_label,truth_source FROM faceproof_checks WHERE check_id=$1 AND document IS NOT NULL",
+        id).Scan(&label,&source)
+    if errors.Is(err,sql.ErrNoRows) {return "","",ErrNotFound}
+    return label,source,err
 }
