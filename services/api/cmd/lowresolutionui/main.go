@@ -183,7 +183,7 @@ func (app *benchmarkApp) benchmark(w http.ResponseWriter, r *http.Request) {
 		Variants json.RawMessage `json:"variants"`
 	}
 	if json.Unmarshal(output, &result) != nil || result.Mode != "offline_low_resolution_diagnostic" || len(result.Variants) == 0 {
-		http.Error(w, "{"error":"unexpected native benchmark response"}", http.StatusBadGateway)
+		http.Error(w, "{\"error\":\"unexpected native benchmark response\"}", http.StatusBadGateway)
 		return
 	}
 	_, _ = w.Write(output)
