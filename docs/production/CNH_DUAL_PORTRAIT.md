@@ -30,8 +30,10 @@ source. Their agreement must not be described as two independent identity checks
   document-to-live biometrics remain unchanged.
 - The shadow result is recorded with the encrypted document check and emitted
   as a privacy-safe analytics event when analytics is configured.
-- The VIO image bytes and secondary embeddings are transient and must never
-  be placed in the analytics event or the persisted check.
+- The VIO image bytes are transient and never persist. The secondary
+  embedding is held only in the existing encrypted identity check until
+  completion, processed expiry or failed-document reset; neither bytes nor
+  embeddings are sent to analytics.
 
 ## Shadow statuses
 
