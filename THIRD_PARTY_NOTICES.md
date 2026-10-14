@@ -61,3 +61,16 @@ Go dependency: `github.com/fullsailor/pkcs7`.
 Used by the Windows/native PDF signature fallback to parse BER/DER PKCS#7/CMS signatures found in official CNH Digital PDFs.
 
 License: MIT.
+
+
+## MediaPipe Tasks Vision / Face Landmarker
+
+Browser dependency: `@mediapipe/tasks-vision` version `1.0.1`.
+
+Runtime use: local facial landmarks for browser-side capture guidance and experimental geometry.
+
+License: Apache License 2.0.
+
+The JavaScript/WASM runtime is installed from the pinned NPM package and copied into the generated same-origin runtime directory only after exact size and SHA-256 verification. The Face Landmarker `float16/1` model is downloaded from the versioned Google MediaPipe model URL and verified against the pinned SHA-256 in `tools/mediapipe-runtime-lock.json`.
+
+The generated MediaPipe runtime directory is not committed to this repository. Runtime network access is restricted by the FaceProof Content Security Policy; MediaPipe input frames remain local browser inputs and the SDK's external metrics endpoint is not allowed by the FaceProof gateway CSP.

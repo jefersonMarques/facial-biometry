@@ -1,8 +1,10 @@
-const DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
-const DEFAULT_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const DEFAULT_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+import { GeometryWasmShadow, } from "./liveness-core-shadow.js";
+const DEFAULT_MODULE_URL = "/vendor/mediapipe/1.0.1/vision_bundle.mjs";
+const DEFAULT_WASM_ROOT = "/vendor/mediapipe/1.0.1/wasm";
+const DEFAULT_MODEL_URL = "/vendor/mediapipe/1.0.1/models/face_landmarker.task";
 const DEFAULT_SAMPLE_INTERVAL_MS = 180;
-const DEFAULT_MAX_OBSERVATIONS = 120;\nconst ANALYSIS_WIDTH = 384;
+const DEFAULT_MAX_OBSERVATIONS = 120;
+const ANALYSIS_WIDTH = 384;
 const MIN_PHASE_SAMPLES = 4;
 export class ExperimentalGeometryLiveness {
     landmarker = null;
@@ -15,6 +17,7 @@ export class ExperimentalGeometryLiveness {
     observations = [];
     analysisCanvas;
     analysisContext;
+    wasmShadow = null;
     onUpdate = null;
     options;
     constructor(options = {}) {
@@ -64,17 +67,28 @@ export class ExperimentalGeometryLiveness {
         this.stop();
         this.landmarker?.close();
         this.landmarker = null;
+        this.wasmShadow?.dispose();
+        this.wasmShadow = null;
         this.initialization = null;
     }
     reset() {
         this.observations.length = 0;
         this.lastInferenceAt = 0;
+        this.wasmShadow?.reset();
     }
     setPhase(phase) {
         this.phase = phase;
     }
     summarize() {
         return summarizeGeometryEvidence(this.observations);
+    }
+    getWasmShadowDiagnostics() {
+        return this.wasmShadow?.snapshot() ?? {
+            state: "idle",
+            summary: null,
+            guide: null,
+            errorMessage: "",
+        };
     }
     async initializeInternal() {
         const moduleUrl = this.options.moduleUrl;
@@ -99,6 +113,16 @@ export class ExperimentalGeometryLiveness {
         catch {
             this.landmarker = await create("CPU");
         }
+        const wasmShadow = new GeometryWasmShadow(() => {
+            this.onUpdate?.(this.summarize());
+        });
+        this.wasmShadow = wasmShadow;
+        try {
+            await wasmShadow.initialize();
+        }
+        catch {
+            // Shadow mode: WASM failure must never affect the active verification flow.
+        }
     }
     tick(timestampMs) {
         if (!this.running) {
@@ -118,7 +142,9 @@ export class ExperimentalGeometryLiveness {
                 }
                 const result = this.landmarker.detectForVideo(analysisFrame, timestampMs);
                 const landmarks = result.faceLandmarks?.[0];
+                dispatchLocalGuide(analyzeLocalFaceGuide(landmarks ?? [], timestampMs));
                 if (landmarks) {
+                    this.wasmShadow?.push(this.phase, timestampMs, landmarks);
                     const observation = extractGeometryObservation(landmarks, this.phase, timestampMs);
                     if (observation) {
                         this.observations.push(observation);
@@ -151,6 +177,65 @@ export class ExperimentalGeometryLiveness {
         this.analysisContext.drawImage(video, 0, 0, width, height);
         return this.analysisCanvas;
     }
+}
+export function analyzeLocalFaceGuide(landmarks, timestampMs) {
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let finiteCount = 0;
+    for (const landmark of landmarks) {
+        if (![landmark.x, landmark.y, landmark.z].every(Number.isFinite)) {
+            continue;
+        }
+        minX = Math.min(minX, landmark.x);
+        minY = Math.min(minY, landmark.y);
+        maxX = Math.max(maxX, landmark.x);
+        maxY = Math.max(maxY, landmark.y);
+        finiteCount++;
+    }
+    const width = maxX - minX;
+    const height = maxY - minY;
+    if (finiteCount < 50 ||
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width < 0.02 ||
+        height < 0.02) {
+        return {
+            timestampMs,
+            faceDetected: false,
+            centerX: 0,
+            centerY: 0,
+            widthRatio: 0,
+            heightRatio: 0,
+            rollDegrees: 0,
+            faceSizeScore: 0,
+        };
+    }
+    let rollDegrees = 0;
+    const leftEye = landmarkAt(landmarks, 33);
+    const rightEye = landmarkAt(landmarks, 263);
+    if (leftEye && rightEye) {
+        rollDegrees = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * (180 / Math.PI);
+    }
+    const areaRatio = width * height;
+    let faceSizeScore = 1;
+    if (areaRatio < 0.07) {
+        faceSizeScore = clamp01(areaRatio / 0.07);
+    }
+    else if (areaRatio > 0.62) {
+        faceSizeScore = clamp01(1 - ((areaRatio - 0.62) / 0.30));
+    }
+    return {
+        timestampMs,
+        faceDetected: true,
+        centerX: clamp01(minX + width / 2),
+        centerY: clamp01(minY + height / 2),
+        widthRatio: clamp01(width),
+        heightRatio: clamp01(height),
+        rollDegrees,
+        faceSizeScore,
+    };
 }
 export function extractGeometryObservation(landmarks, phase, timestampMs) {
     const leftCheek = landmarkAt(landmarks, 234);
@@ -311,4 +396,12 @@ function median(values) {
 }
 function clamp01(value) {
     return Math.max(0, Math.min(1, value));
+}
+function dispatchLocalGuide(guide) {
+    window.dispatchEvent(new CustomEvent("faceproof:local-guide", {
+        detail: {
+            timestampMs: performance.now(),
+            guide,
+        },
+    }));
 }

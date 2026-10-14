@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "tenants": [
+    {
+      "id": "customer-a",
+      "name": "Customer A",
+      "apiKeySha256": "REPLACE_WITH_64_HEX_SHA256_OF_API_KEY",
+      "enabled": true,
+      "monthlyCheckLimit": 1000
+    }
+  ]
+}

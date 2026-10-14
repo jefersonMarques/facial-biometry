@@ -6,7 +6,11 @@ The browser is treated as an untrusted capture client. It may guide the user, pe
 
 The API is authoritative for session lifetime, one-time session consumption, illumination challenge values and frame-to-challenge mapping. Client-provided `challengeIndex` and `clientLight` values are overwritten before the biometric engine receives the capture.
 
-## CNH Digital identity pipeline
+## Core biometric product
+
+The core FaceProof product supports enrollment and 1:1 verification without requiring a document workflow. CNH Digital is an optional identity module that can supply an authenticated reference identity.
+
+## Optional CNH Digital identity pipeline
 
 ```text
 Issuer: expected CPF + minimum signed-PDF date

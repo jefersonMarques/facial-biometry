@@ -1,12 +1,16 @@
+import { buildCaptureSeal } from "./capture-seal.js";
 import type {
     BiometricSessionKind,
     CapturePackage,
+    CaptureProtocolMetadata,
     CompletionResponse,
+    GeometryTelemetry,
     GuidedCapturedFrame,
     IdentityCheckStatus,
     IdentityCompletionResponse,
     IdentityDocumentResponse,
     IdentityGuideResult,
+    RuntimeFingerprint,
     SessionResponse,
 } from "./types.js";
 
@@ -38,6 +42,13 @@ export class BiometricClient {
 
     public async getIdentityCheck(token: string): Promise<IdentityCheckStatus> {
         return this.identityRequest<IdentityCheckStatus>("/v1/identity/check", token, { method: "GET" });
+    }
+
+    public async confirmIdentityView(token: string, visibleMs: number): Promise<void> {
+        await this.identityRequest<{ status: string }>("/v1/identity/view", token, {
+            method: "POST",
+            body: JSON.stringify({ visibleMs }),
+        });
     }
 
     public async uploadIdentityDocument(
@@ -78,18 +89,61 @@ export class BiometricClient {
         token: string,
         session: SessionResponse,
         guidedFrames: GuidedCapturedFrame[],
+        runtime: RuntimeFingerprint,
+        captureProtocol: CaptureProtocolMetadata,
+        geometry?: GeometryTelemetry,
     ): Promise<IdentityCompletionResponse> {
         if (session.kind !== "identity") {
             throw new Error("Invalid identity capture session");
         }
-        return this.identityRequest<IdentityCompletionResponse>("/v1/identity/complete", token, {
-            method: "POST",
-            body: JSON.stringify({
-                sessionId: session.sessionId,
-                sessionToken: session.sessionToken,
-                guidedFrames,
-            }),
+        const captureSeal = await buildCaptureSeal(session, guidedFrames);
+        const form = new FormData();
+        form.append("sessionId", session.sessionId);
+        form.append("sessionToken", session.sessionToken);
+        form.append("manifest", JSON.stringify({
+            runtime,
+            captureProtocol,
+            captureSeal,
+            geometry,
+            guidedFrames: guidedFrames.map((frame) => ({
+                phase: frame.phase,
+                clientQuality: frame.clientQuality,
+            })),
+        }));
+
+        guidedFrames.forEach((frame, index) => {
+            form.append(
+                "frame",
+                frame.imageBlob,
+                `${String(index).padStart(2, "0")}-${frame.phase}.jpg`,
+            );
         });
+
+        const requestInit: RequestInit = {
+            method: "POST",
+            headers: {
+                "Idempotency-Key": session.captureRunId,
+            },
+            body: form,
+        };
+
+        try {
+            return await this.identityRequest<IdentityCompletionResponse>(
+                "/v1/identity/complete",
+                token,
+                requestInit,
+            );
+        } catch (error) {
+            if (!(error instanceof TypeError)) {
+                throw error;
+            }
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 300));
+            return this.identityRequest<IdentityCompletionResponse>(
+                "/v1/identity/complete",
+                token,
+                requestInit,
+            );
+        }
     }
 
     private async identityRequest<T>(path: string, token: string, init: RequestInit): Promise<T> {

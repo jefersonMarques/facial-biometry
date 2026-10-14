@@ -1,0 +1,124 @@
+#include "faceproof_biometric_vision.h"
+
+#include <cstdio>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <iterator>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
+namespace {
+
+std::vector<uint8_t> read_file(const std::string& path) {
+    if (path == "-") {
+#ifdef _WIN32
+        _setmode(_fileno(stdin), _O_BINARY);
+#endif
+        return std::vector<uint8_t>(
+            std::istreambuf_iterator<char>(std::cin),
+            std::istreambuf_iterator<char>()
+        );
+    }
+
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return {};
+    }
+    return std::vector<uint8_t>(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()
+    );
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    if (argc != 4) {
+        std::cerr << "usage: faceproof_biometric_vision_cli <image.jpg> <yunet.onnx> <sface.onnx>\n";
+        return 2;
+    }
+
+    const auto image = read_file(argv[1]);
+    if (image.empty()) {
+        std::cerr << "image could not be read\n";
+        return 3;
+    }
+
+    FPBiometricVisionEngine* engine =
+        fp_bio_vision_create(argv[2], argv[3]);
+    if (engine == nullptr) {
+        std::cerr << "vision engine could not be created\n";
+        return 4;
+    }
+
+    FPBiometricFace face{};
+    FPBiometricQuality quality{};
+    const int analyze_code = fp_bio_vision_analyze_jpeg(
+        engine,
+        image.data(),
+        image.size(),
+        &face,
+        &quality
+    );
+    if (analyze_code != 0) {
+        fp_bio_vision_destroy(engine);
+        std::cerr << "vision detect/quality failed: " << analyze_code
+                  << " error=" << fp_bio_vision_last_error() << "\n";
+        return 5;
+    }
+
+    std::vector<float> embedding(512);
+    size_t embedding_size = 0;
+    const int encode_code = fp_bio_vision_encode_jpeg(
+        engine,
+        image.data(),
+        image.size(),
+        embedding.data(),
+        embedding.size(),
+        &embedding_size,
+        &face,
+        &quality
+    );
+    fp_bio_vision_destroy(engine);
+
+    if (encode_code != 0) {
+        std::cerr << "vision SFace encoding failed: " << encode_code
+                  << " required_embedding_size=" << embedding_size
+                  << " error=" << fp_bio_vision_last_error() << "\n";
+        return 6;
+    }
+
+    std::cout << std::setprecision(17)
+              << "{"
+              << "\"face\":{"
+              << "\"x\":" << face.x << ","
+              << "\"y\":" << face.y << ","
+              << "\"width\":" << face.width << ","
+              << "\"height\":" << face.height << ","
+              << "\"confidence\":" << face.confidence
+              << "},"
+              << "\"quality\":{"
+              << "\"sharpness\":" << quality.sharpness << ","
+              << "\"brightness\":" << quality.brightness << ","
+              << "\"brightnessValue\":" << quality.brightness_value << ","
+              << "\"faceSize\":" << quality.face_size << ","
+              << "\"score\":" << quality.score
+              << "},"
+              << "\"embedding\":[";
+
+    for (size_t index = 0; index < embedding_size; ++index) {
+        if (index > 0) {
+            std::cout << ",";
+        }
+        std::cout << embedding[index];
+    }
+
+    std::cout << "]}\n";
+    return 0;
+}

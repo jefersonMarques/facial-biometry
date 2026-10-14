@@ -98,3 +98,18 @@ func TestIdentityMatchRequestsRetryWhenBorderline(t *testing.T) {
 		t.Fatal("expected clearly different face to proceed to rejection instead of recapture")
 	}
 }
+
+func TestNormalizeGuidedFramesRejectsFarAfterNear(t *testing.T) {
+	frames := []domain.GuidedCapturedFrame{
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "near"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "far"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "near"},
+		{ImageBase64: "data:image/jpeg;base64,AA==", Phase: "near"},
+	}
+
+	if _, err := normalizeGuidedFrames(frames); err == nil {
+		t.Fatal("expected far frame after near phase to be rejected")
+	}
+}

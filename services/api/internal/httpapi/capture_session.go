@@ -13,6 +13,14 @@ func (handler *Handler) issueCaptureSession(subjectID string, kind domain.Sessio
 	if err != nil {
 		return createSessionResponse{}, err
 	}
+	captureRunID, err := security.RandomUUID()
+	if err != nil {
+		return createSessionResponse{}, err
+	}
+	captureChallenge, err := security.RandomID(24)
+	if err != nil {
+		return createSessionResponse{}, err
+	}
 	illuminationPattern, err := randomIlluminationPattern(illuminationSteps)
 	if err != nil {
 		return createSessionResponse{}, err
@@ -20,9 +28,13 @@ func (handler *Handler) issueCaptureSession(subjectID string, kind domain.Sessio
 
 	now := time.Now().UTC()
 	captureSession := domain.CaptureSession{
-		ID:                   sessionID,
-		SubjectID:            subjectID,
-		Kind:                 kind,
+		ID:                     sessionID,
+		SubjectID:              subjectID,
+		Kind:                   kind,
+		CaptureRunID:           captureRunID,
+		CaptureProtocolVersion: "2",
+		CaptureChallenge:       captureChallenge,
+		WatermarkToken:         captureWatermarkToken(captureChallenge),
 		IlluminationPattern:  illuminationPattern,
 		CaptureDurationMS:    captureDurationMS,
 		SampleIntervalMS:     sampleIntervalMS,
@@ -31,16 +43,24 @@ func (handler *Handler) issueCaptureSession(subjectID string, kind domain.Sessio
 		ExpiresAt:            now.Add(handler.config.SessionTTL),
 	}
 
-	token, err := handler.signer.Sign(captureSession.ID, captureSession.ExpiresAt)
+	token, err := handler.signer.SignCapture(
+		captureSession.ID,
+		captureSession.CaptureRunID,
+		captureSession.ExpiresAt,
+	)
 	if err != nil {
 		return createSessionResponse{}, err
 	}
 
 	handler.sessions.Put(captureSession)
 	return createSessionResponse{
-		SessionID:            captureSession.ID,
-		SessionToken:         token,
-		Kind:                 string(captureSession.Kind),
+		SessionID:              captureSession.ID,
+		SessionToken:           token,
+		Kind:                   string(captureSession.Kind),
+		CaptureRunID:           captureSession.CaptureRunID,
+		CaptureProtocolVersion: captureSession.CaptureProtocolVersion,
+		CaptureChallenge:       captureSession.CaptureChallenge,
+		WatermarkToken:         captureSession.WatermarkToken,
 		ExpiresAt:            captureSession.ExpiresAt,
 		CaptureDurationMS:    captureSession.CaptureDurationMS,
 		SampleIntervalMS:     captureSession.SampleIntervalMS,

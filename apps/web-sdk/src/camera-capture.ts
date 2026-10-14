@@ -23,6 +23,11 @@ export interface CameraSnapshot {
     quality: FrameQualityAssessment;
 }
 
+export interface CameraBlobSnapshot {
+    imageBlob: Blob;
+    quality: FrameQualityAssessment;
+}
+
 export interface CaptureOptions {
     skipReadiness?: boolean;
 }
@@ -70,11 +75,43 @@ export class CameraCapture {
         return this.stream !== null && this.stream.getVideoTracks().some((track) => track.readyState === "live");
     }
 
+    public qualityForGuide(maxWidth = 360): FrameQualityAssessment {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        return this.qualityAnalyzer.analyze(imageData);
+    }
+
     public snapshotForGuide(maxWidth = 360, jpegQuality = 0.72): CameraSnapshot {
         this.drawCurrentFrame(maxWidth);
         const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
         return {
             imageBase64: this.canvas.toDataURL("image/jpeg", jpegQuality),
+            quality: this.qualityAnalyzer.analyze(imageData),
+        };
+    }
+
+    public async captureBlob(
+        maxWidth = 640,
+        jpegQuality = 0.80,
+        watermarkLabel = "",
+    ): Promise<CameraBlobSnapshot> {
+        this.drawCurrentFrame(maxWidth);
+        const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        if (watermarkLabel) {
+            this.drawCaptureWatermark(watermarkLabel);
+        }
+        const imageBlob = await new Promise<Blob>((resolve, reject) => {
+            this.canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("Camera failed to encode JPEG"));
+                    return;
+                }
+                resolve(blob);
+            }, "image/jpeg", jpegQuality);
+        });
+
+        return {
+            imageBlob,
             quality: this.qualityAnalyzer.analyze(imageData),
         };
     }
@@ -183,6 +220,38 @@ export class CameraCapture {
             imageBase64: this.canvas.toDataURL("image/jpeg", 0.80),
             quality: this.qualityAnalyzer.analyze(imageData),
         };
+    }
+
+    private drawCaptureWatermark(label: string): void {
+        const normalized = label.trim().slice(0, 48);
+        if (!normalized) {
+            return;
+        }
+
+        const paddingX = Math.max(8, Math.round(this.canvas.width * 0.015));
+        const paddingY = Math.max(6, Math.round(this.canvas.height * 0.012));
+        const fontSize = Math.max(11, Math.round(this.canvas.width * 0.024));
+
+        this.context.save();
+        this.context.font = `600 ${fontSize}px system-ui, sans-serif`;
+        this.context.textBaseline = "bottom";
+        const metrics = this.context.measureText(normalized);
+        const boxWidth = Math.ceil(metrics.width + paddingX * 2);
+        const boxHeight = Math.ceil(fontSize + paddingY * 2);
+        const x = Math.max(0, this.canvas.width - boxWidth - paddingX);
+        const y = Math.max(0, this.canvas.height - boxHeight - paddingY);
+
+        this.context.globalAlpha = 0.72;
+        this.context.fillStyle = "#10130f";
+        this.context.fillRect(x, y, boxWidth, boxHeight);
+        this.context.globalAlpha = 0.96;
+        this.context.fillStyle = "#f5f8ef";
+        this.context.fillText(
+            normalized,
+            x + paddingX,
+            y + boxHeight - paddingY,
+        );
+        this.context.restore();
     }
 
     private drawCurrentFrame(maxWidth = 640): void {

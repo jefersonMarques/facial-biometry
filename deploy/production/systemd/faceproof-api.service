@@ -1,0 +1,40 @@
+[Unit]
+Description=FaceProof API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=faceproof
+Group=faceproof
+WorkingDirectory=/opt/faceproof
+Environment=FACEPROOF_ENV=production
+EnvironmentFile=/etc/faceproof/faceproof.env
+ExecStart=/opt/faceproof/bin/faceproof-api
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/opt/faceproof /etc/faceproof
+ReadWritePaths=/var/lib/faceproof
+
+[Install]
+WantedBy=multi-user.target
