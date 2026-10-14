@@ -208,6 +208,18 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
 20. ⬜ **Validação independente**
     - Metodologia PAD formal, benchmark externo e preparação para ISO/IEC 30107-3.
 
+## Evolução em andamento — consistência documental CNH × VIO
+
+- ⏳ **CNH Dual Portrait Consistency (shadow mode)**:
+  - Código de coleta da segunda imagem VIO assinado, com decoder BPG quando disponível.
+  - Comparação PDF × VIO reutilizando Secure Core C++/SFace e cosine similarity, sem novo limiar.
+  - Flag `FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW` desabilitada por padrão.
+  - Registro de status, score, qualidade e latência sem armazenar segunda imagem ou embedding.
+  - ⏳ Confirmar CI, testes completos, assinaturas VIO dos diferentes formatos e funcionamento em ambiente Linux real.
+  - ⏳ Medir latência e calibrar scores em CNHs legítimas de diferentes versões e adulterações controladas.
+  - ⏳ Validar o comportamento de shadow mode sem alterar aprovações ou falsos negativos.
+  - Documentação técnica: [CNH_DUAL_PORTRAIT.md](CNH_DUAL_PORTRAIT.md).
+
 ## Baseline técnico congelado
 
 O baseline acima é referência para comparar a migração de Python authority → C++ authority. Durante essa migração, thresholds e modelos biométricos não devem ser alterados simultaneamente. Qualquer mudança posterior deve gerar uma nova versão de baseline.
