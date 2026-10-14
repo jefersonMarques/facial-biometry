@@ -394,7 +394,7 @@ function renderDetail(detail) {
                     </div>
                     <span>VIO original</span>
                     ${detail.vioPhotoDataUrl
-                        ? `<a class="vio-save" download="faceproof-vio-original.png" href="${escapeAttribute(detail.vioPhotoDataUrl)}">Salvar VIO</a>`
+                        ? `<a class="vio-save" download="faceproof-vio-original.${detail.vioPhotoDataUrl.startsWith("data:image/jpeg;") ? "jpg" : "png"}" href="${escapeAttribute(detail.vioPhotoDataUrl)}">Salvar VIO</a>`
                         : '<small>Novas verificações em modo de demonstração</small>'}
                 </div>
                 <div class="detail-arrow">↔</div>
