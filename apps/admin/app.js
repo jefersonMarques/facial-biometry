@@ -31,6 +31,14 @@ const openGenerator = document.getElementById("openGenerator");
 const closeGenerator = document.getElementById("closeGenerator");
 const generatorPanel = document.getElementById("generatorPanel");
 const summaryCards = document.getElementById("summaryCards");
+const calibrationDays = document.getElementById("calibrationDays");
+const calibrationRuntime = document.getElementById("calibrationRuntime");
+const calibrationPair = document.getElementById("calibrationPair");
+const calibrationStatus = document.getElementById("calibrationStatus");
+const calibrationCounts = document.getElementById("calibrationCounts");
+const calibrationHistograms = document.getElementById("calibrationHistograms");
+const calibrationHealth = document.getElementById("calibrationHealth");
+let calibrationCache = null;
 const checkForm = document.getElementById("checkForm");
 const faceActionField = document.getElementById("faceActionField");
 const displayNameField = document.getElementById("displayNameField");
@@ -80,6 +88,11 @@ loginForm.addEventListener("submit", (event) => {
 
 logoutButton.addEventListener("click", logout);
 refreshButton.addEventListener("click", () => void loadDashboard());
+calibrationDays.addEventListener("change", () => void loadCalibration());
+calibrationRuntime.addEventListener("change", () => void loadCalibration());
+calibrationPair.addEventListener("change", () => {
+    if (calibrationCache) renderCalibration(calibrationCache);
+});
 openGenerator.addEventListener("click", () => {
     generatorPanel.hidden = false;
     generatorPanel.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -157,6 +170,7 @@ async function loadDashboard() {
             loadChecks(),
         ]);
         renderSummary(summary);
+        await loadCalibration();
         lastUpdated.textContent = "Atualizado " + new Date().toLocaleTimeString("pt-BR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -193,6 +207,152 @@ function renderSummary(summary) {
             <strong>${escapeHtml(value)}</strong>
         </article>
     `).join("");
+}
+
+const calibrationMethods = {
+    production_cubic: "Bicúbica atual",
+    nearest: "Nearest Neighbor",
+    linear: "Bilinear",
+    lanczos4: "Lanczos4",
+};
+
+async function loadCalibration() {
+    calibrationStatus.textContent = "Calculando estatísticas...";
+    const params = new URLSearchParams({
+        days: calibrationDays.value,
+        runtime: calibrationRuntime.value,
+    });
+    try {
+        const report = await api("/v1/admin/calibration?" + params.toString());
+        calibrationCache = report;
+        renderCalibration(report);
+    } catch (error) {
+        calibrationStatus.textContent = "Calibração indisponível: " + errorMessage(error);
+        calibrationCounts.replaceChildren();
+        calibrationHistograms.replaceChildren();
+        calibrationHealth.replaceChildren();
+    }
+}
+
+function calibrationNumber(value, digits = 4) {
+    return value === null || value === undefined || !Number.isFinite(Number(value))
+        ? "—" : Number(value).toFixed(digits).replace(".", ",");
+}
+
+function renderCalibration(report) {
+    // Aggregated metrics only; no check IDs, names, images or embeddings.
+    const selectedRuntime = calibrationRuntime.value;
+    calibrationRuntime.replaceChildren(new Option("Todos os runtimes", ""));
+    for (const runtime of report.runtimes || []) {
+        if (!runtime.runtimeId) continue;
+        const label = runtime.runtimeId === "unknown"
+            ? "Runtime não identificado"
+            : runtime.runtimeId.slice(0, 12) + "… (" + runtime.embeddingModel + ")";
+        calibrationRuntime.add(new Option(label, runtime.runtimeId));
+    }
+    if ([...calibrationRuntime.options].some(option => option.value === selectedRuntime)) {
+        calibrationRuntime.value = selectedRuntime;
+    }
+    const mixed = (report.runtimes || []).length > 1 && !report.runtimeFilter;
+    calibrationStatus.textContent =
+        integer(report.completedCnh) + " CNHs concluídas no período · " +
+        integer(report.withBenchmark) + " com benchmark. " +
+        (mixed ? "Múltiplos runtimes: use o filtro para não misturar versões." :
+        "Estatísticas observacionais; sem calibração automática.");
+
+    calibrationCounts.replaceChildren();
+    const summaries = [
+        ["Aprovadas", report.approved],
+        ["Rejeitadas", report.rejected],
+        ["Verdade desconhecida", report.unknownTruth],
+        ["Titulares confirmados", report.confirmedGenuine],
+        ["Impostores confirmados", report.confirmedImpostor],
+    ];
+    for (const [label, value] of summaries) {
+        const card = document.createElement("div");
+        card.className = "calibration-stat";
+        const title = document.createElement("span");
+        title.textContent = label;
+        const amount = document.createElement("strong");
+        amount.textContent = integer(value);
+        card.append(title, amount);
+        calibrationCounts.append(card);
+    }
+
+    calibrationHistograms.replaceChildren();
+    const pair = calibrationPair.value;
+    const matching = (report.series || []).filter(item => item.pair === pair);
+    if (!matching.length) {
+        const note = document.createElement("p");
+        note.textContent = "Ainda não há scores desta comparação no período selecionado.";
+        calibrationHistograms.append(note);
+    }
+    for (const method of ["production_cubic", "nearest", "linear", "lanczos4"]) {
+        const records = matching.filter(item => item.method === method);
+        if (!records.length) continue;
+        const chart = document.createElement("section");
+        chart.className = "calibration-chart";
+        const title = document.createElement("h3");
+        title.textContent = calibrationMethods[method] || method;
+        chart.append(title);
+        const maxCount = Math.max(1, ...records.flatMap(item => item.histogram || []));
+        for (const truth of [
+            ["genuine_confirmed", "Titular confirmado"],
+            ["impostor_confirmed", "Impostor confirmado"],
+            ["unknown", "Sem confirmação independente"],
+        ]) {
+            const record = records.find(item => item.truthLabel === truth[0]);
+            if (!record) continue;
+            const name = document.createElement("p");
+            name.className = "calibration-series-label";
+            name.textContent = truth[1] + " · " + integer(record.compared) +
+                " scores · média " + calibrationNumber(record.meanCosine);
+            const bars = document.createElement("div");
+            bars.className = "calibration-bars " + truth[0];
+            (record.histogram || []).forEach((count, index) => {
+                const bar = document.createElement("span");
+                bar.style.height = Math.max(2, Math.round((count / maxCount) * 55)) + "px";
+                bar.title = (index / 10 - 1).toFixed(1) + " até " +
+                    ((index + 1) / 10 - 1).toFixed(1) + ": " + count;
+                bars.append(bar);
+            });
+            const axis = document.createElement("div");
+            axis.className = "calibration-axis";
+            axis.textContent = "−1,0                                            0,0                                            +1,0";
+            chart.append(name, bars, axis);
+        }
+        calibrationHistograms.append(chart);
+    }
+
+    calibrationHealth.replaceChildren();
+    const head = document.createElement("h3");
+    head.textContent = "Saúde do processamento experimental";
+    calibrationHealth.append(head);
+    const table = document.createElement("table");
+    table.className = "benchmark-table";
+    const captions = ["Método", "Tentativas", "Comparadas", "Falhas", "Duração média adicional"];
+    const tr = table.createTHead().insertRow();
+    captions.forEach(value => {
+        const th = document.createElement("th");
+        th.textContent = value;
+        tr.append(th);
+    });
+    const tbody = table.createTBody();
+    for (const item of report.methodHealth || []) {
+        const row = tbody.insertRow();
+        [
+            calibrationMethods[item.method] || item.method,
+            integer(item.attempts),
+            integer(item.compared),
+            integer(item.failed),
+            item.method === "production_cubic" ? "Reutilizada" :
+                calibrationNumber(item.avgDurationMs, 0) + " ms",
+        ].forEach(value => {
+            const cell = row.insertCell();
+            cell.textContent = value;
+        });
+    }
+    calibrationHealth.append(table);
 }
 
 function renderChecks(items) {
