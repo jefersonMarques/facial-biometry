@@ -69,12 +69,7 @@ func (handler *Handler) updateAdminCalibrationTruth(
             handler.writeError(writer,http.StatusInternalServerError,"failed to update classification")
             return
         }
-        handler.recordAnalyticsEvent(request.Context(),id,"admin_ground_truth_updated",map[string]any{
-            "beforeLabel":oldLabel,
-            "beforeSource":oldSource,
-            "afterLabel":payload.Label,
-            "afterSource":payload.Source,
-        })
+        // UpdateCalibrationTruth writes the audit event in the same transaction.
     }
     handler.writeJSON(writer,http.StatusOK,map[string]string{
         "truthLabel":payload.Label,"truthSource":payload.Source,
