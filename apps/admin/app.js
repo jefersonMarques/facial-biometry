@@ -133,6 +133,34 @@ detailDialog.addEventListener("click", (event) => {
     if (event.target === detailDialog) detailDialog.close();
 });
 
+detailBody.addEventListener("click", (event) => {
+    if (!event.target.closest("#saveCalibrationTruth")) return;
+    const button = detailBody.querySelector("#saveCalibrationTruth");
+    const label = detailBody.querySelector("#calibrationTruthLabel")?.value || "unknown";
+    const source = label === "unknown" ? "" :
+        detailBody.querySelector("#calibrationTruthSource")?.value || "";
+    const checkId = detailBody.querySelector("#calibrationTruthCheckId")?.value;
+    const message = detailBody.querySelector("#calibrationTruthMessage");
+    if (!checkId || (label !== "unknown" && !source)) {
+        if (message) message.textContent = "Selecione a origem da confirmação independente.";
+        return;
+    }
+    if (label !== "unknown" && !window.confirm(
+        "Confirma que esta classificação foi estabelecida por evidência independente da decisão biométrica?"
+    )) return;
+    button.disabled = true;
+    void api("/v1/admin/checks/" + encodeURIComponent(checkId) + "/truth", {
+        method: "PATCH",
+        body: JSON.stringify({label, source}),
+    }).then(async () => {
+        const detail = await api("/v1/admin/checks/" + encodeURIComponent(checkId));
+        detailBody.innerHTML = renderDetail(detail);
+        await loadCalibration();
+    }).catch(error => {
+        if (message) message.textContent = errorMessage(error);
+    }).finally(() => { button.disabled = false; });
+});
+
 if (authHeader) void connect();
 
 async function connect() {
@@ -513,7 +541,7 @@ async function openDetail(checkId) {
         const detail = await api("/v1/admin/checks/" + encodeURIComponent(checkId));
         detailTitle.textContent = detail.displayName || detail.subjectId || shortID(checkId);
         detailBody.innerHTML = renderDetail(detail);
-        detailDialog.showModal();
+        if (!detailDialog.open) detailDialog.showModal();
     } catch (error) {
         window.alert(errorMessage(error));
     }
@@ -582,6 +610,7 @@ function renderDetail(detail) {
         ${detailSection("Runtime", detail.runtime)}
         ${detailSection("Diagnósticos", detail.diagnostics)}
         ${renderLowResolutionComparison(detail.events || [])}
+        ${flowType === "cnh" ? renderCalibrationTruthControls(detail) : ""}
 
         <section class="detail-section">
             <h3>Timeline</h3>
@@ -605,6 +634,38 @@ function detailSection(title, value) {
             <pre>${escapeHtml(prettyJSON(normalized))}</pre>
         </section>
     `;
+}
+
+function renderCalibrationTruthControls(detail) {
+    const choices = [
+        ["unknown", "Desconhecido — não comprovado"],
+        ["genuine_confirmed", "Titular confirmado"],
+        ["impostor_confirmed", "Impostor confirmado"],
+    ];
+    const sources = [
+        ["", "Selecione a evidência independente"],
+        ["controlled_test", "Teste controlado"],
+        ["manual_review", "Revisão documental independente"],
+        ["external_verified", "Confirmação externa independente"],
+    ];
+    const option = (value, label, selected) =>
+        "<option value=\"" + escapeAttribute(value) + "\"" +
+        (value === selected ? " selected" : "") + ">" + escapeHtml(label) + "</option>";
+    return "<section class=\"detail-section calibration-truth\">" +
+        "<h3>Identidade confirmada independentemente</h3>" +
+        "<p>Não derive esta informação da aprovação ou rejeição do FaceProof. " +
+        "Os campos de cenário e resultado esperado também não são confirmação.</p>" +
+        "<input id=\"calibrationTruthCheckId\" type=\"hidden\" value=\"" +
+            escapeAttribute(detail.checkId) + "\">" +
+        "<div class=\"calibration-truth-controls\">" +
+            "<select id=\"calibrationTruthLabel\" aria-label=\"Identidade confirmada\">" +
+                choices.map(c => option(c[0], c[1], detail.truthLabel || "unknown")).join("") +
+            "</select>" +
+            "<select id=\"calibrationTruthSource\" aria-label=\"Fonte da confirmação\">" +
+                sources.map(c => option(c[0], c[1], detail.truthSource || "")).join("") +
+            "</select>" +
+            "<button class=\"button button-primary\" id=\"saveCalibrationTruth\" type=\"button\">Salvar</button>" +
+        "</div><p id=\"calibrationTruthMessage\" class=\"form-feedback\"></p></section>";
 }
 
 function renderLowResolutionComparison(events) {
