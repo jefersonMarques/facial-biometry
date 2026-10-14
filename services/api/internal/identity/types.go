@@ -26,6 +26,29 @@ const (
 	StatusExpired            Status = "expired"
 )
 
+type LowResolutionEvidence struct {
+	Method          string                `json:"method"`
+	Status          string                `json:"status"`
+	ErrorCode       string                `json:"errorCode,omitempty"`
+	SourceWidth     int                   `json:"sourceWidth"`
+	SourceHeight    int                   `json:"sourceHeight"`
+	PreparedWidth   int                   `json:"preparedWidth"`
+	PreparedHeight  int                   `json:"preparedHeight"`
+	ScaleX          float64               `json:"scaleX"`
+	ScaleY          float64               `json:"scaleY"`
+	Quality         *float64              `json:"quality,omitempty"`
+	DurationMS      int64                 `json:"durationMs"`
+	PDFVIO          *PortraitPairEvidence `json:"pdfVio,omitempty"`
+	VIOLive         *PortraitPairEvidence `json:"vioLive,omitempty"`
+}
+
+type LowResolutionReference struct {
+	Method          string      `json:"method"`
+	Embedding       []float64   `json:"embedding"`
+	Embeddings      [][]float64 `json:"embeddings,omitempty"`
+	EmbeddingModel  string      `json:"embeddingModel"`
+}
+
 type PortraitPairEvidence struct {
 	Status            string   `json:"status"`
 	CombinedCosine    *float64 `json:"combinedCosine,omitempty"`
@@ -75,6 +98,7 @@ type DocumentEvidence struct {
 	ReferencePhotoWidth      int       `json:"referencePhotoWidth,omitempty"`
 	ReferencePhotoHeight     int       `json:"referencePhotoHeight,omitempty"`
 	DualPortrait             *DualPortraitEvidence `json:"dualPortrait,omitempty"`
+	LowResolutionBenchmark []LowResolutionEvidence `json:"lowResolutionBenchmark,omitempty"`
 	VIOTemplateID          uint16    `json:"vioTemplateId"`
 	VIOCreatedAt           time.Time `json:"vioCreatedAt"`
 	VIOSignatureAlgorithm  string    `json:"vioSignatureAlgorithm"`
@@ -123,6 +147,7 @@ type Check struct {
 	VIOReferenceEmbedding      []float64      `json:"vioReferenceEmbedding,omitempty"`
 	VIOReferenceEmbeddings     [][]float64    `json:"vioReferenceEmbeddings,omitempty"`
 	VIOReferenceEmbeddingModel string         `json:"vioReferenceEmbeddingModel,omitempty"`
+	LowResolutionReferences []LowResolutionReference `json:"lowResolutionReferences,omitempty"`
 	Document               *DocumentEvidence `json:"document,omitempty"`
 	Decision               string            `json:"decision,omitempty"`
 	LivenessScore          float64           `json:"livenessScore,omitempty"`
