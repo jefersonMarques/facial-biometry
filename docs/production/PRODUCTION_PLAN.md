@@ -224,6 +224,19 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
   - ⏳ Validar o comportamento de shadow mode sem alterar aprovações ou falsos negativos.
   - Documentação técnica: [CNH_DUAL_PORTRAIT.md](CNH_DUAL_PORTRAIT.md).
 
+## Benchmark de fotografias VIO de baixa resolução
+
+- ⏳ **Low-Resolution Portrait Benchmark — C++ offline**:
+  - ✅ Executável diagnóstico separado de `libfaceproof_core.so`, reutilizando YuNet e SFace.
+  - ✅ Comparações VIO por interpolação cúbica (baseline), nearest, linear e Lanczos4.
+  - ✅ Dimensões originais, fator de ampliação, bounding box estimada na origem e qualidade discriminadas.
+  - ✅ Scores PDF × VIO, VIO × foto ao vivo e PDF × foto ao vivo (proxy de imagem única).
+  - ✅ Executor de corpus rotulado local e sumários agregados, sem exportar imagens/embeddings.
+  - ⏳ Confirmar CI C++/OpenCV e testes de relatório.
+  - ⏳ Avaliar CNHs legítimas e impostores com fotos autorizadas; risco de falso aceite e estabilidade.
+  - ⬜ Promoção de qualquer técnica ao runtime: proibida até validação empírica específica.
+  - Documentação: [LOW_RESOLUTION_BENCHMARK.md](LOW_RESOLUTION_BENCHMARK.md).
+
 ## Baseline técnico congelado
 
 O baseline acima é referência para comparar a migração de Python authority → C++ authority. Durante essa migração, thresholds e modelos biométricos não devem ser alterados simultaneamente. Qualquer mudança posterior deve gerar uma nova versão de baseline.
