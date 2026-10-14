@@ -219,7 +219,13 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		"bytes":   len(pdf),
 	})
 
-	document, documentErr := handler.cnhDocuments.Process(request.Context(), pdf, check.ExpectedCPF, check.MinimumDocumentDate)
+	document, documentErr := handler.cnhDocuments.ProcessWithDualPortrait(
+		request.Context(),
+		pdf,
+		check.ExpectedCPF,
+		check.MinimumDocumentDate,
+		handler.config.CNHDualPortraitShadow,
+	)
 	if documentErr != nil {
 		handler.resetIdentityDocumentAttempt(token, documentErr)
 		if failedCheck, loadErr := handler.identityChecks.Load(token); loadErr == nil {
@@ -256,6 +262,11 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		return
 	}
 
+	var dualPortrait *identity.DualPortraitEvidence
+	if handler.config.CNHDualPortraitShadow {
+		dualPortrait = handler.analyzeCNHDualPortrait(request.Context(), document, reference)
+	}
+
 	updatedDocumentCheck, err := handler.identityChecks.Update(token, func(current *identity.Check) error {
 		if current.Status != identity.StatusProcessingDocument {
 			return errIdentityInvalidState
@@ -274,6 +285,7 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 			ReferencePhotoSHA256:     document.PhotoSHA256,
 			ReferencePhotoWidth:      document.PhotoWidth,
 			ReferencePhotoHeight:     document.PhotoHeight,
+			DualPortrait:             dualPortrait,
 			VIOTemplateID:         document.VIOTemplateID,
 			VIOCreatedAt:          document.VIOCreatedAt,
 			VIOSignatureAlgorithm: document.VIOSignatureAlgorithm,
@@ -304,6 +316,14 @@ func (handler *Handler) uploadIdentityDocument(writer http.ResponseWriter, reque
 		return
 	}
 	handler.recordAnalyticsDocumentAccepted(request.Context(), updatedDocumentCheck)
+	if dualPortrait != nil {
+		handler.recordAnalyticsEvent(
+			request.Context(),
+			updatedDocumentCheck.ID,
+			"cnh_dual_portrait_shadow",
+			dualPortrait,
+		)
+	}
 
 	response := identityDocumentResponse{
 		Status: identity.StatusBiometryPending,
