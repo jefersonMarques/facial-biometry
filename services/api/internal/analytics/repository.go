@@ -162,6 +162,7 @@ type CheckListItem struct {
 	DisplayName           string     `json:"displayName,omitempty"`
 	ReferencePhotoDataURL string     `json:"referencePhotoDataUrl,omitempty"`
 	CapturedPhotoDataURL  string     `json:"capturedPhotoDataUrl,omitempty"`
+	VIOPhotoDataURL       string     `json:"vioPhotoDataUrl,omitempty"`
 	TenantID         string     `json:"tenantId,omitempty"`
 	CampaignID       string     `json:"campaignId,omitempty"`
 	CampaignName     string     `json:"campaignName,omitempty"`
