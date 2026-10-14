@@ -104,10 +104,16 @@ ou outro endpoint necessário.**
   ampliação, qualidade e scores, inclusive erros técnicos individuais.
 - O custo adicional de processamento tem limite de 4 segundos para as
   alternativas, e o shadow não altera aceitação, prova de vida ou limiares.
-- Nenhuma imagem VIO é persistida pelo benchmark. Os embeddings de comparação
-  ficam somente no check criptografado, são limpos na conclusão,
-  no reset documental e na expiração processada. Checks abandonados ainda
-  exigem endurecimento da rotina de retenção.
+- O benchmark não persiste imagens VIO em produção. Para inspeção técnica
+  e envio manual da foto, o **console autenticado do modo de demonstração**
+  oferece a imagem VIO original e o link `Salvar VIO` na tela de detalhes
+  (CNH PDF ↔ VIO ↔ captura). Essa prévia é armazenada exclusivamente no
+  `DemoArtifacts` do registro criptografado e não é incluída em
+  analytics, listas, relatórios ou endpoints públicos.
+  A retenção das fotografias do demo precisa de revisão específica.
+- Os embeddings das alternativas ficam somente no check criptografado,
+  são limpos na conclusão, no reset documental e na expiração processada.
+  Checks abandonados ainda exigem endurecimento da rotina de retenção.
 - A interpolação `lanczos4` desta execução automática é implementada em Go;
   o CLI offline usa `cv::INTER_LANCZOS4`. As saídas não devem ser
   consideradas numericamente idênticas sem validação de paridade.
