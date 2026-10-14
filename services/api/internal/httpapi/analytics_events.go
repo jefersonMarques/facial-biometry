@@ -215,6 +215,23 @@ func (handler *Handler) recordAnalyticsTriplePortrait(
 	})
 }
 
+func (handler *Handler) recordAnalyticsLowResolution(
+	ctx context.Context,
+	checkID string,
+	pdfLive *identity.PortraitPairEvidence,
+	variants []identity.LowResolutionEvidence,
+) {
+	if len(variants) == 0 {
+		return
+	}
+	handler.recordAnalyticsEvent(ctx, checkID, "cnh_low_resolution_shadow", map[string]any{
+		"mode": "automatic_existing_cnh_flow",
+		"status": "experimental",
+		"pdf_live": pdfLive,
+		"variants": variants,
+	})
+}
+
 func (handler *Handler) recordAnalyticsDocumentAccepted(ctx context.Context, check identity.Check) {
 	if handler.analytics == nil || check.Document == nil {
 		return
