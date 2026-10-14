@@ -30,10 +30,17 @@ source. Their agreement must not be described as two independent identity checks
   document-to-live biometrics remain unchanged.
 - The shadow result is recorded with the encrypted document check and emitted
   as a privacy-safe analytics event when analytics is configured.
-- The VIO image bytes are transient and never persist. The secondary
-  embedding is held only in the existing encrypted identity check until
-  completion, processed expiry or failed-document reset; neither bytes nor
-  embeddings are sent to analytics.
+- In production/non-demo, VIO image bytes remain transient and are not persisted.
+  In the internal authenticated demo console only, when shadow mode is enabled,
+  the exact VIO portrait is stored as a bounded MIME-checked base64 image in
+  `DemoArtifacts` within the existing AES-GCM encrypted identity check, like
+  the PDF and captured demo portraits. The demo-only image is returned solely
+  by the authenticated admin check detail endpoint for inspection/download.
+  Never return it in issuer/public APIs, analytics events, check lists or reports.
+  The demo image follows the current encrypted demo-artifact retention policy,
+  which requires a separate production-grade retention/cleanup review.
+  Secondary embeddings remain temporary and are cleared at completion,
+  processed expiry or failed-document reset.
 
 ## Shadow statuses
 
