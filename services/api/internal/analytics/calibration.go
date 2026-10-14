@@ -3,6 +3,7 @@ package analytics
 import (
     "context"
     "database/sql"
+    "encoding/json"
     "errors"
     "math"
     "sort"
@@ -60,14 +61,28 @@ func ValidateCalibrationTruth(label, source string) error {
 
 func (r *Repository) UpdateCalibrationTruth(ctx context.Context, id, label, source string) error {
     if err := ValidateCalibrationTruth(label,source); err != nil { return err }
-    result, err := r.db.ExecContext(ctx, `UPDATE faceproof_checks SET
-        truth_label=$2, truth_source=$3, truth_updated_at=NOW(),
-        updated_at=NOW() WHERE check_id=$1 AND document IS NOT NULL`, id,label,source)
-    if err != nil { return err }
-    n,err := result.RowsAffected()
-    if err != nil { return err }
-    if n == 0 { return ErrNotFound }
-    return nil
+    tx,err:=r.db.BeginTx(ctx,nil)
+    if err!=nil {return err}
+    defer tx.Rollback()
+    var previousLabel,previousSource string
+    err=tx.QueryRowContext(ctx,
+        "SELECT truth_label,truth_source FROM faceproof_checks WHERE check_id=$1 AND document IS NOT NULL FOR UPDATE",
+        id).Scan(&previousLabel,&previousSource)
+    if errors.Is(err,sql.ErrNoRows) {return ErrNotFound}
+    if err!=nil {return err}
+    if previousLabel==label && previousSource==source {return tx.Commit()}
+    _,err=tx.ExecContext(ctx,"UPDATE faceproof_checks SET truth_label=$2,truth_source=$3,truth_updated_at=NOW(),updated_at=NOW() WHERE check_id=$1",id,label,source)
+    if err!=nil {return err}
+    payload,err:=json.Marshal(map[string]string{
+        "beforeLabel":previousLabel,"beforeSource":previousSource,
+        "afterLabel":label,"afterSource":source,
+    })
+    if err!=nil {return err}
+    _,err=tx.ExecContext(ctx,
+        "INSERT INTO faceproof_events (check_id,event_type,payload) VALUES ($1,'admin_ground_truth_updated',$2::jsonb)",
+        id,string(payload))
+    if err!=nil {return err}
+    return tx.Commit()
 }
 
 func (r *Repository) Calibration(ctx context.Context, from,to time.Time, runtime string) (CalibrationReport,error) {
