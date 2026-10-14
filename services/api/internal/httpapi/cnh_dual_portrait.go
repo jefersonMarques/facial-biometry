@@ -21,7 +21,7 @@ func (handler *Handler) analyzeCNHDualPortrait(
 	portrait := document.DualPortrait
 	evidence := &identity.DualPortraitEvidence{
 		Status:            portrait.Status,
-		PDFQuality:        reference.Quality.Score,
+		PDFQuality:        finiteQualityScore(reference.Quality.Score),
 		VIOPhotoPresent:   portrait.PhotoPresent,
 		VIOPhotoValidated: portrait.Status == cnh.DualPortraitReady,
 		VIOPhotoWidth:     portrait.Width,
@@ -43,8 +43,7 @@ func (handler *Handler) analyzeCNHDualPortrait(
 		return evidence
 	}
 
-	quality := secondary.Quality.Score
-	evidence.VIOQuality = &quality
+	evidence.VIOQuality = finiteQualityScore(secondary.Quality.Score)
 	similarity, errorCode := compareCNHPortraitEmbeddings(reference, secondary)
 	if errorCode != "" {
 		evidence.Status = cnh.DualPortraitAnalysisFailed
@@ -75,4 +74,11 @@ func compareCNHPortraitEmbeddings(
 		return 0, "embedding_comparison_invalid"
 	}
 	return score, ""
+}
+
+func finiteQualityScore(score float64) *float64 {
+	if math.IsNaN(score) || math.IsInf(score, 0) {
+		return nil
+	}
+	return &score
 }
