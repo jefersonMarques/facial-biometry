@@ -80,6 +80,47 @@ Não fornecer imagem completa da CNH, CPF, nome nem dados identificáveis
 no nome de arquivo ou no relatório. O decoder BPG pode ser usado
 isoladamente antes do benchmark, sem persistência adicional na API.
 
+## Frontend local para três fotografias
+
+A página de apoio para desenvolvimento está em
+`services/api/cmd/lowresolutionui/index.html` e não faz parte da
+interface pública de verificação ou do dashboard comercial. Serve apenas
+para preparar o diagnóstico com amostras autorizadas sem enviar fotos para
+servidores externos.
+
+Após atualizar a branch e instalar o OpenCV fixado pelo projeto:
+
+```bash
+cd /mnt/d/wsl-home/jeferson/faceproof
+git pull --ff-only origin feature/liveness-core-cpp
+bash scripts/run-low-resolution-ui.sh
+```
+
+O script compila o CLI de benchmark, se necessário, sem recompilar ou
+substituir a biblioteca Secure Core de produção. Abra no navegador:
+
+`http://127.0.0.1:8765`
+
+A interface recebe **três retratos já extraídos**, PNG ou JPEG:
+foto original do PDF, fotografia original do QR/VIO decodificada com
+`bpgdec` e uma foto facial ao vivo autorizada. Não aceita PDF inteiro
+nem BPG bruto. Para preservar a comparação de baixa resolução,
+**não aumente nem altere previamente a imagem VIO de 45 × 61 pixels**.
+
+O frontend disponibiliza o JSON com scores, resolução, fator de ampliação,
+localização estimada do rosto e quatro alternativas de interpolação;
+pode copiar esse JSON para análise sem enviar retratos. A interface
+só atende em `127.0.0.1`, limita arquivos a 4 MiB, usa token local e
+verificação de origem; imagens são armazenadas temporariamente em diretório
+privado durante a chamada nativa e removidas ao final do processamento
+normal. Em encerramento forçado, arquivos temporários podem permanecer;
+inspecione `/tmp/faceproof-private-benchmark-*` conforme a política
+de segurança local. O parser OpenCV recebe imagens não confiáveis;
+execute com usuário sem privilégios e não publique a porta na internet.
+
+A ferramenta faz comparação com **uma fotografia de captura**. Não
+substitui a comparação biométrica multiframes do serviço FaceProof.
+
 ## Corpus local e resultados agregados
 
 Arquivo CSV privado (não versionar, não anexar ao repositório):
