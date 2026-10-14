@@ -44,7 +44,7 @@ jobs:
         run: go test ./...
       - name: Validate Linux development scripts
         run: |
-          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh scripts/build-biometric-shadow.sh scripts/build-biometric-core.sh scripts/build-model-pack.sh scripts/start-analytics-postgres.sh scripts/setup-analytics-postgres-native.sh scripts/run-low-resolution-ui.sh
+          bash -n scripts/run-dev.sh scripts/create-identity-check.sh scripts/build-liveness-wasm.sh scripts/build-opencv-parity.sh scripts/build-biometric-shadow.sh scripts/build-biometric-core.sh scripts/build-model-pack.sh scripts/start-analytics-postgres.sh scripts/setup-analytics-postgres-native.sh
 
   python:
     runs-on: ubuntu-latest
