@@ -539,6 +539,46 @@ input:focus, select:focus {
 }
 .detail-arrow { text-align: center; font-size: 22px; }
 
+
+.detail-face-triple {
+    grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr) 20px minmax(0,1fr);
+    max-width: 660px;
+    gap: 8px;
+}
+.detail-face-column {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+.detail-face-column .detail-face { width: 100%; }
+.detail-face-column small {
+    font-size: 10px;
+    line-height: 1.3;
+    color: var(--muted);
+    font-weight: 400;
+}
+.detail-face-vio img {
+    image-rendering: pixelated;
+    object-fit: contain;
+}
+.vio-save {
+    display: inline-block;
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: var(--soft);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.vio-save:hover { background: #edffca; }
+
 .detail-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
