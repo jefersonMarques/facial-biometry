@@ -80,46 +80,36 @@ Não fornecer imagem completa da CNH, CPF, nome nem dados identificáveis
 no nome de arquivo ou no relatório. O decoder BPG pode ser usado
 isoladamente antes do benchmark, sem persistência adicional na API.
 
-## Frontend local para três fotografias
+## Diagnóstico automático no fluxo CNH + Face
 
-A página de apoio para desenvolvimento está em
-`services/api/cmd/lowresolutionui/index.html` e não faz parte da
-interface pública de verificação ou do dashboard comercial. Serve apenas
-para preparar o diagnóstico com amostras autorizadas sem enviar fotos para
-servidores externos.
+A comparação experimental roda **automaticamente na verificação normal**, quando
+`FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW=true`. O usuário envia apenas a CNH Digital
+e realiza a captura facial habitual. **Não há página de upload, fotos separadas
+ou outro endpoint necessário.**
 
-Após atualizar a branch e instalar o OpenCV fixado pelo projeto:
+- No upload da CNH: após validação do PDF e da assinatura VIO, a API obtém
+  as duas fotografias e os embeddings base. Para VIO com baixa resolução, gera
+  `nearest`, `linear` e `lanczos4` com interpolação separável em Go e
+  extrai embeddings adicionais pelo mesmo Secure Core C++.
+- Na conclusão biométrica: compara cada VIO com os mesmos embeddings dos
+  frames próximos capturados normalmente, além dos pares CNH × VIO e
+  CNH × biometria (baseline autoritativo).
+- A timeline do console existente apresenta
+  **`cnh_low_resolution_shadow`** com as alternativas, resolução,
+  ampliação, qualidade e scores, inclusive erros técnicos individuais.
+- O custo adicional de processamento tem limite de 4 segundos para as
+  alternativas, e o shadow não altera aceitação, prova de vida ou limiares.
+- Nenhuma imagem VIO é persistida pelo benchmark. Os embeddings de comparação
+  ficam somente no check criptografado, são limpos na conclusão,
+  no reset documental e na expiração processada. Checks abandonados ainda
+  exigem endurecimento da rotina de retenção.
+- A interpolação `lanczos4` desta execução automática é implementada em Go;
+  o CLI offline usa `cv::INTER_LANCZOS4`. As saídas não devem ser
+  consideradas numericamente idênticas sem validação de paridade.
 
-```bash
-cd /mnt/d/wsl-home/jeferson/faceproof
-git pull --ff-only origin feature/liveness-core-cpp
-bash scripts/run-low-resolution-ui.sh
-```
-
-O script compila o CLI de benchmark, se necessário, sem recompilar ou
-substituir a biblioteca Secure Core de produção. Abra no navegador:
-
-`http://127.0.0.1:8765`
-
-A interface recebe **três retratos já extraídos**, PNG ou JPEG:
-foto original do PDF, fotografia original do QR/VIO decodificada com
-`bpgdec` e uma foto facial ao vivo autorizada. Não aceita PDF inteiro
-nem BPG bruto. Para preservar a comparação de baixa resolução,
-**não aumente nem altere previamente a imagem VIO de 45 × 61 pixels**.
-
-O frontend disponibiliza o JSON com scores, resolução, fator de ampliação,
-localização estimada do rosto e quatro alternativas de interpolação;
-pode copiar esse JSON para análise sem enviar retratos. A interface
-só atende em `127.0.0.1`, limita arquivos a 4 MiB, usa token local e
-verificação de origem; imagens são armazenadas temporariamente em diretório
-privado durante a chamada nativa e removidas ao final do processamento
-normal. Em encerramento forçado, arquivos temporários podem permanecer;
-inspecione `/tmp/faceproof-private-benchmark-*` conforme a política
-de segurança local. O parser OpenCV recebe imagens não confiáveis;
-execute com usuário sem privilégios e não publique a porta na internet.
-
-A ferramenta faz comparação com **uma fotografia de captura**. Não
-substitui a comparação biométrica multiframes do serviço FaceProof.
+O CLI offline documentado acima continua disponível **apenas para pesquisa
+controlada e reprodução independente**, não é necessário para usar a
+verificação CNH + Face.
 
 ## Corpus local e resultados agregados
 
