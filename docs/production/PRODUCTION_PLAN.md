@@ -238,6 +238,19 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
   - ⬜ Promoção de qualquer técnica ao runtime: proibida até validação empírica específica.
   - Documentação: [LOW_RESOLUTION_BENCHMARK.md](LOW_RESOLUTION_BENCHMARK.md).
 
+## Coleta estatística e calibração observacional
+
+- ✅ Módulo agregado sobre eventos shadow já persistidos no PostgreSQL.
+- ✅ Histogramas de 20 intervalos por interpolação e por classe de confirmação.
+- ✅ Módulo no console administrativo, com filtros de 7/30/90 dias e runtime.
+- ✅ Separação entre decisão automática e titular/impostor confirmado independentemente.
+- ✅ Atualização de confirmação com transação e evento imutável de auditoria.
+- ✅ Métricas de falhas, tempo adicional, qualidade, liveness e PAD.
+- ⏳ Validar CI final e desempenho com corpus de produção.
+- ⏳ Definir cronograma de retenção, controles LGPD, observabilidade sob carga e proveniência dos modelos nativos.
+- ⬜ Nenhuma recomendação automática de limiares antes de corpus genuíno/impostor representativo.
+- Documentação: [CALIBRATION_ANALYTICS.md](CALIBRATION_ANALYTICS.md).
+
 ## Baseline técnico congelado
 
 O baseline acima é referência para comparar a migração de Python authority → C++ authority. Durante essa migração, thresholds e modelos biométricos não devem ser alterados simultaneamente. Qualquer mudança posterior deve gerar uma nova versão de baseline.
