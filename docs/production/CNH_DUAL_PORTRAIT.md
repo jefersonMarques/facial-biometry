@@ -60,6 +60,42 @@ and `error_code` (fixed machine-readable code).
 The shadow record never stores the VIO image, its embedding, CPF or name.
 The raw cosine similarity is **not** the probability that an identity is genuine.
 
+## Three-pair facial observation
+
+With `FACEPROOF_CNH_DUAL_PORTRAIT_SHADOW=true`, the system collects these
+scores, without using any of them as additional approval or rejection gates:
+
+| Pair | Combined cosine | Robust multi-variant cosine |
+|---|---|---|
+| Signed PDF portrait vs signed VIO portrait | yes | yes |
+| Signed VIO portrait vs live near-phase frames | yes | yes |
+| Signed PDF portrait vs live near-phase frames | yes | yes (matches the existing authoritative live verification method) |
+
+A new `cnh_tri_portrait_shadow` event is emitted **after successful completion
+persistence**. The event records the three pairs as `pdf_vio`, `vio_live`,
+`pdf_live`, with each pair's raw `combinedCosine` and `robustCosine`,
+status, variant counts, number of compared frames and any technical error code.
+
+The VIO photo often has substantially lower resolution and compression quality
+than the PDF. Do not reuse the document-vs-live threshold `0.363` for either
+VIO pair. Record VIO and PDF quality, dimensions, face size, sharpness and
+brightness as **diagnostics, not pass/fail gates**. A lower VIO cosine does
+not, by itself, prove tampering.
+
+To enable the VIO-to-live comparison, the secondary SFace embedding is stored
+temporarily within the existing **AES-GCM encrypted identity check** while
+awaiting completion. The same temporary reference is removed atomically at
+normal completion, document-attempt reset or recorded expiry; the VIO image
+bytes are never persisted as an additional reference. Incomplete checks not
+yet subjected to expiry processing retain their encrypted reference in the
+existing storage until the application's retention/cleanup process handles
+them. A scheduled expiry/retention sweeper is a production hardening task.
+No raw secondary embedding is sent in the analytics event, demo or issuer API.
+
+The final decision still uses only the existing document validation,
+Secure Core liveness/PAD and **PDF-to-live robust similarity**. Scores are not
+calibrated probabilities.
+
 ## Validation before activation
 
 1. Run `go test ./...` in `services/api` and inspect the GitHub Actions CI.
