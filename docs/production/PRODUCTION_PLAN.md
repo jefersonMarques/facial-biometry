@@ -228,6 +228,7 @@ Regra: um item recebe `✅` somente quando está implementado e validado. `⏳` 
 
 - ⏳ **Low-Resolution Portrait Benchmark — C++ offline**:
   - ✅ Executável diagnóstico separado de `libfaceproof_core.so`, reutilizando YuNet e SFace.
+  - ✅ Teste integrado automaticamente ao fluxo CNH + Face no shadow, sem upload separado de imagens ou nova página.
   - ✅ Comparações VIO por interpolação cúbica (baseline), nearest, linear e Lanczos4.
   - ✅ Dimensões originais, fator de ampliação, bounding box estimada na origem e qualidade discriminadas.
   - ✅ Scores PDF × VIO, VIO × foto ao vivo e PDF × foto ao vivo (proxy de imagem única).
