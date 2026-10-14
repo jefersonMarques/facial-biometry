@@ -229,24 +229,14 @@ func resizeLowResolutionImage(source image.Image, width, height int, method stri
 		}
 	}
 	output := image.NewNRGBA(image.Rect(0, 0, width, height))
-	vertical := make([]float64, width*height*4)
 	for y, kernel := range rows {
 		for x := 0; x < width; x++ {
-			for i, srcY := range kernel.indices {
-				start := (srcY*width + x)*4
-				end := y*output.Stride + x*4
-				for channel := 0; channel < 4; channel++ {
-					vertical[(y*width+x)*4+channel] +=
-						horizontal[start+channel] * kernel.weights[i]
-				}
-			}
-		}
-	}
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
 			for channel := 0; channel < 4; channel++ {
-				output.Pix[y*output.Stride+x*4+channel] =
-					normalizedPixel(vertical[(y*width+x)*4+channel])
+				value := 0.0
+				for i, srcY := range kernel.indices {
+					value += horizontal[(srcY*width+x)*4+channel] * kernel.weights[i]
+				}
+				output.Pix[y*output.Stride+x*4+channel] = normalizedPixel(value)
 			}
 		}
 	}
