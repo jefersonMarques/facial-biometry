@@ -633,14 +633,14 @@ func (repository *Repository) RecordCompletion(
 		     completed_at = $4,
 		     duration_ms = CASE
 		         WHEN started_at IS NULL THEN NULL
-		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4 - started_at)) * 1000)::BIGINT)
+		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4::TIMESTAMPTZ - started_at)) * 1000)::BIGINT)
 		     END,
 		     document_attempts = $5,
 		     biometric_sessions = $6,
 		     liveness_score = $7,
 		     face_similarity = $8,
 		     match_threshold = $9,
-		     margin = $8 - $9,
+		     margin = $8::DOUBLE PRECISION - $9::DOUBLE PRECISION,
 		     liveness_threshold = $10,
 		     review_liveness_threshold = $11,
 		     require_passive_pad = $12,
@@ -950,8 +950,8 @@ func (repository *Repository) RecordAuthoritativeState(
 		         WHEN $4::timestamptz IS NULL OR started_at IS NULL THEN duration_ms
 		         ELSE GREATEST(0, (EXTRACT(EPOCH FROM ($4::timestamptz - started_at)) * 1000)::BIGINT)
 		     END,
-		     liveness_score = CASE WHEN $5 = 0 THEN liveness_score ELSE $5 END,
-		     face_similarity = CASE WHEN $6 = 0 THEN face_similarity ELSE $6 END,
+		     liveness_score = CASE WHEN $5::DOUBLE PRECISION = 0 THEN liveness_score ELSE $5::DOUBLE PRECISION END,
+		     face_similarity = CASE WHEN $6::DOUBLE PRECISION = 0 THEN face_similarity ELSE $6::DOUBLE PRECISION END,
 		     biometric_sessions = GREATEST(biometric_sessions, $7),
 		     updated_at = NOW()
 		 WHERE check_id = $1`,
