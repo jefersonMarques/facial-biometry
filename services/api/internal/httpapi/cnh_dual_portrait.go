@@ -17,7 +17,7 @@ func (handler *Handler) analyzeCNHDualPortrait(
 	ctx context.Context,
 	document cnh.Document,
 	reference domain.ReferenceResult,
-) *identity.DualPortraitEvidence {
+) (*identity.DualPortraitEvidence, domain.ReferenceResult) {
 	portrait := document.DualPortrait
 	evidence := &identity.DualPortraitEvidence{
 		Status:            portrait.Status,
@@ -28,9 +28,13 @@ func (handler *Handler) analyzeCNHDualPortrait(
 		VIOPhotoHeight:    portrait.Height,
 		DecodeDurationMS:  portrait.DecodeDurationMS,
 		EmbeddingModel:    reference.EmbeddingModel,
+		PDFFaceSize:      finiteQualityScore(reference.Quality.FaceSize),
+		PDFSharpness:     finiteQualityScore(reference.Quality.Sharpness),
+		PDFBrightness:    finiteQualityScore(reference.Quality.Brightness),
 	}
 	if portrait.Status != cnh.DualPortraitReady {
-		return evidence
+		evidence.PDFVIO = &identity.PortraitPairEvidence{Status: "unavailable"}
+		return evidence, domain.ReferenceResult{}
 	}
 
 	started := time.Now()
@@ -40,20 +44,31 @@ func (handler *Handler) analyzeCNHDualPortrait(
 	if err != nil {
 		evidence.Status = cnh.DualPortraitAnalysisFailed
 		evidence.ErrorCode = "vio_reference_extraction_failed"
-		return evidence
+		evidence.PDFVIO = &identity.PortraitPairEvidence{
+			Status: "analysis_failed",
+			ErrorCode: "vio_reference_extraction_failed",
+		}
+		return evidence, domain.ReferenceResult{}
 	}
 
 	evidence.VIOQuality = finiteQualityScore(secondary.Quality.Score)
+	evidence.VIOFaceSize = finiteQualityScore(secondary.Quality.FaceSize)
+	evidence.VIOSharpness = finiteQualityScore(secondary.Quality.Sharpness)
+	evidence.VIOBrightness = finiteQualityScore(secondary.Quality.Brightness)
+	evidence.PDFVIO = comparePortraitPair(
+		portraitEmbeddingSet(reference.EmbeddingModel, reference.Embedding, reference.Embeddings),
+		portraitEmbeddingSet(secondary.EmbeddingModel, secondary.Embedding, secondary.Embeddings),
+	)
 	similarity, errorCode := compareCNHPortraitEmbeddings(reference, secondary)
 	if errorCode != "" {
 		evidence.Status = cnh.DualPortraitAnalysisFailed
 		evidence.ErrorCode = errorCode
-		return evidence
+		return evidence, domain.ReferenceResult{}
 	}
 
 	evidence.Similarity = &similarity
 	evidence.Status = cnh.DualPortraitCompared
-	return evidence
+	return evidence, secondary
 }
 
 func compareCNHPortraitEmbeddings(
@@ -81,4 +96,49 @@ func finiteQualityScore(score float64) *float64 {
 		return nil
 	}
 	return &score
+}
+
+type portraitEmbeddingSetData struct {
+	Model    string
+	Combined []float64
+	Variants [][]float64
+}
+
+func portraitEmbeddingSet(model string, combined []float64, variants [][]float64) portraitEmbeddingSetData {
+	if len(variants) == 0 && len(combined) > 0 {
+		variants = [][]float64{combined}
+	}
+	return portraitEmbeddingSetData{Model: model, Combined: combined, Variants: variants}
+}
+
+func comparePortraitPair(reference, target portraitEmbeddingSetData) *identity.PortraitPairEvidence {
+	evidence := &identity.PortraitPairEvidence{
+		Status:            "analysis_failed",
+		ReferenceVariants: len(reference.Variants),
+		TargetVariants:    len(target.Variants),
+	}
+	if reference.Model == "" || !strings.EqualFold(reference.Model, target.Model) {
+		evidence.ErrorCode = "embedding_model_mismatch"
+		return evidence
+	}
+	if len(reference.Combined) == 0 || len(reference.Combined) != len(target.Combined) {
+		evidence.ErrorCode = "embedding_dimensions_invalid"
+		return evidence
+	}
+	combined := matching.CosineSimilarity(reference.Combined, target.Combined)
+	if combined == -1 || math.IsNaN(combined) || math.IsInf(combined, 0) {
+		evidence.ErrorCode = "embedding_comparison_invalid"
+		return evidence
+	}
+	evidence.CombinedCosine = &combined
+
+	robust, frameScores := matching.RobustCosineSimilarity(reference.Variants, target.Variants)
+	if len(frameScores) == 0 || robust == -1 || math.IsNaN(robust) || math.IsInf(robust, 0) {
+		evidence.ErrorCode = "robust_comparison_invalid"
+		return evidence
+	}
+	evidence.RobustCosine = &robust
+	evidence.FrameComparisons = len(frameScores)
+	evidence.Status = "compared"
+	return evidence
 }
