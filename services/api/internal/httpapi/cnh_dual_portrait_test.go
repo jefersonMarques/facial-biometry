@@ -70,3 +70,17 @@ func TestCompareCNHPortraitEmbeddings(t *testing.T) {
 		})
 	}
 }
+
+func TestFiniteQualityScore(t *testing.T) {
+	if score := finiteQualityScore(0); score == nil || *score != 0 {
+		t.Fatal("zero is a valid finite quality measurement")
+	}
+	if score := finiteQualityScore(0.82); score == nil || *score != 0.82 {
+		t.Fatal("valid quality measurement was lost")
+	}
+	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if finiteQualityScore(value) != nil {
+			t.Fatal("nonfinite quality must never be persisted")
+		}
+	}
+}
