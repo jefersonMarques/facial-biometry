@@ -164,6 +164,7 @@ func (r *Repository) Calibration(ctx context.Context, from,to time.Time, runtime
             ('vio_live',v.item->'vioLive'),
             ('pdf_live',v.payload->'pdf_live')
         ) AS p(pair,metric)
+        WHERE p.pair <> 'pdf_live' OR v.method = 'production_cubic'
     ), bucketed AS (
         SELECT method,pair,truth_label,
             CASE WHEN cosine IS NULL OR cosine < -1 OR cosine > 1 THEN NULL
