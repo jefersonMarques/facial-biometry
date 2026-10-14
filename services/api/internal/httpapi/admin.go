@@ -518,6 +518,12 @@ func (handler *Handler) getAdminCheck(
 	}
 	item := detail.CheckListItem
 	handler.applyAuthoritativeCheckItem(&item)
+	if handler.config.DemoMode && handler.config.CNHDualPortraitShadow &&
+		handler.identityChecks != nil {
+		if check, loadErr := handler.identityChecks.LoadByID(checkID); loadErr == nil {
+			item.VIOPhotoDataURL = demoVIOPreviewForAdmin(check, true, true)
+		}
+	}
 	detail.CheckListItem = item
 	handler.writeJSON(writer, http.StatusOK, detail)
 }
@@ -660,6 +666,7 @@ func (handler *Handler) getAdminReport(writer http.ResponseWriter, request *http
 		// Demo portraits are intentionally excluded from exported reports.
 		item.ReferencePhotoDataURL = ""
 		item.CapturedPhotoDataURL = ""
+		item.VIOPhotoDataURL = ""
 		detail.CheckListItem = item
 
 		reportCheck := adminReportCheck{
