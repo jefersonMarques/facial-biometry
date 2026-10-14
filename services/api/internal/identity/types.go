@@ -112,6 +112,7 @@ type DocumentEvidence struct {
 type DemoArtifacts struct {
 	ReferencePhotoDataURL string `json:"referencePhotoDataUrl,omitempty"`
 	CapturedPhotoDataURL  string `json:"capturedPhotoDataUrl,omitempty"`
+	VIOPhotoDataURL       string `json:"vioPhotoDataUrl,omitempty"`
 }
 
 type CompletionReceipt struct {
