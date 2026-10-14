@@ -60,6 +60,9 @@ jobs:
           PYTHONPATH: services/engine
         run: python -m unittest discover -s services/engine/tests -v
 
+      - name: Test offline low-resolution cohort report
+        run: python -m unittest scripts.test_low_resolution_benchmark -v
+
   cpp:
     runs-on: ubuntu-latest
     steps:
